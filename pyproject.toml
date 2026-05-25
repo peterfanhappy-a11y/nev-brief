@@ -1,0 +1,43 @@
+[project]
+name = "nev-brief"
+version = "0.1.0"
+description = "NEV 早报 — 新能源汽车 B 端 AI 早报订阅"
+requires-python = ">=3.12"
+
+[tool.uv.workspace]
+members = ["packages/contracts", "packages/shared"]
+# Agents 1-7 will add their packages here as they're scaffolded
+
+[tool.uv.sources]
+nev-contracts = { workspace = true }
+nev-shared = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "faker>=25.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "UP", "ANN", "S", "BLE", "C4", "RET", "SIM"]
+ignore = ["ANN101", "ANN102", "S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: integration tests (require docker-compose)",
+    "ai_eval: golden set AI evaluation (calls real DeepSeek)",
+]
