@@ -1,0 +1,9 @@
+{
+  "name": "@nev/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo 'Agent-1 will fill this in'",
+    "build": "echo 'Agent-1 will fill this in'"
+  }
+}

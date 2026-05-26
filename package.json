@@ -1,0 +1,17 @@
+{
+  "name": "nev-brief",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/contracts/ts",
+    "packages/web"
+  ],
+  "scripts": {
+    "lint": "eslint packages/web",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0"
+  }
+}
