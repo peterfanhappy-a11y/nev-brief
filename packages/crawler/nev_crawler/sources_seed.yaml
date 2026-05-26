@@ -1,0 +1,250 @@
+# 25 个 MVP 信源配置 — spec §5.1
+# 修改后运行: uv run python -m nev_crawler.source_loader sync
+
+sources:
+  # === 国内综合媒体 (8) ===
+  - name: "36氪汽车"
+    type: rss
+    url: "https://36kr.com/feed-newsflash"
+    authority: 9
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  - name: "虎嗅汽车"
+    type: rss
+    url: "https://www.huxiu.com/rss/4.xml"
+    authority: 8
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  - name: "未来汽车日报"
+    type: rss
+    url: "https://auto-time.36kr.com/feed"
+    authority: 9
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  - name: "晚点 Auto"
+    type: html
+    url: "https://www.latepost.com/news/auto"
+    authority: 9
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+    extra:
+      list_selector: "article.news-item"
+      title_selector: "h3 a"
+      link_selector: "h3 a"
+      link_attr: "href"
+      time_selector: ".publish-time"
+
+  - name: "电动星球 News"
+    type: rsshub
+    url: "/wechat/ebrun/dianxing"
+    authority: 8
+    locale: zh
+    category: media
+    crawl_cron: "0 12,22 * * *"
+
+  - name: "智驾网"
+    type: rss
+    url: "https://www.zhijiawang.com/feed"
+    authority: 7
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  - name: "车东西"
+    type: rss
+    url: "https://www.chedongxi.com/feed"
+    authority: 7
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  - name: "量子位"
+    type: rss
+    url: "https://www.qbitai.com/feed"
+    authority: 7
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+
+  # === 国内垂类网站 (3) ===
+  - name: "汽车之家资讯"
+    type: html
+    url: "https://www.autohome.com.cn/news/"
+    authority: 7
+    locale: zh
+    category: media
+    crawl_cron: "30 22 * * *"
+    extra:
+      list_selector: ".article-pic-list li"
+      title_selector: ".article-content h3 a"
+      link_selector: ".article-content h3 a"
+      link_attr: "href"
+      time_selector: ".fn-clear .fn-right"
+
+  - name: "懂车帝资讯"
+    type: html
+    url: "https://www.dongchedi.com/news"
+    authority: 7
+    locale: zh
+    category: media
+    crawl_cron: "30 22 * * *"
+    extra:
+      list_selector: "[class*='card_box']"
+      title_selector: "[class*='card_title']"
+      link_selector: "a"
+      link_attr: "href"
+      time_selector: "[class*='card_time']"
+
+  - name: "车质网投诉"
+    type: html
+    url: "https://www.12365auto.com/news/index.shtml"
+    authority: 8
+    locale: zh
+    category: media
+    crawl_cron: "30 22 * * *"
+    extra:
+      list_selector: ".newsList li"
+      title_selector: "a"
+      link_selector: "a"
+      link_attr: "href"
+      time_selector: ".time"
+
+  # === 国内官方/协会 (3) ===
+  - name: "乘联会 CPCA 周报"
+    type: html
+    url: "http://www.cpcaauto.com/list.php?types=csjd"
+    authority: 10
+    locale: zh
+    category: association
+    crawl_cron: "0 23 * * *"
+    extra:
+      list_selector: ".dadao li"
+      title_selector: "a"
+      link_selector: "a"
+      link_attr: "href"
+      time_selector: ".time"
+
+  - name: "中汽协 CAAM"
+    type: html
+    url: "http://www.caam.org.cn/chn/9/cate_117/list_1.html"
+    authority: 10
+    locale: zh
+    category: association
+    crawl_cron: "0 23 * * *"
+    extra:
+      list_selector: ".item"
+      title_selector: ".title a"
+      link_selector: ".title a"
+      link_attr: "href"
+      time_selector: ".date"
+
+  - name: "工信部新车目录"
+    type: html
+    url: "https://www.miit.gov.cn/jgsj/zbys/qcgy/index.html"
+    authority: 10
+    locale: zh
+    category: official
+    crawl_cron: "0 23 * * *"
+    extra:
+      list_selector: ".list_tit li"
+      title_selector: "a"
+      link_selector: "a"
+      link_attr: "href"
+      time_selector: ".date"
+
+  # === 车企官方 (8) ===
+  - name: "比亚迪官方"
+    type: rsshub
+    url: "/weibo/user/2391758825"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "蔚来 NIO 官方"
+    type: rsshub
+    url: "/weibo/user/5044281310"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "小鹏汽车官方"
+    type: rsshub
+    url: "/weibo/user/5867122180"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "理想汽车官方"
+    type: rsshub
+    url: "/weibo/user/5610087109"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "华为终端官方"
+    type: rsshub
+    url: "/weibo/user/2756066412"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "小米汽车官方"
+    type: rsshub
+    url: "/weibo/user/7705929477"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "特斯拉中国官方"
+    type: rsshub
+    url: "/weibo/user/2196393537"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  - name: "极氪 ZEEKR 官方"
+    type: rsshub
+    url: "/weibo/user/7619221127"
+    authority: 10
+    locale: zh
+    category: oem
+    crawl_cron: "0 22 * * *"
+
+  # === 海外媒体 (3) ===
+  - name: "Reuters Autos"
+    type: rss
+    url: "https://www.reutersagency.com/feed/?best-sectors=automotive&post_type=best"
+    authority: 10
+    locale: en
+    category: media
+    crawl_cron: "0 18 * * *"
+
+  - name: "Electrek"
+    type: rss
+    url: "https://electrek.co/feed/"
+    authority: 9
+    locale: en
+    category: media
+    crawl_cron: "0 18 * * *"
+
+  - name: "InsideEVs"
+    type: rss
+    url: "https://insideevs.com/rss/articles/all/"
+    authority: 9
+    locale: en
+    category: media
+    crawl_cron: "0 18 * * *"
