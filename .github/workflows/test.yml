@@ -1,0 +1,52 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run pytest packages/ -v --maxfail=3
+        env:
+          SUPABASE_URL: https://test.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: test-key
+          DEEPSEEK_API_KEY: test-key
+          RESEND_API_KEY: test-key
+          FEISHU_WEBHOOK_URL: https://test.feishu
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nev
+          POSTGRES_PASSWORD: nev_local_dev
+          POSTGRES_DB: nev_brief
+        ports:
+          - 54322:5432
+        options: >-
+          --health-cmd "pg_isready -U nev"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - name: Apply migrations
+        run: |
+          for f in infra/supabase/migrations/*.sql; do
+            PGPASSWORD=nev_local_dev psql -h localhost -p 54322 -U nev -d nev_brief -f "$f"
+          done
+      - run: uv run pytest tests/integration/ -v -m integration
+        env:
+          DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief
