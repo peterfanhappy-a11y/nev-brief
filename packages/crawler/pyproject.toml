@@ -1,0 +1,22 @@
+[project]
+name = "nev-crawler"
+version = "0.1.0"
+description = "信源爬取服务 — 拉取 RSS / 官方 API / HTML 入库 articles_raw"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "httpx[http2]>=0.27",
+    "feedparser>=6.0.11",
+    "selectolax>=0.3.21",
+    "readability-lxml>=0.8.1",
+    "pyyaml>=6.0",
+    "psycopg[binary]>=3.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nev_crawler"]

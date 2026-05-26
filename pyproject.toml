@@ -3,14 +3,20 @@ name = "nev-brief"
 version = "0.1.0"
 description = "NEV 早报 — 新能源汽车 B 端 AI 早报订阅"
 requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "nev-crawler",
+]
 
 [tool.uv.workspace]
-members = ["packages/contracts", "packages/shared"]
+members = ["packages/contracts", "packages/shared", "packages/crawler"]
 # Agents 1-7 will add their packages here as they're scaffolded
 
 [tool.uv.sources]
 nev-contracts = { workspace = true }
 nev-shared = { workspace = true }
+nev-crawler = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -21,6 +27,7 @@ dev = [
     "mypy>=1.10",
     "faker>=25.0",
     "psycopg[binary]>=3.3.4",
+    "respx>=0.21",
 ]
 
 [tool.ruff]
