@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>36氪汽车</title>
+    <link>https://36kr.com</link>
+    <description>Test feed</description>
+    <item>
+      <title>比亚迪 5 月销量突破 50 万</title>
+      <link>https://36kr.com/article/1</link>
+      <description>正文摘要</description>
+      <pubDate>Mon, 25 May 2026 14:00:00 +0800</pubDate>
+    </item>
+    <item>
+      <title>蔚来 ET9 正式交付</title>
+      <link>https://36kr.com/article/2</link>
+      <description>蔚来旗舰交付仪式</description>
+      <pubDate>Mon, 25 May 2026 15:30:00 +0800</pubDate>
+    </item>
+  </channel>
+</rss>
