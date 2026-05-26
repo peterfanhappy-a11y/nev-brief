@@ -1,0 +1,38 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nev-postgres
+    environment:
+      POSTGRES_USER: nev
+      POSTGRES_PASSWORD: nev_local_dev
+      POSTGRES_DB: nev_brief
+    ports:
+      - "54322:5432"  # 避免与本地 Postgres 默认 5432 冲突
+    volumes:
+      - nev_pg_data:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nev -d nev_brief"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: nev-rsshub
+    ports:
+      - "1200:1200"
+    environment:
+      NODE_ENV: production
+      CACHE_TYPE: memory
+    depends_on:
+      - rsshub-redis
+    restart: unless-stopped
+
+  rsshub-redis:
+    image: redis:alpine
+    container_name: nev-rsshub-redis
+    restart: unless-stopped
+
+volumes:
+  nev_pg_data:

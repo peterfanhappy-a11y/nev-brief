@@ -1,6 +1,22 @@
 -- 0004_rls_policies.sql
 -- Spec §4.4 §7.6
 
+-- Create Supabase roles for local dev (safe if they exist)
+DO $$ BEGIN
+  CREATE ROLE anon NOINHERIT;
+EXCEPTION WHEN duplicate_object THEN END;
+$$;
+
+DO $$ BEGIN
+  CREATE ROLE authenticated NOINHERIT;
+EXCEPTION WHEN duplicate_object THEN END;
+$$;
+
+DO $$ BEGIN
+  CREATE ROLE service_role NOINHERIT;
+EXCEPTION WHEN duplicate_object THEN END;
+$$;
+
 -- 启用所有表的 RLS
 ALTER TABLE subscribers              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE subscriber_preferences   ENABLE ROW LEVEL SECURITY;
