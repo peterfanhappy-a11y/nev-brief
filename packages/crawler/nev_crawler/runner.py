@@ -65,18 +65,27 @@ async def _crawl_one(
         await limiter.acquire(domain)
 
         result: FetchResult = await adapter.fetch(source)
-        return _report(name, started, result.ok, articles=len(result.articles), error=result.error)
+        return _report(
+            name, started, result.ok,
+            articles=len(result.articles), error=result.error,
+            raw_articles=result.articles,
+        )
     except Exception as exc:  # noqa: BLE001
         log.warning("crawl_one_exception", source=name, error=str(exc))
         return _report(name, started, False, error=str(exc))
 
 
-def _report(name: str, started: datetime, ok: bool, articles: int = 0, error: str | None = None) -> dict[str, Any]:
+def _report(
+    name: str, started: datetime, ok: bool,
+    articles: int = 0, error: str | None = None,
+    raw_articles: list | None = None,
+) -> dict[str, Any]:
     return {
         "source_name": name,
         "ok": ok,
         "articles": articles,
         "error": error,
+        "raw_articles": raw_articles or [],
         "started_at": started.isoformat(),
         "finished_at": datetime.utcnow().isoformat(),
     }

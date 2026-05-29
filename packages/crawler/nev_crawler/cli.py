@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 
 import psycopg
 
 from nev_crawler.runner import crawl_sources
+from nev_crawler.storage import insert_articles_raw
 from nev_shared.config import get_settings
 from nev_shared.logger import configure_logging, get_logger
 
@@ -53,7 +55,7 @@ async def _async_main(args: argparse.Namespace) -> int:
     except Exception:  # noqa: BLE001
         # Settings 未配置时（如纯 --help 调用），跳过日志配置
         configure_logging(level="INFO")
-    db_url = "postgresql://nev:nev_local_dev@localhost:54322/nev_brief"  # MVP 本地；生产用 Supabase
+    db_url = os.environ.get("DATABASE_URL", "postgresql://nev:nev_local_dev@localhost:54322/nev_brief")
     conn = psycopg.connect(db_url)
     try:
         sources = _load_sources(conn, args.type)
@@ -61,8 +63,18 @@ async def _async_main(args: argparse.Namespace) -> int:
         reports = await crawl_sources(sources)
         ok = sum(1 for r in reports if r["ok"])
         total_articles = sum(r["articles"] for r in reports)
-        log.info("crawl_done", ok=ok, total=len(reports), articles=total_articles)
-        print(f"OK {ok}/{len(reports)} sources, {total_articles} articles fetched.")
+
+        # Persist articles to DB
+        total_inserted = 0
+        for r in reports:
+            raw_articles = r.get("raw_articles", [])
+            if raw_articles:
+                inserted = insert_articles_raw(conn, raw_articles)
+                total_inserted += inserted
+                conn.commit()
+
+        log.info("crawl_done", ok=ok, total=len(reports), articles=total_articles, inserted=total_inserted)
+        print(f"OK {ok}/{len(reports)} sources, {total_articles} fetched, {total_inserted} inserted to DB.")
         return 0 if ok > 0 else 1
     finally:
         conn.close()
