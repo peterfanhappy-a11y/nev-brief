@@ -34,3 +34,5 @@ supabase/.temp/
 # Logs
 *.log
 logs/
+
+.env
