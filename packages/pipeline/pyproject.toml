@@ -1,0 +1,28 @@
+[project]
+name = "nev-pipeline"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "openai>=1.0",
+    "jieba>=0.42",
+    "selectolax>=0.3",
+    "readability-lxml>=0.8",
+    "lxml[html_clean]>=5.0",
+    "psycopg[binary]>=3.1",
+    "pyyaml>=6.0",
+    "structlog",
+    "tenacity",
+]
+
+[tool.uv.sources]
+nev-contracts = { workspace = true }
+nev-shared    = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

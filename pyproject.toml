@@ -7,16 +7,18 @@ dependencies = [
     "nev-contracts",
     "nev-shared",
     "nev-crawler",
+    "nev-pipeline",
 ]
 
 [tool.uv.workspace]
-members = ["packages/contracts", "packages/shared", "packages/crawler"]
+members = ["packages/contracts", "packages/shared", "packages/crawler", "packages/pipeline"]
 # Agents 1-7 will add their packages here as they're scaffolded
 
 [tool.uv.sources]
 nev-contracts = { workspace = true }
 nev-shared = { workspace = true }
 nev-crawler = { workspace = true }
+nev-pipeline = { workspace = true }
 
 [dependency-groups]
 dev = [
