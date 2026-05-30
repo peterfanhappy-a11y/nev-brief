@@ -52,4 +52,5 @@ markers = [
     "integration: integration tests (require docker-compose)",
     "ai_eval: golden set AI evaluation (calls real DeepSeek)",
     "network: real network calls — opt-in only, skipped by default",
+    "golden: run against real DeepSeek API",
 ]

@@ -26,3 +26,4 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+markers = ["golden: run against real DeepSeek API"]
