@@ -1,0 +1,274 @@
+# NEV Morning Brief - Entity Dictionary Seed
+# 50 车企 canonical + ~200 车型 + 中英文别名
+# Hot brands (is_hot: true): BYD, Tesla, NIO, XPeng, Li Auto, AITO (华为系), Xiaomi
+# Used by pipeline as fallback when DeepSeek JSON parsing fails,
+# and to determine "hot brand bonus" in importance scoring.
+
+brands:
+  # ===== Hot Chinese NEV brands (is_hot: true) =====
+  - canonical: "BYD"
+    aliases: ["比亚迪", "BYD", "比亚迪汽车"]
+    models: ["秦", "汉", "唐", "宋", "元", "海豹", "海豚", "海狮", "仰望 U8", "仰望 U9", "腾势 D9", "腾势 N7", "腾势 N8", "方程豹 豹 5", "宋 PLUS", "汉 EV", "唐 DM-i"]
+    is_hot: true
+
+  - canonical: "Tesla"
+    aliases: ["特斯拉", "Tesla"]
+    models: ["Model 3", "Model Y", "Model S", "Model X", "Cybertruck", "Semi", "Roadster"]
+    is_hot: true
+
+  - canonical: "NIO"
+    aliases: ["蔚来", "NIO", "蔚来汽车"]
+    models: ["ET5", "ET5T", "ET7", "ET9", "ES6", "ES7", "ES8", "EC6", "EC7", "乐道 L60", "萤火虫"]
+    is_hot: true
+
+  - canonical: "XPeng"
+    aliases: ["小鹏", "XPeng", "小鹏汽车", "Xpeng"]
+    models: ["P7", "P7i", "P5", "G3", "G6", "G9", "X9", "MONA M03"]
+    is_hot: true
+
+  - canonical: "Li Auto"
+    aliases: ["理想", "理想汽车", "Li Auto", "LiAuto", "Lixiang"]
+    models: ["L6", "L7", "L8", "L9", "MEGA", "理想 ONE"]
+    is_hot: true
+
+  - canonical: "AITO"
+    aliases: ["华为", "AITO", "问界", "鸿蒙智行", "Huawei", "享界", "智界", "尊界"]
+    models: ["问界 M5", "问界 M7", "问界 M9", "智界 S7", "智界 R7", "享界 S9", "尊界 S800"]
+    is_hot: true
+
+  - canonical: "Xiaomi"
+    aliases: ["小米", "Xiaomi", "小米汽车", "Mi"]
+    models: ["SU7", "SU7 Pro", "SU7 Max", "SU7 Ultra", "YU7"]
+    is_hot: true
+
+  # ===== Other Chinese NEV / EV brands =====
+  - canonical: "Zeekr"
+    aliases: ["极氪", "Zeekr"]
+    models: ["001", "007", "009", "X", "MIX"]
+    is_hot: false
+
+  - canonical: "Leapmotor"
+    aliases: ["零跑", "Leapmotor", "零跑汽车"]
+    models: ["C10", "C11", "C16", "T03", "S01"]
+    is_hot: false
+
+  - canonical: "Aion"
+    aliases: ["广汽埃安", "埃安", "Aion", "AION"]
+    models: ["AION S", "AION Y", "AION V", "AION LX", "Hyper GT", "Hyper SSR"]
+    is_hot: false
+
+  - canonical: "IM Motors"
+    aliases: ["智己", "上汽智己", "IM", "IM Motors"]
+    models: ["L6", "L7", "LS6", "LS7"]
+    is_hot: false
+
+  - canonical: "Avatr"
+    aliases: ["阿维塔", "长安阿维塔", "Avatr"]
+    models: ["11", "12", "07"]
+    is_hot: false
+
+  - canonical: "Great Wall"
+    aliases: ["长城", "长城汽车", "Great Wall", "魏牌", "WEY", "欧拉", "ORA", "坦克", "TANK"]
+    models: ["哈弗 H6", "哈弗 大狗", "魏牌 蓝山", "欧拉 好猫", "坦克 300", "坦克 500", "坦克 700"]
+    is_hot: false
+
+  - canonical: "Geely"
+    aliases: ["吉利", "Geely", "吉利汽车", "银河", "Galaxy"]
+    models: ["银河 E5", "银河 L6", "银河 L7", "星越 L", "星瑞", "博越", "帝豪"]
+    is_hot: false
+
+  - canonical: "Chery"
+    aliases: ["奇瑞", "Chery", "iCAR", "星途", "Exeed"]
+    models: ["瑞虎 8", "瑞虎 7", "艾瑞泽 8", "星途 揽月", "星途 瑶光", "iCAR 03"]
+    is_hot: false
+
+  - canonical: "Wuling"
+    aliases: ["五菱", "Wuling", "上汽通用五菱"]
+    models: ["宏光 MINI EV", "缤果", "星光", "Air ev", "凯捷"]
+    is_hot: false
+
+  - canonical: "MG"
+    aliases: ["名爵", "MG", "上汽名爵", "Morris Garages"]
+    models: ["MG4 EV", "MG5", "MG7", "ZS EV", "Cyberster"]
+    is_hot: false
+
+  - canonical: "Neta"
+    aliases: ["哪吒", "Neta", "哪吒汽车"]
+    models: ["哪吒 X", "哪吒 S", "哪吒 GT", "哪吒 AYA", "哪吒 U"]
+    is_hot: false
+
+  - canonical: "Voyah"
+    aliases: ["岚图", "Voyah", "岚图汽车"]
+    models: ["FREE", "梦想家", "追光", "知音"]
+    is_hot: false
+
+  - canonical: "Deepal"
+    aliases: ["深蓝", "Deepal", "深蓝汽车", "长安深蓝"]
+    models: ["SL03", "S07", "L07", "G318"]
+    is_hot: false
+
+  - canonical: "HiPhi"
+    aliases: ["高合", "HiPhi", "高合汽车"]
+    models: ["HiPhi X", "HiPhi Z", "HiPhi Y"]
+    is_hot: false
+
+  - canonical: "JIYUE"
+    aliases: ["极越", "JIYUE", "集度"]
+    models: ["01", "07"]
+    is_hot: false
+
+  - canonical: "Hongqi"
+    aliases: ["红旗", "Hongqi", "一汽红旗"]
+    models: ["H5", "H9", "HS5", "HS7", "E-HS9", "EH7"]
+    is_hot: false
+
+  - canonical: "JAC"
+    aliases: ["江淮", "JAC", "江淮汽车", "钇为"]
+    models: ["瑞风", "钇为 3", "瑞风 RF8", "嘉悦"]
+    is_hot: false
+
+  - canonical: "BAIC"
+    aliases: ["北汽", "BAIC", "北京汽车", "极狐", "ARCFOX"]
+    models: ["极狐 阿尔法 S", "极狐 阿尔法 T", "极狐 考拉", "BJ40", "BJ60"]
+    is_hot: false
+
+  - canonical: "Dongfeng"
+    aliases: ["东风", "Dongfeng", "东风汽车", "风神", "纳米", "eπ"]
+    models: ["奕派 007", "奕派 008", "风神 L7", "纳米 06", "猛士 917"]
+    is_hot: false
+
+  - canonical: "Trumpchi"
+    aliases: ["广汽传祺", "传祺", "Trumpchi", "GAC"]
+    models: ["GS8", "GS4", "M8", "影豹", "E9"]
+    is_hot: false
+
+  - canonical: "Roewe"
+    aliases: ["荣威", "Roewe", "上汽荣威"]
+    models: ["RX5", "i5", "D7", "iMAX8", "Marvel R"]
+    is_hot: false
+
+  - canonical: "Maxus"
+    aliases: ["大通", "Maxus", "上汽大通", "MAXUS"]
+    models: ["G50", "G90", "D90", "T90", "MIFA 9"]
+    is_hot: false
+
+  # ===== Joint ventures / global in China =====
+  - canonical: "Volkswagen"
+    aliases: ["大众", "Volkswagen", "VW", "一汽大众", "上汽大众"]
+    models: ["ID.3", "ID.4", "ID.6", "ID.7", "帕萨特", "迈腾", "途观", "高尔夫", "途昂"]
+    is_hot: false
+
+  - canonical: "Toyota"
+    aliases: ["丰田", "Toyota", "一汽丰田", "广汽丰田"]
+    models: ["bZ4X", "bZ3", "凯美瑞", "卡罗拉", "RAV4", "汉兰达", "普拉多", "塞那"]
+    is_hot: false
+
+  - canonical: "Honda"
+    aliases: ["本田", "Honda", "广汽本田", "东风本田"]
+    models: ["e:NP1", "e:NS1", "雅阁", "思域", "CR-V", "皓影", "型格"]
+    is_hot: false
+
+  - canonical: "Ford"
+    aliases: ["福特", "Ford", "长安福特"]
+    models: ["Mustang Mach-E", "F-150 Lightning", "蒙迪欧", "锐界", "探险者", "EVOS"]
+    is_hot: false
+
+  - canonical: "GM"
+    aliases: ["通用", "GM", "General Motors", "通用汽车"]
+    models: ["Hummer EV", "Silverado EV", "Equinox EV", "Blazer EV"]
+    is_hot: false
+
+  - canonical: "Stellantis"
+    aliases: ["Stellantis", "Jeep", "标致", "Peugeot", "雪铁龙", "Citroen", "DS", "玛莎拉蒂", "Maserati"]
+    models: ["牧马人", "大切诺基", "标致 408", "标致 508", "雪铁龙 C5", "DS 9"]
+    is_hot: false
+
+  # ===== Global EV-only =====
+  - canonical: "Rivian"
+    aliases: ["Rivian", "瑞维安"]
+    models: ["R1T", "R1S", "R2", "R3"]
+    is_hot: false
+
+  - canonical: "Lucid"
+    aliases: ["Lucid", "Lucid Motors", "路西德"]
+    models: ["Air", "Gravity", "Air Pure", "Air Touring", "Air Grand Touring"]
+    is_hot: false
+
+  - canonical: "Polestar"
+    aliases: ["极星", "Polestar"]
+    models: ["Polestar 2", "Polestar 3", "Polestar 4", "Polestar 5", "Polestar 6"]
+    is_hot: false
+
+  # ===== Korean =====
+  - canonical: "Hyundai"
+    aliases: ["现代", "Hyundai", "北京现代"]
+    models: ["IONIQ 5", "IONIQ 6", "Kona Electric", "伊兰特", "途胜", "胜达"]
+    is_hot: false
+
+  - canonical: "Kia"
+    aliases: ["起亚", "Kia", "东风悦达起亚"]
+    models: ["EV5", "EV6", "EV9", "K3", "K5", "智跑", "狮铂拓界"]
+    is_hot: false
+
+  # ===== European luxury =====
+  - canonical: "BMW"
+    aliases: ["宝马", "BMW", "华晨宝马", "MINI"]
+    models: ["i3", "i4", "i5", "i7", "iX", "iX3", "X3", "X5", "3 系", "5 系", "7 系"]
+    is_hot: false
+
+  - canonical: "Mercedes-Benz"
+    aliases: ["奔驰", "Mercedes", "Mercedes-Benz", "梅赛德斯", "北京奔驰", "迈巴赫", "Maybach"]
+    models: ["EQS", "EQE", "EQA", "EQB", "EQC", "C 级", "E 级", "S 级", "GLC", "GLE"]
+    is_hot: false
+
+  - canonical: "Audi"
+    aliases: ["奥迪", "Audi", "一汽奥迪", "上汽奥迪"]
+    models: ["e-tron", "Q4 e-tron", "Q5 e-tron", "Q6 e-tron", "A4L", "A6L", "Q5L", "Q7", "RS6"]
+    is_hot: false
+
+  - canonical: "Porsche"
+    aliases: ["保时捷", "Porsche"]
+    models: ["Taycan", "Macan EV", "911", "Panamera", "Cayenne", "Macan"]
+    is_hot: false
+
+  # ===== Additional global brands =====
+  - canonical: "Nissan"
+    aliases: ["日产", "Nissan", "东风日产"]
+    models: ["Ariya", "Leaf", "轩逸", "天籁", "奇骏", "逍客"]
+    is_hot: false
+
+  - canonical: "Mazda"
+    aliases: ["马自达", "Mazda", "一汽马自达", "长安马自达"]
+    models: ["MX-30", "EZ-6", "CX-5", "CX-30", "Mazda 3", "Mazda 6"]
+    is_hot: false
+
+  - canonical: "Volvo"
+    aliases: ["沃尔沃", "Volvo"]
+    models: ["EX30", "EX90", "EM90", "XC40", "XC60", "XC90", "S60", "S90"]
+    is_hot: false
+
+  - canonical: "Lexus"
+    aliases: ["雷克萨斯", "Lexus"]
+    models: ["RZ", "ES", "LS", "RX", "NX", "LM", "UX"]
+    is_hot: false
+
+  - canonical: "Cadillac"
+    aliases: ["凯迪拉克", "Cadillac"]
+    models: ["LYRIQ", "Celestiq", "CT4", "CT5", "CT6", "XT4", "XT5", "XT6"]
+    is_hot: false
+
+  - canonical: "Chevrolet"
+    aliases: ["雪佛兰", "Chevrolet", "Chevy"]
+    models: ["Bolt EV", "Silverado EV", "Blazer EV", "Equinox EV", "科鲁泽", "迈锐宝"]
+    is_hot: false
+
+topics:
+  - new_car
+  - sales
+  - policy
+  - tech
+  - overseas
+  - people
+  - finance
+  - recall
+  - supply_chain
