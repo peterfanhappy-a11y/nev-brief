@@ -5,10 +5,11 @@ import pytest
 from nev_crawler.source_loader import load_sources_yaml, SourceSpec
 
 
-def test_load_sources_yaml_returns_25():
+def test_load_sources_yaml_has_minimum_sources():
+    """Source count grows over time; lock in a floor (25 MVP launch set)."""
     yaml_path = Path(__file__).parent.parent.parent / "packages" / "crawler" / "nev_crawler" / "sources_seed.yaml"
     specs = load_sources_yaml(yaml_path)
-    assert len(specs) == 25
+    assert len(specs) >= 25
 
 
 def test_source_spec_fields():

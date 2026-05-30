@@ -21,4 +21,6 @@ def test_settings_missing_required_raises(monkeypatch):
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     get_settings.cache_clear()
     with pytest.raises(Exception):
-        get_settings()
+        # _env_file=None bypasses real .env so the test isn't satisfied by
+        # local secrets (config.py uses absolute-path .env by default).
+        Settings(_env_file=None)
