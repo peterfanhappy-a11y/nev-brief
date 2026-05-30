@@ -47,10 +47,11 @@ warn_return_any = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "-m 'not network'"
+addopts = "-m 'not network and not integration and not perf and not golden'"
 markers = [
     "integration: integration tests (require docker-compose)",
     "ai_eval: golden set AI evaluation (calls real DeepSeek)",
     "network: real network calls — opt-in only, skipped by default",
     "golden: run against real DeepSeek API",
+    "perf: performance acceptance gate (slow)",
 ]

@@ -13,12 +13,27 @@ import logging
 
 from nev_shared.config import get_settings
 from nev_shared.logger import get_logger
-from openai import AsyncOpenAI
+from openai import (
+    APIConnectionError,
+    APITimeoutError,
+    AsyncOpenAI,
+    InternalServerError,
+    RateLimitError,
+)
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+)
+
+# Retry only transient errors. Auth / bad-request / quota errors fail fast
+# (no point waiting through exponential backoff when the key is wrong).
+_RETRYABLE = (
+    APIConnectionError,
+    APITimeoutError,
+    InternalServerError,
+    RateLimitError,
 )
 
 log = get_logger("deepseek")
@@ -38,7 +53,7 @@ def _client() -> AsyncOpenAI:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=16),
-    retry=retry_if_exception_type(Exception),
+    retry=retry_if_exception_type(_RETRYABLE),
     reraise=True,
 )
 async def _call(
