@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
 import sys
+from pathlib import Path
 
 import psycopg
+import yaml
 
 from nev_crawler.runner import crawl_sources
 from nev_crawler.storage import insert_articles_raw
@@ -27,6 +28,16 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _load_extra_from_yaml() -> dict[str, dict]:
+    """Load `extra` (HTML selectors etc.) from sources_seed.yaml, keyed by source name.
+
+    sources 表暂无 extra 列；HTML adapter 需要的 selector 走 YAML 兜底直到 schema 迁移。
+    """
+    yaml_path = Path(__file__).parent / "sources_seed.yaml"
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    return {s["name"]: s.get("extra", {}) for s in data.get("sources", [])}
+
+
 def _load_sources(conn: psycopg.Connection, type_filter: str) -> list[dict]:
     where = "enabled = true"
     if type_filter == "domestic":
@@ -40,22 +51,25 @@ def _load_sources(conn: psycopg.Connection, type_filter: str) -> list[dict]:
         cur.execute(f"SELECT id, name, type, url, locale, category, enabled FROM sources WHERE {where}")
         cols = [c.name for c in cur.description]
         rows = cur.fetchall()
+    extras = _load_extra_from_yaml()
     sources = []
     for r in rows:
         s = dict(zip(cols, r, strict=True))
         s["id"] = str(s["id"])
-        s["extra"] = {}  # 从 DB 读不到 extra；HTML 类型暂用 YAML 配置
+        s["extra"] = extras.get(s["name"], {})
         sources.append(s)
     return sources
 
 
 async def _async_main(args: argparse.Namespace) -> int:
     try:
-        configure_logging(level=get_settings().log_level)
+        settings = get_settings()
+        configure_logging(level=settings.log_level)
+        db_url = settings.database_url
     except Exception:  # noqa: BLE001
         # Settings 未配置时（如纯 --help 调用），跳过日志配置
         configure_logging(level="INFO")
-    db_url = os.environ.get("DATABASE_URL", "postgresql://nev:nev_local_dev@localhost:54322/nev_brief")
+        db_url = "postgresql://nev:nev_local_dev@localhost:54322/nev_brief"
     conn = psycopg.connect(db_url)
     try:
         sources = _load_sources(conn, args.type)

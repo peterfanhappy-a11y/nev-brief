@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from nev_crawler.adapters.api import APIAdapter
 from nev_crawler.adapters.base import Adapter, FetchResult
 from nev_crawler.adapters.html import HTMLAdapter
+from nev_crawler.adapters.nextjs_json import NextJSJSONAdapter
 from nev_crawler.adapters.rss import RSSAdapter
 from nev_crawler.adapters.rsshub import RSSHubAdapter
 from nev_crawler.rate_limiter import DomainRateLimiter
@@ -22,6 +23,7 @@ DEFAULT_REGISTRY: dict[str, Adapter] = {
     "html_scrape": HTMLAdapter(),
     "api": APIAdapter(),
     "rsshub": RSSHubAdapter(),
+    "nextjs_json": NextJSJSONAdapter(),
 }
 
 
@@ -59,6 +61,7 @@ async def _crawl_one(
         if source["type"] != "rsshub":
             allowed = await robots.is_allowed(url)
             if not allowed:
+                log.warning("robots_disallowed", source=name, url=url)
                 return _report(name, started, False, error="robots.txt disallows")
 
         domain = urlparse(url).netloc or "rsshub"

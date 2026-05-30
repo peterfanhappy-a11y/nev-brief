@@ -19,7 +19,7 @@ log = get_logger("source_loader")
 
 class SourceSpec(BaseModel):
     name: str
-    type: str = Field(pattern="^(rss|api|html_scrape|html|rsshub)$")
+    type: str = Field(pattern="^(rss|api|html_scrape|html|rsshub|nextjs_json)$")
     url: str
     authority: int = Field(ge=1, le=10)
     locale: str = Field(pattern="^(zh|en)$")

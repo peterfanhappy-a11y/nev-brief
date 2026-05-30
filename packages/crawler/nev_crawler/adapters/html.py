@@ -31,7 +31,7 @@ class HTMLAdapter(Adapter):
         url = source["url"]
         source_id = UUID(source["id"])
         try:
-            async with make_client() as client:
+            async with make_client(user_agent=extra.get("user_agent")) as client:
                 resp = await client.get(url)
                 resp.raise_for_status()
                 html = resp.text

@@ -33,6 +33,7 @@ sources:
     authority: 9
     locale: zh
     category: media
+    enabled: false  # TODO: 原 URL 已 404，需查 latepost.com 新栏目结构
     crawl_cron: "0 22 * * *"
     extra:
       list_selector: "article.news-item"
@@ -82,25 +83,28 @@ sources:
     category: media
     crawl_cron: "30 22 * * *"
     extra:
-      list_selector: ".article-pic-list li"
-      title_selector: ".article-content h3 a"
-      link_selector: ".article-content h3 a"
+      # debug_html.py 验证: 60x 链接父容器为 ul.article
+      list_selector: "ul.article > li"
+      title_selector: "a"
+      link_selector: "a"
       link_attr: "href"
-      time_selector: ".fn-clear .fn-right"
+      time_selector: ".fn-right"
 
   - name: "懂车帝资讯"
-    type: html
+    type: nextjs_json
     url: "https://www.dongchedi.com/news"
     authority: 7
     locale: zh
     category: media
+    enabled: false  # ⚠️ 合规硬约束：dongchedi.com/robots.txt 明确 Disallow: / (禁止所有爬虫)
     crawl_cron: "30 22 * * *"
     extra:
-      list_selector: "[class*='card_box']"
-      title_selector: "[class*='card_title']"
-      link_selector: "a"
-      link_attr: "href"
-      time_selector: "[class*='card_time']"
+      # __NEXT_DATA__ JSON 路径已验证，但 robots.txt 禁止访问，不能启用
+      json_path: "props.pageProps.staticData.news"
+      title_field: "title"
+      id_field: "unique_id_str"
+      url_template: "https://www.dongchedi.com/article/{id}"
+      published_field: "publish_time"
 
   - name: "车质网投诉"
     type: html
@@ -110,7 +114,8 @@ sources:
     category: media
     crawl_cron: "30 22 * * *"
     extra:
-      list_selector: ".newsList li"
+      # debug_html.py 验证: 20x 链接父容器为 div.news_nr
+      list_selector: "div.news_nr"
       title_selector: "a"
       link_selector: "a"
       link_attr: "href"
@@ -119,29 +124,48 @@ sources:
   # === 国内官方/协会 (3) ===
   - name: "乘联会 CPCA 周报"
     type: html
-    url: "http://www.cpcaauto.com/list.php?types=csjd"
+    url: "https://www.cpcaauto.com/news.php?types=csjd"
     authority: 10
     locale: zh
     category: association
     crawl_cron: "0 23 * * *"
     extra:
-      list_selector: ".dadao li"
+      # debug_html.py 验证: 25x div.cat_list 是周度报告列表
+      list_selector: "div.cat_list"
       title_selector: "a"
       link_selector: "a"
       link_attr: "href"
       time_selector: ".time"
+      # 乘联会拒绝 NEV-Brief-Bot UA (403)，用浏览器伪装绕过
+      user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36"
 
   - name: "中汽协 CAAM"
     type: html
-    url: "http://www.caam.org.cn/chn/9/cate_117/list_1.html"
+    url: "http://www.caam.org.cn/chn/8/cate_82/list_1.html"
     authority: 10
     locale: zh
     category: association
     crawl_cron: "0 23 * * *"
     extra:
-      list_selector: ".item"
-      title_selector: ".title a"
-      link_selector: ".title a"
+      # debug_html.py 验证: 27x [class*='article'] 是行业动态文章
+      list_selector: "[class*='article']"
+      title_selector: "a"
+      link_selector: "a"
+      link_attr: "href"
+      time_selector: ".date"
+
+  - name: "中汽协 产销数据"
+    type: html
+    url: "http://www.caam.org.cn/chn/5/cate_39/list_1.html"
+    authority: 10
+    locale: zh
+    category: association
+    crawl_cron: "0 23 * * *"
+    extra:
+      # cate_39 = 国内产销数据（NEV 月度销量来源）
+      list_selector: "[class*='article']"
+      title_selector: "a"
+      link_selector: "a"
       link_attr: "href"
       time_selector: ".date"
 
@@ -153,7 +177,8 @@ sources:
     category: official
     crawl_cron: "0 23 * * *"
     extra:
-      list_selector: ".list_tit li"
+      # debug_html.py 验证: 7x 链接父容器为 ul.lmy_main_tj
+      list_selector: "ul.lmy_main_tj li"
       title_selector: "a"
       link_selector: "a"
       link_attr: "href"
