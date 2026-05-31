@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from nev_shared.logger import get_logger
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
-from nev_pipeline.entity_dict import canonicalize_brand, find_brands_in_text
+from nev_pipeline.entity_dict import canonicalize_brands, find_brands_in_text
 
 log = get_logger("entity_extractor")
 
@@ -61,25 +61,6 @@ def _build_user_prompt(title: str, clean_text: str) -> str:
     return f"标题: {title}\n正文（截断到 1500 字）: {clean_text[:1500]}"
 
 
-def _canonicalize_brands(raw: list[str]) -> list[str]:
-    """Map DeepSeek-returned brand strings (alias or canonical) → canonical form.
-
-    DeepSeek often returns Chinese aliases ("比亚迪", "蔚来") rather than the canonical
-    English form ("BYD", "NIO"). entity_dict is the truth source — map through it.
-    Unrecognized brands are preserved as-is (preserves novel-brand information).
-    """
-    seen: set[str] = set()
-    out: list[str] = []
-    for b in raw:
-        if not b:
-            continue
-        canonical = canonicalize_brand(b) or b
-        if canonical not in seen:
-            seen.add(canonical)
-            out.append(canonical)
-    return out
-
-
 async def extract_entities(title: str, clean_text: str) -> Entities:
     """Extract entities via DeepSeek; fall back to entity_dict on failure."""
     user = _build_user_prompt(title, clean_text)
@@ -95,7 +76,7 @@ async def extract_entities(title: str, clean_text: str) -> Entities:
         return Entities(brands=brands, used_fallback=True)
 
     return Entities(
-        brands=_canonicalize_brands(list(result.get("brands", []))),
+        brands=canonicalize_brands(list(result.get("brands", []))),
         models=list(result.get("models", [])),
         topics=list(result.get("topics", [])),
         people=list(result.get("people", [])),

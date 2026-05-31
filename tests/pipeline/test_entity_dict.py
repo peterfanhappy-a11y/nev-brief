@@ -1,6 +1,7 @@
 """Tests for nev_pipeline.entity_dict (T6)."""
 from nev_pipeline.entity_dict import (
     canonicalize_brand,
+    canonicalize_brands,
     find_brands_in_text,
     load_entity_dict,
 )
@@ -47,6 +48,30 @@ def test_find_brands_in_text():
 def test_find_brands_empty():
     assert find_brands_in_text("") == []
     assert find_brands_in_text("Random text with no brands") == []
+
+
+def test_canonicalize_brands_maps_aliases():
+    """DeepSeek 别名输出 → canonical（核心：feedback_deepseek_brand_canonicalize）"""
+    assert canonicalize_brands(["比亚迪", "特斯拉", "蔚来"]) == ["BYD", "Tesla", "NIO"]
+
+
+def test_canonicalize_brands_preserves_unknown():
+    """非 entity_dict 品牌（"微博"）原样保留，让下游决定过滤。"""
+    assert canonicalize_brands(["BYD", "微博"]) == ["BYD", "微博"]
+
+
+def test_canonicalize_brands_dedups_order_preserved():
+    """重复 alias 去重，保持首次出现顺序。"""
+    assert canonicalize_brands(["比亚迪", "BYD", "蔚来", "BYD"]) == ["BYD", "NIO"]
+
+
+def test_canonicalize_brands_skips_empty():
+    """空字符串 / None / 全空白跳过。"""
+    assert canonicalize_brands(["", "BYD", None, "  "]) == ["BYD"]  # type: ignore[list-item]
+
+
+def test_canonicalize_brands_empty_input():
+    assert canonicalize_brands([]) == []
 
 
 def test_hot_brands_set():

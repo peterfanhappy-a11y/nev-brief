@@ -8,14 +8,14 @@ import psycopg
 from python.content import ArticleRaw
 
 
-def hash_content(text: str | None) -> str | None:
+def hash_content(text: str | None, fallback: str = "") -> str:
     """生成 60-bit 内容哈希（用于 SimHash 之前的快速去重）。
 
+    永不返回 None：content 为空时用 fallback（如 title+url）兜底，仍空走 "_empty_"。
     MVP 用 blake2b 8 字节做粗去重；pipeline 阶段（Agent-3）会算真正 SimHash。
     """
-    if not text:
-        return None
-    h = hashlib.blake2b(text.encode("utf-8"), digest_size=8)
+    payload = (text or "").strip() or fallback.strip() or "_empty_"
+    h = hashlib.blake2b(payload.encode("utf-8"), digest_size=8)
     return h.hexdigest()
 
 
@@ -34,7 +34,9 @@ def insert_articles_raw(conn: psycopg.Connection, articles: list[ArticleRaw]) ->
                        ON CONFLICT (url) DO NOTHING""",
                     (
                         str(a.id), str(a.source_id), a.url, a.title,
-                        a.content, hash_content(a.content), a.published_at,
+                        a.content,
+                        hash_content(a.content, fallback=f"{a.title or ''} {a.url}"),
+                        a.published_at,
                     ),
                 )
                 if cur.rowcount > 0:

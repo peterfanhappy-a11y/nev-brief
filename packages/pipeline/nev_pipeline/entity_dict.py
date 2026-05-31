@@ -57,6 +57,33 @@ def canonicalize_brand(alias_or_canonical: str) -> str | None:
     return d.alias_to_canonical.get(alias_or_canonical.lower())
 
 
+def canonicalize_brands(raw: list[str]) -> list[str]:
+    """Map a list of DeepSeek-returned brand strings → canonical, dedup'd, order-preserved.
+
+    Use this whenever a module calls DeepSeek to extract brands: the LLM often
+    returns Chinese aliases ("比亚迪", "蔚来") instead of canonical English ("BYD",
+    "NIO") even when the prompt explicitly asks for canonical names. entity_dict
+    is the single source of truth.
+
+    Unrecognized brands (not in entity_dict) are preserved as-is so novel-brand
+    information isn't lost — downstream scoring/filtering can decide whether to
+    drop them.
+
+    See feedback_deepseek_brand_canonicalize.md for the painful history.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for b in raw:
+        if not b or not b.strip():
+            continue
+        stripped = b.strip()
+        canonical = canonicalize_brand(stripped) or stripped
+        if canonical not in seen:
+            seen.add(canonical)
+            out.append(canonical)
+    return out
+
+
 def find_brands_in_text(text: str) -> list[str]:
     """Find canonical brand names mentioned in *text*.
 

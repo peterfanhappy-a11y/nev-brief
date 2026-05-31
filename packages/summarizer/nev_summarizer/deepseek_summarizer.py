@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
-from nev_pipeline.entity_dict import canonicalize_brand
+from nev_pipeline.entity_dict import canonicalize_brands
 from nev_shared.logger import get_logger
 
 from nev_summarizer.char_validator import (
@@ -61,25 +61,6 @@ class ClusterSummary:
     source_count: int
     used_truncation: bool       # True if algorithmic fallback kicked in
     retry_count: int            # 0 or 1
-
-
-def _canonicalize_brands(raw: list[str]) -> list[str]:
-    """Map DeepSeek-returned brand strings (alias or canonical) → canonical form.
-
-    Same as nev_pipeline.entity_extractor._canonicalize_brands — DeepSeek often
-    returns Chinese aliases ("比亚迪") rather than canonical ("BYD"). entity_dict
-    is truth. Unrecognized brands preserved as-is.
-    """
-    seen: set[str] = set()
-    out: list[str] = []
-    for b in raw:
-        if not b:
-            continue
-        canonical = canonicalize_brand(b) or b
-        if canonical not in seen:
-            seen.add(canonical)
-            out.append(canonical)
-    return out
 
 
 def _build_user_prompt(cluster: Cluster) -> str:
@@ -161,7 +142,7 @@ async def summarize_cluster(cluster: Cluster) -> ClusterSummary | None:
         title=title,
         summary=summary,
         key_data=dict(result.get("key_data") or {}),
-        brands=_canonicalize_brands(list(result.get("brands") or [])),
+        brands=canonicalize_brands(list(result.get("brands") or [])),
         topics=list(result.get("topics") or []),
         primary_source=str(result.get("primary_source") or ""),
         source_count=int(result.get("source_count") or len(cluster.articles)),
