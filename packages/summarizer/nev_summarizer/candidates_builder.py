@@ -32,7 +32,9 @@ def build_candidate(
         "title": summary.title,
         "summary": summary.summary,
         "brands": summary.brands,
-        "topics": summary.topics,
+        # Use cluster.topics (Agent-3 Prompt 1 enum-constrained) rather than
+        # summary.topics (Prompt 2 free-form). Composer needs enum for filtering.
+        "topics": cluster.topics,
         "source_links": source_links,
         "global_importance": round(global_importance, 2),
         "key_data": summary.key_data,

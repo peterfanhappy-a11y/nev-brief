@@ -66,6 +66,25 @@ def test_freshness_decay():
     assert cluster_importance(fresh, now=now) > cluster_importance(stale, now=now)
 
 
+def test_non_nev_brand_scores_lower_than_cold_nev():
+    """新公式: 非 entity_dict 品牌（微博/腾讯）应输给 cold NEV 品牌（JAC/Hyundai）。"""
+    now = datetime.now(timezone.utc)
+    non_nev = _make_cluster(source_ids=["s1"], authorities=[8],
+                             brands=["微博"], topics=["overseas"], earliest=now)
+    cold_nev = _make_cluster(source_ids=["s1"], authorities=[8],
+                              brands=["JAC"], topics=["overseas"], earliest=now)
+    assert cluster_importance(cold_nev, now=now) > cluster_importance(non_nev, now=now)
+
+
+def test_no_brand_no_topic_baseline():
+    """完全无 brand 无 hot topic 应给 0 heat（与 non-NEV 同）。"""
+    now = datetime.now(timezone.utc)
+    bare = _make_cluster(source_ids=["s1"], authorities=[5], earliest=now)
+    nev_cold = _make_cluster(source_ids=["s1"], authorities=[5],
+                              brands=["BMW"], earliest=now)
+    assert cluster_importance(nev_cold, now=now) > cluster_importance(bare, now=now)
+
+
 def test_score_range():
     now = datetime.now(timezone.utc)
     c = _make_cluster(source_ids=["s1","s2","s3","s4","s5"],

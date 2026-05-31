@@ -65,3 +65,25 @@ def test_passes_summary_metadata() -> None:
     )
     assert cand["brands"] == ["Tesla", "NIO"]
     assert cand["primary_source"] == "36氪"
+
+
+def test_topics_from_cluster_not_summary() -> None:
+    """topics 字段必须用 cluster.topics（enum 约束），忽略 summary.topics 自由词。"""
+    now = datetime.now(timezone.utc)
+    art = ClusterArticle(
+        raw_id="r1", title="t", clean_text="c", url="u",
+        source_id="s1", source_name="36氪", source_authority=8,
+        published_at=now, importance_score=0.0,
+    )
+    cluster = Cluster(
+        cluster_id="cl1", articles=[art], brands=[], models=[],
+        topics=["new_car", "sales"],   # enum 值，来自 Agent-3 Prompt 1
+        earliest_published=now,
+    )
+    cand = build_candidate(
+        cluster,
+        _summary(topics=["Robotaxi", "EPA 认证"]),   # 自由词，应被忽略
+        global_importance=10.0, rank=1,
+    )
+    assert cand["topics"] == ["new_car", "sales"]
+    assert "Robotaxi" not in cand["topics"]

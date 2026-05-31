@@ -28,10 +28,21 @@ def cluster_importance(cluster: Cluster, now: datetime | None = None) -> float:
     coverage = min(len(unique_sources) / 5, 1.0)
     age_hours = max((now - cluster.earliest_published).total_seconds() / 3600, 0.0)
     freshness = max(0.0, 1.0 - age_hours / 24.0)
+    # Graduated NEV relevance heat:
+    # - 0.0  no entity_dict brand match → non-NEV noise (e.g. 微博/腾讯/AI)
+    # - 0.4  cold NEV brand (in dict but not hot)
+    # - 0.8  hot NEV brand
+    # +0.2 bonus if topic is hot (new_car / sales / policy)
+    # Capped at 1.0.
+    cluster_brands = set(cluster.brands)
+    nev_brands = cluster_brands & set(d.brands_by_canonical.keys())
     heat = 0.0
-    if set(cluster.brands) & d.hot_brands:
-        heat += 0.5
+    if nev_brands:
+        heat += 0.4
+        if nev_brands & d.hot_brands:
+            heat += 0.4
     if set(cluster.topics) & HOT_TOPICS:
-        heat += 0.5
+        heat += 0.2
+    heat = min(heat, 1.0)
 
     return 100.0 * (auth * 0.3 + coverage * 0.3 + freshness * 0.2 + heat * 0.2)
