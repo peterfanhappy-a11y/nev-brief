@@ -1,0 +1,200 @@
+[
+  {
+    "cluster_label": "BYD海豹06上市",
+    "expected_brands": ["BYD"],
+    "articles": [
+      {
+        "title": "比亚迪海豹06 EV正式上市 售价8.98万起",
+        "content": "5月30日，比亚迪发布全新海豹06 EV，售价区间8.98-13.98万元。新车搭载弗迪e3.0平台，CLTC最大续航605公里。该车型对标特斯拉Model 3，定位中型纯电轿车市场。",
+        "source": "36氪",
+        "authority": 9
+      },
+      {
+        "title": "比亚迪海豹06正式上市 起售价8.98万元",
+        "content": "比亚迪海豹06 EV于5月30日发布上市，售价8.98-13.98万元。基于e3.0平台打造，CLTC续航605km。新车将进一步丰富比亚迪海洋网产品矩阵。",
+        "source": "电车汇",
+        "authority": 7
+      },
+      {
+        "title": "海豹06 EV上市 8.98万起售",
+        "content": "5月30日比亚迪海豹06 EV官方上市，售价区间8.98-13.98万元。基于弗迪e3.0平台，续航605公里。直接竞争对手为特斯拉Model 3。",
+        "source": "盖世汽车",
+        "authority": 8
+      }
+    ]
+  },
+  {
+    "cluster_label": "Tesla Model Y焕新版交付",
+    "expected_brands": ["Tesla"],
+    "articles": [
+      {
+        "title": "特斯拉Model Y焕新版6月起交付 起售价26.4万",
+        "content": "特斯拉中国官宣，全新焕新版Model Y将于6月起在国内正式交付，起售价26.4万元。新车在内饰、续航、悬挂方面均有升级，CLTC续航最高719公里。",
+        "source": "新浪汽车",
+        "authority": 7
+      },
+      {
+        "title": "Model Y焕新版本月开启交付 售价26.4万起",
+        "content": "特斯拉宣布焕新版Model Y将于6月开启交付，起售价26.4万元。CLTC续航最高达719公里，是Model Y在华上市以来最大规模中期改款。",
+        "source": "36氪",
+        "authority": 9
+      }
+    ]
+  },
+  {
+    "cluster_label": "NIO ET9旗舰交付",
+    "expected_brands": ["NIO"],
+    "articles": [
+      {
+        "title": "蔚来ET9旗舰轿车正式开启大规模交付",
+        "content": "5月28日，蔚来汽车在合肥工厂举行ET9首批车主交付仪式。ET9搭载自研神玑NX9031智能驾驶芯片，售价78.8万元起。李斌出席仪式表示ET9是技术集大成之作。",
+        "source": "腾讯汽车",
+        "authority": 7
+      },
+      {
+        "title": "蔚来ET9首批交付 售价78.8万起",
+        "content": "蔚来ET9于5月28日在合肥工厂举行首批交付仪式，售价78.8万元起。新车搭载自研神玑NX9031芯片，是蔚来旗舰纯电轿车。",
+        "source": "汽车之家",
+        "authority": 8
+      },
+      {
+        "title": "ET9开启首批交付 蔚来旗舰技术集大成",
+        "content": "5月28日蔚来在合肥工厂首批交付ET9旗舰轿车，售价78.8万元起。搭载自研神玑NX9031芯片，李斌亲临交付现场。",
+        "source": "电车汇",
+        "authority": 7
+      }
+    ]
+  },
+  {
+    "cluster_label": "Xiaomi SU7 Ultra提车",
+    "expected_brands": ["Xiaomi"],
+    "articles": [
+      {
+        "title": "小米SU7 Ultra首批车主提车 雷军亲自交付",
+        "content": "5月29日小米汽车工厂举行SU7 Ultra首批车主交付仪式，雷军亲自为车主交付钥匙。SU7 Ultra售价81.49万元，最大功率1548马力，零百加速1.98秒。",
+        "source": "36氪",
+        "authority": 9
+      },
+      {
+        "title": "雷军亲自交付SU7 Ultra首批车主",
+        "content": "5月29日小米SU7 Ultra开启首批交付，雷军到场。新车售价81.49万元，零百加速1.98秒，最大功率1548马力。",
+        "source": "新浪汽车",
+        "authority": 7
+      }
+    ]
+  },
+  {
+    "cluster_label": "Li Auto L6销量新高",
+    "expected_brands": ["Li Auto"],
+    "articles": [
+      {
+        "title": "理想L6 5月销量再创新高 单月突破2.5万辆",
+        "content": "理想汽车公布5月销售数据，理想L6单月销量达25,328辆，环比增长12%。L系列全系5月累计交付41,000辆，连续三个月增长。",
+        "source": "电车汇",
+        "authority": 7
+      },
+      {
+        "title": "理想L6 5月销售2.5万辆 创历史新高",
+        "content": "5月理想L6销量达25,328辆，环比增长12%，创历史新高。理想L系列累计交付4.1万辆，6月有望继续增长。",
+        "source": "盖世汽车",
+        "authority": 8
+      }
+    ]
+  },
+  {
+    "cluster_label": "AITO问界M9大定突破",
+    "expected_brands": ["AITO"],
+    "articles": [
+      {
+        "title": "问界M9累计大定突破18万 鸿蒙智行高端提速",
+        "content": "AITO问界M9自上市以来累计大定突破18万辆，连续多月成为中国50万元以上市场销量冠军。鸿蒙智行表示问界品牌已成功打开高端豪华市场。",
+        "source": "36氪",
+        "authority": 9
+      },
+      {
+        "title": "AITO问界M9大定突破18万辆",
+        "content": "问界M9自上市累计大定突破18万辆，稳居50万元以上市场销冠。鸿蒙智行高端化战略成效显著，享界、智界也将持续放量。",
+        "source": "汽车之家",
+        "authority": 8
+      }
+    ]
+  },
+  {
+    "cluster_label": "BYD vs Tesla销量对比",
+    "expected_brands": ["BYD", "Tesla"],
+    "articles": [
+      {
+        "title": "5月全球新能源销冠：比亚迪38万碾压特斯拉15万",
+        "content": "2026年5月全球新能源乘用车销量数据显示，比亚迪以38万辆位居榜首，特斯拉全球交付15万辆位列第二。比亚迪同比增长32%，特斯拉同比下降8%。",
+        "source": "36氪",
+        "authority": 9
+      },
+      {
+        "title": "比亚迪5月销38万 特斯拉15万 差距持续扩大",
+        "content": "5月比亚迪全球销量38万辆，同比增长32%；特斯拉全球交付15万辆，同比下降8%。比亚迪与特斯拉的销量差距进一步扩大。",
+        "source": "盖世汽车",
+        "authority": 8
+      }
+    ]
+  },
+  {
+    "cluster_label": "Geely银河E5海外发布",
+    "expected_brands": ["Geely"],
+    "articles": [
+      {
+        "title": "吉利银河E5在东南亚市场正式发布",
+        "content": "5月29日，吉利银河E5在马来西亚吉隆坡正式发布，海外市场定价约2.3万美元起。这是吉利银河品牌首款全球化车型，目标年销10万辆。",
+        "source": "新浪汽车",
+        "authority": 7
+      },
+      {
+        "title": "吉利银河E5登陆东南亚 起售价2.3万美元",
+        "content": "吉利银河E5于5月29日在吉隆坡发布上市，定价约2.3万美元起。作为银河品牌首款全球化产品，年销目标10万辆。",
+        "source": "电车汇",
+        "authority": 7
+      }
+    ]
+  },
+  {
+    "cluster_label": "工信部发布下乡目录",
+    "expected_brands": ["BYD", "Wuling"],
+    "articles": [
+      {
+        "title": "工信部发布2026年新能源汽车下乡车型目录",
+        "content": "工信部5月28日发布2026年度新能源汽车下乡车型推荐目录申报通知。比亚迪元PLUS、五菱缤果、长安Lumin等30余款车型入围。政策持续支持下沉市场新能源消费。",
+        "source": "工信部官网",
+        "authority": 10
+      },
+      {
+        "title": "新能源下乡目录公布 比亚迪五菱多车入围",
+        "content": "工信部发布2026年新能源汽车下乡车型推荐目录，比亚迪元PLUS、五菱缤果等30余款车型入围。预计将带动三四线城市渗透率提升。",
+        "source": "36氪",
+        "authority": 9
+      },
+      {
+        "title": "工信部新能源下乡目录通知发布",
+        "content": "5月28日工信部发布2026年新能源汽车下乡车型推荐目录申报通知，比亚迪元PLUS、五菱缤果等30余款车型入围。",
+        "source": "盖世汽车",
+        "authority": 8
+      }
+    ]
+  },
+  {
+    "cluster_label": "Rivian R2量产推迟",
+    "expected_brands": ["Rivian"],
+    "articles": [
+      {
+        "title": "Rivian R2量产推迟至2027年 股价跌12%",
+        "content": "据Electrek报道，Rivian宣布R2车型量产时间推迟至2027年初，原计划2026年下半年。公司表示需要更多时间优化生产线。消息公布后Rivian股价盘后跌超12%。",
+        "source": "Electrek",
+        "authority": 9
+      },
+      {
+        "title": "Rivian R2推迟到2027 股价大跌",
+        "content": "Rivian官方宣布R2量产推迟至2027年初，比原计划晚约6个月。消息导致股价盘后跌超12%。公司CEO表示这是确保质量的必要决定。",
+        "source": "InsideEVs",
+        "authority": 8
+      }
+    ]
+  }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "caam_2026_05_multi",
+    "title": "中汽协：2026年5月汽车产销情况简析",
+    "content": "中国汽车工业协会数据显示，2026年5月新能源汽车产销分别完成80万辆和85万辆，环比分别增长5%和8%。其中：比亚迪销量30.5万辆，同比增长25%；特斯拉中国销售5.5万辆，同比下降3%；蔚来交付2.1万辆，同比增长45%；理想交付4.1万辆，环比增长10%；小鹏交付1.8万辆，同比增长30%。详细数据请见报告。",
+    "expected_records": [
+      {"brand_canonical": "BYD", "units": 305000, "yoy": 0.25},
+      {"brand_canonical": "Tesla", "units": 55000, "yoy": -0.03},
+      {"brand_canonical": "NIO", "units": 21000, "yoy": 0.45},
+      {"brand_canonical": "Li Auto", "units": 41000, "wow": 0.10},
+      {"brand_canonical": "XPeng", "units": 18000, "yoy": 0.30}
+    ]
+  },
+  {
+    "id": "caam_2026_05_byd_only",
+    "title": "比亚迪发布5月销量快报：单月交付突破38万辆",
+    "content": "比亚迪股份有限公司5月31日发布产销快报，2026年5月新能源汽车销量达380,123辆，同比增长32%，环比增长7%。其中纯电动车型销售200,500辆，插电混动车型销售179,623辆。1-5月累计销量达160万辆，同比增长28%。",
+    "expected_records": [
+      {"brand_canonical": "BYD", "units": 380123, "yoy": 0.32, "wow": 0.07}
+    ]
+  },
+  {
+    "id": "caam_2026_05_precise",
+    "title": "中汽协月报：2026年5月主要新能源乘用车企销量数据",
+    "content": "中汽协公布2026年5月数据：极氪销量24,567辆，同比增长65%，环比增长12%；零跑汽车销量45,123辆，同比增长88%，环比增长15%；广汽埃安销量32,890辆，同比下降8%，环比增长3%。三家企业均实现稳定增长，反映新能源车市持续向好。",
+    "expected_records": [
+      {"brand_canonical": "Zeekr", "units": 24567, "yoy": 0.65, "wow": 0.12},
+      {"brand_canonical": "Leapmotor", "units": 45123, "yoy": 0.88, "wow": 0.15},
+      {"brand_canonical": "Aion", "units": 32890, "yoy": -0.08, "wow": 0.03}
+    ]
+  },
+  {
+    "id": "caam_2026_05_aito_alias",
+    "title": "鸿蒙智行5月战报：问界品牌交付4.2万辆",
+    "content": "鸿蒙智行公布2026年5月销量数据，华为问界系列累计交付42,000辆，同比增长120%。其中问界M9单月销量18,500辆，连续多月稳居50万元以上市场销冠。小米汽车5月交付28,500辆SU7系列，同比增长150%。",
+    "expected_records": [
+      {"brand_canonical": "AITO", "units": 42000, "yoy": 1.20},
+      {"brand_canonical": "Xiaomi", "units": 28500, "yoy": 1.50}
+    ]
+  },
+  {
+    "id": "caam_2026_05_edge_cases",
+    "title": "中汽协5月新能源销量回顾：合资品牌承压",
+    "content": "中汽协2026年5月数据显示：大众ID系列在华销量约1.2万辆，同比下降约15%；丰田bZ系列销量约8,000辆；本田e:N系列销售6,500辆，同比下降20%。合资品牌新能源整体表现承压，市占率持续被自主品牌挤压。具体环比数据未披露。",
+    "expected_records": [
+      {"brand_canonical": "Volkswagen", "units": 12000, "yoy": -0.15},
+      {"brand_canonical": "Toyota", "units": 8000},
+      {"brand_canonical": "Honda", "units": 6500, "yoy": -0.20}
+    ]
+  }
+]
