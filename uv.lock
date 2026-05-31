@@ -13,6 +13,7 @@ members = [
     "nev-crawler",
     "nev-pipeline",
     "nev-shared",
+    "nev-summarizer",
 ]
 
 [[package]]
@@ -1089,6 +1090,7 @@ dependencies = [
     { name = "nev-crawler" },
     { name = "nev-pipeline" },
     { name = "nev-shared" },
+    { name = "nev-summarizer" },
 ]
 
 [package.dev-dependencies]
@@ -1109,6 +1111,7 @@ requires-dist = [
     { name = "nev-crawler", editable = "packages/crawler" },
     { name = "nev-pipeline", editable = "packages/pipeline" },
     { name = "nev-shared", editable = "packages/shared" },
+    { name = "nev-summarizer", editable = "packages/summarizer" },
 ]
 
 [package.metadata.requires-dev]
@@ -1221,6 +1224,31 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.1" },
     { name = "supabase", specifier = ">=2.5" },
     { name = "tenacity", specifier = ">=8.3" },
+]
+
+[[package]]
+name = "nev-summarizer"
+version = "0.1.0"
+source = { editable = "packages/summarizer" }
+dependencies = [
+    { name = "nev-contracts" },
+    { name = "nev-pipeline" },
+    { name = "nev-shared" },
+    { name = "openai" },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pydantic" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nev-contracts", editable = "packages/contracts" },
+    { name = "nev-pipeline", editable = "packages/pipeline" },
+    { name = "nev-shared", editable = "packages/shared" },
+    { name = "openai", specifier = ">=1.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.1" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "structlog" },
 ]
 
 [[package]]

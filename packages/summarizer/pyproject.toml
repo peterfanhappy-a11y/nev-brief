@@ -1,0 +1,26 @@
+[project]
+name = "nev-summarizer"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "nev-pipeline",
+    "openai>=1.0",
+    "psycopg[binary]>=3.1",
+    "pydantic>=2.0",
+    "structlog",
+]
+
+[tool.uv.sources]
+nev-contracts = { workspace = true }
+nev-shared    = { workspace = true }
+nev-pipeline  = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["golden: run against real DeepSeek API"]
