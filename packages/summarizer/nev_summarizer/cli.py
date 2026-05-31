@@ -51,6 +51,7 @@ async def _async_run(args: argparse.Namespace) -> int:
     try:
         brief_date = args.date or datetime.now(timezone.utc).date()
         result = await run_brief_for_date(conn, brief_date, top_n=args.top_n)
+        conn.commit()
         print(
             f"OK brief={result['brief_date']} clusters={result['clusters']} "
             f"summarized={result['summarized']} truncated={result['truncated']}"
@@ -67,6 +68,7 @@ async def _async_sales(args: argparse.Namespace) -> int:
     conn = psycopg.connect(settings.database_url)
     try:
         result = await run_caam_extraction(conn, args.month, limit=args.limit)
+        conn.commit()
         print(
             f"OK month={args.month} articles={result['articles_processed']} "
             f"sales_rows={result['sales_upserted']}"
