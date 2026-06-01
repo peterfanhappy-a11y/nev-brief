@@ -1,0 +1,24 @@
+🚗 NEV 早报 · {{ brief_date_human }}
+═══════════════════════════════════
+{% if sales_card %}📊 昨日核心数据
+{% for s in sales_card %}{{ s.brand_name }} {{ '{:,}'.format(s.units) }}辆{% if s.yoy is not none %} ({{ '+' if s.yoy > 0 else '' }}{{ '{:.0%}'.format(s.yoy) }}){% endif %}
+{% endfor %}
+{% endif %}
+🔥 今日十条
+{% for item in top_items %}
+{{ loop.index }}. {{ item.title }}
+{{ item.summary }}
+📰 {{ item.source_links[:3] | map(attribute='name') | join(' / ') }}{% if item.topics %} #{{ item.topics[:3] | map('label') | join(' #') }}{% endif %}
+详情：{{ item.web_url }}
+{% endfor %}
+{% if overseas_items %}
+🌍 海外动态
+{% for o in overseas_items %}- {{ o.title }} ({{ o.web_url }})
+{% endfor %}
+{% endif %}
+═══════════════════════════════════
+管理订阅：{{ manage_url }}
+一键退订：{{ unsubscribe_url }}
+Web 版：{{ web_url }}
+
+收件人：{{ subscriber_email }}

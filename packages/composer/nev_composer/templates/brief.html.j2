@@ -1,0 +1,62 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<title>NEV 早报 · {{ brief_date }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;">
+<table align="center" width="640" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;margin:24px auto;">
+  <tr><td style="background:#0066FF;padding:24px;color:#ffffff;font-size:20px;font-weight:bold;">
+    🚗 NEV 早报 · {{ brief_date_human }}
+  </td></tr>
+
+  {% if sales_card %}
+  <tr><td style="padding:16px 24px;border-bottom:1px solid #eee;">
+    <div style="font-size:14px;color:#666;margin-bottom:8px;">📊 昨日核心数据</div>
+    <table width="100%" cellpadding="6" cellspacing="0">
+      {% for s in sales_card %}
+      <tr>
+        <td style="font-size:14px;color:#333;">{{ s.brand_name }}</td>
+        <td style="font-size:14px;color:#333;text-align:right;">{{ '{:,}'.format(s.units) }} 辆</td>
+        <td style="font-size:13px;color:{% if s.yoy and s.yoy > 0 %}#00C896{% else %}#999{% endif %};text-align:right;width:80px;">
+          {% if s.yoy is not none %}{{ '+' if s.yoy > 0 else '' }}{{ '{:.0%}'.format(s.yoy) }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td></tr>
+  {% endif %}
+
+  <tr><td style="padding:16px 24px;">
+    <div style="font-size:14px;color:#666;margin-bottom:12px;">🔥 今日十条</div>
+    {% for item in top_items %}
+    <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid #f4f5f7;">
+      <div style="font-size:15px;font-weight:bold;color:#0066FF;margin-bottom:6px;">
+        {{ loop.index }}. {{ item.title }}
+      </div>
+      <div style="font-size:14px;color:#444;line-height:1.5;margin-bottom:6px;">{{ item.summary }}</div>
+      <div style="font-size:12px;color:#999;">
+        📰 {% for link in item.source_links[:3] %}<a href="{{ link.url }}" style="color:#0066FF;text-decoration:none;">{{ link.name }}</a>{% if not loop.last %} / {% endif %}{% endfor %}
+        {% if item.topics %}&nbsp;&nbsp;{% for t in item.topics[:3] %}<span style="color:#00C896;">#{{ topic_label(t) }}</span> {% endfor %}{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </td></tr>
+
+  {% if overseas_items %}
+  <tr><td style="padding:12px 24px;background:#f9fafb;font-size:13px;color:#666;">
+    🌍 海外动态（{{ overseas_items|length }}条）：
+    {% for o in overseas_items %}<a href="{{ o.web_url }}" style="color:#0066FF;text-decoration:none;">{{ o.title }}</a>{% if not loop.last %}; {% endif %}{% endfor %}
+  </td></tr>
+  {% endif %}
+
+  <tr><td style="padding:18px 24px;background:#f4f5f7;font-size:12px;color:#999;text-align:center;">
+    <a href="{{ manage_url }}" style="color:#999;">管理订阅</a> |
+    <a href="{{ unsubscribe_url }}" style="color:#999;">一键退订</a> |
+    <a href="{{ web_url }}" style="color:#999;">查看 Web 版</a>
+    <br><br>
+    收件人：{{ subscriber_email }}<br>
+    © 2026 NEV 早报
+  </td></tr>
+</table>
+</body></html>
