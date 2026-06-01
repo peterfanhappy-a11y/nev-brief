@@ -37,3 +37,6 @@ supabase/.temp/
 logs/
 
 .env
+
+# Local artifacts (preview / scratch)
+preview.html
