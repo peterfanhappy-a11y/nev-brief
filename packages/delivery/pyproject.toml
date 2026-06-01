@@ -1,0 +1,27 @@
+[project]
+name = "nev-delivery"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "resend>=0.8.0",
+    "psycopg[binary]>=3.1",
+    "tenacity>=8.0",
+    "pydantic>=2.0",
+    "structlog",
+]
+
+[tool.uv.sources]
+nev-contracts = { workspace = true }
+nev-shared    = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "real_resend: hits Resend API (skipped unless RESEND_API_KEY present)",
+]
