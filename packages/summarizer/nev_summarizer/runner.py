@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any
 
 import psycopg
+from nev_pipeline.entity_dict import load_entity_dict
 from nev_shared.logger import get_logger
 
 from nev_summarizer.candidates_builder import build_candidate
@@ -18,6 +19,17 @@ log = get_logger("summarizer.runner")
 
 DEFAULT_CONCURRENCY = 5
 DEFAULT_TOP_N = 35
+
+
+def _is_nev_cluster(cluster: Cluster, nev_canonical: set[str]) -> bool:
+    """A cluster qualifies as NEV-relevant iff at least one of its brands maps to
+    an entity_dict canonical brand (i.e. a known auto brand).
+
+    Articles with brands=[] are dropped — DeepSeek would have extracted a brand
+    if one was mentioned. brands=[] correlates strongly with non-NEV content
+    (financial / general tech / ETF / etc.) per empirical 2026-06-02 data.
+    """
+    return bool(set(cluster.brands) & nev_canonical)
 
 
 async def _summarize_with_semaphore(
@@ -38,8 +50,14 @@ async def run_brief_for_date(
     clusters = aggregate_clusters(conn, brief_date)
     log.info("clusters_loaded", date=str(brief_date), n=len(clusters))
 
+    nev_canonical = set(load_entity_dict().brands_by_canonical.keys())
+    nev_clusters = [c for c in clusters if _is_nev_cluster(c, nev_canonical)]
+    dropped = len(clusters) - len(nev_clusters)
+    log.info("nev_filter_applied",
+             total=len(clusters), nev_relevant=len(nev_clusters), dropped=dropped)
+
     scored: list[tuple[Cluster, float]] = [
-        (c, cluster_importance(c)) for c in clusters
+        (c, cluster_importance(c)) for c in nev_clusters
     ]
     scored.sort(key=lambda x: -x[1])
     top = scored[:top_n]

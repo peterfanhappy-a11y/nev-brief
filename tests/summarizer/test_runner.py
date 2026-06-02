@@ -35,6 +35,38 @@ def _summary(
 
 
 @pytest.mark.asyncio
+async def test_nev_filter_drops_non_nev_clusters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """非 NEV cluster (brand 不在 entity_dict canonical 集) 应该在 summarize 之前被丢弃。"""
+    now = datetime.now(timezone.utc)
+    # BYD is in entity_dict; "茅台" and brands=[] are not NEV
+    nev_cluster = _cluster("nev1", "BYD", now)
+    non_nev_brand = _cluster("noise1", "茅台", now)
+    empty_brand = Cluster(
+        cluster_id="empty1", articles=nev_cluster.articles,
+        brands=[], models=[], topics=["finance"],
+        earliest_published=now,
+    )
+    monkeypatch.setattr(
+        "nev_summarizer.runner.aggregate_clusters",
+        lambda conn, d: [nev_cluster, non_nev_brand, empty_brand],
+    )
+
+    summarized_ids: list[str] = []
+    async def fake_sum(c: Cluster) -> ClusterSummary:
+        summarized_ids.append(c.cluster_id)
+        return _summary(title=f"t-{c.cluster_id}")
+    monkeypatch.setattr("nev_summarizer.runner.summarize_cluster", fake_sum)
+    monkeypatch.setattr("nev_summarizer.runner.upsert_daily_brief", lambda *a, **kw: None)
+
+    result = await run_brief_for_date(MagicMock(), date(2026, 6, 2))
+    # 只有 nev1 应该被 summarize 调用，noise1 和 empty1 被过滤掉
+    assert summarized_ids == ["nev1"]
+    # clusters 计数仍然是 3（信源进来 3 个）；summarized 是 1
+    assert result["clusters"] == 3
+    assert result["summarized"] == 1
+
+
+@pytest.mark.asyncio
 async def test_runs_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
     now = datetime.now(timezone.utc)
     monkeypatch.setattr(
