@@ -28,11 +28,16 @@ async def process_article(
     entities = await extract_entities(title, clean)
     sh = simhash(f"{title} {clean}")
 
+    # HTML scrape sources (汽车之家, 车质网) often lack published_at.
+    # Fall back to "now" so clustering + scoring don't crash.
+    from datetime import datetime, timezone
+    pub_at = raw.get("published_at") or datetime.now(tz=timezone.utc)
+
     article_candidate = ClusterCandidate(
         brands=entities.brands,
         models=entities.models,
         simhash=sh,
-        published_at=raw["published_at"],
+        published_at=pub_at,
         cluster_id=None,
     )
     cluster_id = find_or_create_cluster(article_candidate, recent)
@@ -41,7 +46,7 @@ async def process_article(
         authority=raw.get("source_authority", 5),
         brands=entities.brands,
         topics=entities.topics,
-        published_at=raw["published_at"],
+        published_at=pub_at,
     )
 
     return {

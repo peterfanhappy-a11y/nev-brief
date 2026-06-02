@@ -23,7 +23,7 @@ def importance_score(
     authority: int,
     brands: list[str],
     topics: list[str],
-    published_at: datetime,
+    published_at: datetime | None,
     now: datetime | None = None,
 ) -> float:
     now = now or datetime.now(tz=timezone.utc)
@@ -31,7 +31,10 @@ def importance_score(
 
     auth = min(authority, 10) / 10
     coverage = _COVERAGE_SINGLE_ARTICLE
-    age_hours = max((now - published_at).total_seconds() / 3600, 0.0)
+    # HTML scrape sources (汽车之家, 车质网) often lack published_at because the
+    # list page only exposes "X 小时前" text. Fall back to "now" (treat as fresh).
+    pub = published_at or now
+    age_hours = max((now - pub).total_seconds() / 3600, 0.0)
     freshness = max(0.0, 1.0 - age_hours / 24.0)
 
     heat = 0.0
