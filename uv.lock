@@ -13,6 +13,7 @@ members = [
     "nev-contracts",
     "nev-crawler",
     "nev-delivery",
+    "nev-orchestrator",
     "nev-pipeline",
     "nev-shared",
     "nev-summarizer",
@@ -1306,6 +1307,25 @@ requires-dist = [
     { name = "resend", specifier = ">=0.8.0" },
     { name = "structlog" },
     { name = "tenacity", specifier = ">=8.0" },
+]
+
+[[package]]
+name = "nev-orchestrator"
+version = "0.1.0"
+source = { editable = "packages/orchestrator" }
+dependencies = [
+    { name = "httpx" },
+    { name = "nev-shared" },
+    { name = "pydantic" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "nev-shared", editable = "packages/shared" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "structlog" },
 ]
 
 [[package]]

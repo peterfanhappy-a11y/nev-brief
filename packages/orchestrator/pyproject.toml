@@ -1,0 +1,20 @@
+[project]
+name = "nev-orchestrator"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-shared",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "structlog",
+]
+
+[tool.uv.sources]
+nev-shared = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
