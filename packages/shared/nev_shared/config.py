@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     resend_api_key: str
 
     # Monitoring
-    feishu_webhook_url: str
+    feishu_webhook_url: str = ""
     sentry_dsn: str | None = None
     healthchecks_ping_url: str | None = None
 
