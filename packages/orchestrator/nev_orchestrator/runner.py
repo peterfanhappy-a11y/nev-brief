@@ -170,7 +170,7 @@ def run_daily(
             log.error("runner.aborted", step=step.name)
             break
 
-    if result.success:
+    if result.success and not dry_run:
         send_alert(
             level=AlertLevel.INFO,
             title=f"NEV 早报 {brief_date.isoformat()} 完成",
