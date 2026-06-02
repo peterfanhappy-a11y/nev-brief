@@ -65,7 +65,7 @@ def _build_steps(brief_date: date) -> list[Step]:
         ),
         Step(
             name="pipeline",
-            cmd=[sys.executable, "-m", "nev_pipeline", "run"],
+            cmd=[sys.executable, "-m", "nev_pipeline", "run", "--limit", "500"],
             failure="abort",
             alert_level=AlertLevel.P0,
         ),
