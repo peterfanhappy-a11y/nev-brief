@@ -71,13 +71,14 @@ def _build_steps(brief_date: date) -> list[Step]:
         ),
         Step(
             name="summarize",
-            cmd=[sys.executable, "-m", "nev_summarizer", "run"],
+            cmd=[sys.executable, "-m", "nev_summarizer", "run", "--date", date_str],
             failure="abort",
             alert_level=AlertLevel.P0,
         ),
         Step(
             name="sales",
-            cmd=[sys.executable, "-m", "nev_summarizer", "sales-extract"],
+            cmd=[sys.executable, "-m", "nev_summarizer", "sales-extract",
+                 "--month", date_str[:7]],
             failure="continue",
             alert_level=AlertLevel.P2,
         ),
