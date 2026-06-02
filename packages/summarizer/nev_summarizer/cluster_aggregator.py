@@ -39,20 +39,23 @@ def aggregate_clusters(conn: psycopg.Connection, brief_date: date) -> list[Clust
 
     Articles with NULL cluster_id are skipped.
     """
+    # COALESCE: HTML scrape sources (汽车之家, 车质网) have r.published_at = NULL
+    # because list pages only show "X 小时前". Fall back to r.created_at (when the
+    # crawler stored the row) so we don't drop NEV-pure sources from the brief.
     sql = """
         SELECT
             p.raw_id, p.title, p.clean_text, r.url,
             p.cluster_id, p.brands, p.models, p.topics,
             p.importance_score,
             r.source_id, s.name AS source_name, s.authority AS source_authority,
-            r.published_at
+            COALESCE(r.published_at, r.created_at) AS published_at
         FROM articles_processed p
         JOIN articles_raw r ON r.id = p.raw_id
         JOIN sources s ON s.id = r.source_id
         WHERE p.cluster_id IS NOT NULL
-          AND r.published_at >= %s - INTERVAL '2 hours'
-          AND r.published_at < %s + INTERVAL '26 hours'
-        ORDER BY p.cluster_id, r.published_at;
+          AND COALESCE(r.published_at, r.created_at) >= %s - INTERVAL '2 hours'
+          AND COALESCE(r.published_at, r.created_at) < %s + INTERVAL '26 hours'
+        ORDER BY p.cluster_id, COALESCE(r.published_at, r.created_at);
     """
     with conn.cursor() as cur:
         cur.execute(sql, (brief_date, brief_date))
