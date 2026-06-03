@@ -3,7 +3,7 @@ from datetime import date, timedelta
 import pytest
 
 from nev_composer.personalization import (
-    UserPreferences, personal_score, select_top_n,
+    UserPreferences, personal_score, select_diverse_top_n, select_top_n,
 )
 
 
@@ -94,3 +94,84 @@ def test_select_top_n_annotates_personal_score():
     user = UserPreferences(brands=[], topics=[])
     top = select_top_n([_cand(global_imp=50.0)], user, today, today=today)
     assert "personal_score" in top[0]
+
+
+def test_diverse_select_caps_sales_to_one():
+    """22 sales candidates → only 1 in Top 10, leaving room for other topics."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = [_cand(cluster_id=f"sales{i}", topics=["sales"], global_imp=80.0 - i)
+             for i in range(22)]
+    cands += [_cand(cluster_id=f"tech{i}", topics=["tech"], global_imp=50.0 - i)
+              for i in range(5)]
+    cands += [_cand(cluster_id=f"new{i}", topics=["new_car"], global_imp=40.0 - i)
+              for i in range(5)]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    sales_count = sum(1 for c in top if "sales" in c["topics"])
+    assert sales_count == 1, f"expected exactly 1 sales, got {sales_count}"
+
+
+def test_diverse_select_prioritizes_sales_bucket_over_new_car():
+    """Candidate with topics=[new_car, sales] goes to sales bucket (compressed)."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = [
+        _cand(cluster_id="hybrid", topics=["new_car", "sales"], global_imp=90.0),
+        _cand(cluster_id="pure-new", topics=["new_car"], global_imp=80.0),
+        _cand(cluster_id="another-sales", topics=["sales"], global_imp=70.0),
+    ]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    # Hybrid takes the single 'sales' slot; another-sales is excluded; pure-new admitted
+    cluster_ids = [c["cluster_id"] for c in top]
+    assert "hybrid" in cluster_ids
+    assert "another-sales" not in cluster_ids
+    assert "pure-new" in cluster_ids
+
+
+def test_diverse_select_hard_cap_sales_even_when_thin():
+    """sales is a hard cap — even when only sales exist, no backfill past quota.
+
+    The brief honestly reflects "only 1 unique sales angle today" rather than
+    smuggling compressed items back via backfill.
+    """
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = [_cand(cluster_id=f"s{i}", topics=["sales"], global_imp=90.0 - i)
+             for i in range(15)]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    assert len(top) == 1  # hard cap enforced; no padding
+    assert top[0]["cluster_id"] == "s0"  # highest score wins the slot
+
+
+def test_diverse_select_diverse_data_fills_to_n():
+    """When data covers multiple topics, brief naturally fills to n=10."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = []
+    # 3 each of major topics
+    for topic in ["sales", "new_car", "tech", "policy", "overseas", "supply_chain"]:
+        for j in range(3):
+            cands.append(_cand(cluster_id=f"{topic}{j}", topics=[topic],
+                               global_imp=80.0 - j))
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    assert len(top) == 10
+    # sales hard cap 1
+    sales_count = sum(1 for c in top if "sales" in c["topics"])
+    assert sales_count == 1
+
+
+def test_diverse_select_all_hard_caps_enforced():
+    """All topics are hard-cap — brief shrinks honestly rather than piling
+    one topic to 10. 10 tech + 5 new_car → 3 tech + 3 new_car = 6 items total."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = [_cand(cluster_id=f"t{i}", topics=["tech"], global_imp=90.0 - i)
+             for i in range(10)]
+    cands += [_cand(cluster_id=f"n{i}", topics=["new_car"], global_imp=50.0 - i)
+              for i in range(5)]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    tech_count = sum(1 for c in top if "tech" in c["topics"])
+    new_car_count = sum(1 for c in top if "new_car" in c["topics"])
+    assert tech_count == 3
+    assert new_car_count == 3
+    assert len(top) == 6  # hard caps respected; no padding past quotas

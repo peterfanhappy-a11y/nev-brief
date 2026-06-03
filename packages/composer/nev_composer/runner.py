@@ -10,7 +10,7 @@ import psycopg
 
 from nev_shared.logger import get_logger
 
-from nev_composer.personalization import UserPreferences, select_top_n
+from nev_composer.personalization import UserPreferences, select_diverse_top_n
 from nev_composer.renderer import render_html, render_text
 from nev_composer.sales_card import fetch_latest_sales, rank_for_user
 from nev_composer.storage import (
@@ -103,7 +103,7 @@ def run_for_date(
     for sub in subscribers:
         try:
             prefs = UserPreferences(brands=sub.pref_brands, topics=sub.pref_topics)
-            ranked = select_top_n(candidates, prefs, brief_date, n=top_n)
+            ranked = select_diverse_top_n(candidates, prefs, brief_date, n=top_n)
             ranked_with_urls = _add_web_urls(ranked, brief_date, base_url)
             main_items, overseas = _split_overseas(ranked_with_urls)
             sales_card = rank_for_user(sales_entries, sub.pref_brands)
