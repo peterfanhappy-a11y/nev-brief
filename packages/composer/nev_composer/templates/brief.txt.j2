@@ -4,12 +4,16 @@
 {% for s in sales_card %}{{ s.brand_name }} {{ '{:,}'.format(s.units) }}辆{% if s.yoy is not none %} ({{ '+' if s.yoy > 0 else '' }}{{ '{:.0%}'.format(s.yoy) }}){% endif %}
 {% endfor %}
 {% endif %}
-🔥 今日十条
-{% for item in top_items %}
-{{ loop.index }}. {{ item.title }}
-{{ item.summary }}
-📰 {{ item.source_links[:3] | map(attribute='name') | join(' / ') }}{% if item.topics %} #{{ item.topics[:3] | map('label') | join(' #') }}{% endif %}
-详情：{{ item.web_url }}
+🔥 今日 {{ top_items|length }} 条 · 按主题分类
+{% for topic, items in grouped_items %}
+
+{{ topic_heading(topic) }} ({{ items|length }} 条)
+{% for item in items %}
+- {{ item.title }}
+  {{ item.summary }}
+  📰 {{ item.source_links[:3] | map(attribute='name') | join(' / ') }}{% if item.topics %} #{{ item.topics[:3] | map('label') | join(' #') }}{% endif %}
+  详情：{{ item.web_url }}
+{% endfor %}
 {% endfor %}
 {% if overseas_items %}
 🌍 海外动态

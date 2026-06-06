@@ -4,9 +4,31 @@ from __future__ import annotations
 import pytest
 
 from nev_composer.renderer import render_html, render_text
+from nev_composer.runner import _group_items_by_topic
 
 
 def _sample_ctx():
+    top_items = [
+        {
+            "title": "比亚迪海豹06 EV上市",
+            "summary": "5月30日，比亚迪发布全新海豹06 EV，售价8.98-13.98万元。",
+            "brands": ["BYD"],
+            "topics": ["new_car", "sales"],
+            "source_links": [
+                {"name": "36氪", "url": "https://36kr.com/x"},
+                {"name": "电车汇", "url": "https://dcwauto.com/y"},
+            ],
+            "web_url": "https://nev-brief.com/d/2026-05-31/cl1",
+        },
+        {
+            "title": "Tesla Model Y 焕新版6月交付",
+            "summary": "Model Y 焕新版起售26.4万元，6月起交付。",
+            "brands": ["Tesla"],
+            "topics": ["new_car"],
+            "source_links": [{"name": "Reuters", "url": "https://reuters.com/z"}],
+            "web_url": "https://nev-brief.com/d/2026-05-31/cl2",
+        },
+    ]
     return {
         "brief_date": "2026-05-31",
         "brief_date_human": "2026年5月31日",
@@ -18,27 +40,8 @@ def _sample_ctx():
             {"brand_code": "BYD", "brand_name": "比亚迪", "units": 305000, "yoy": 0.25, "wow": None},
             {"brand_code": "Tesla", "brand_name": "特斯拉", "units": 55000, "yoy": -0.03, "wow": 0.12},
         ],
-        "top_items": [
-            {
-                "title": "比亚迪海豹06 EV上市",
-                "summary": "5月30日，比亚迪发布全新海豹06 EV，售价8.98-13.98万元。",
-                "brands": ["BYD"],
-                "topics": ["new_car", "sales"],
-                "source_links": [
-                    {"name": "36氪", "url": "https://36kr.com/x"},
-                    {"name": "电车汇", "url": "https://dcwauto.com/y"},
-                ],
-                "web_url": "https://nev-brief.com/d/2026-05-31/cl1",
-            },
-            {
-                "title": "Tesla Model Y 焕新版6月交付",
-                "summary": "Model Y 焕新版起售26.4万元，6月起交付。",
-                "brands": ["Tesla"],
-                "topics": ["new_car"],
-                "source_links": [{"name": "Reuters", "url": "https://reuters.com/z"}],
-                "web_url": "https://nev-brief.com/d/2026-05-31/cl2",
-            },
-        ],
+        "top_items": top_items,
+        "grouped_items": _group_items_by_topic(top_items),
         "overseas_items": [
             {"title": "Rivian R2 EPA认证", "web_url": "https://nev-brief.com/d/2026-05-31/cl3"},
         ],

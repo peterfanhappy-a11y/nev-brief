@@ -11,6 +11,7 @@ import psycopg
 from nev_shared.logger import get_logger
 
 from nev_composer.personalization import UserPreferences, select_diverse_top_n
+from nev_composer.personalization import _primary_bucket  # noqa: PLC2701 — reused for grouping
 from nev_composer.renderer import render_html, render_text
 from nev_composer.sales_card import fetch_latest_sales, rank_for_user
 from nev_composer.storage import (
@@ -24,6 +25,42 @@ log = get_logger("composer.runner")
 
 
 OVERSEAS_TOPIC = "overseas"
+
+# Display order for grouped sections in the email. User feedback 2026-06-05:
+# group items by topic with emoji headers. Sub-topics first (most actionable
+# for B-side audience), then market/policy, then misc.
+_GROUP_ORDER: tuple[str, ...] = (
+    "sales",
+    "battery_tech", "autonomous_driving", "smart_cockpit", "ota_update",
+    "chassis", "exterior_design",
+    "new_car", "tech",
+    "policy", "recall", "supply_chain",
+    "finance", "people",
+    # overseas handled separately as fold-out
+)
+
+
+def _group_items_by_topic(
+    items: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Bucket items by primary topic and return [(topic, items), ...] in
+    _GROUP_ORDER. Empty buckets are skipped. Items keep their original order
+    within each bucket (already personalized + diverse-ranked)."""
+    buckets: dict[str, list[dict[str, Any]]] = {}
+    for item in items:
+        bucket = _primary_bucket(item)
+        buckets.setdefault(bucket, []).append(item)
+    ordered: list[tuple[str, list[dict[str, Any]]]] = []
+    seen: set[str] = set()
+    for topic in _GROUP_ORDER:
+        if buckets.get(topic):
+            ordered.append((topic, buckets[topic]))
+            seen.add(topic)
+    # Catch-all for any topic not in _GROUP_ORDER (defensive)
+    for topic, bucket_items in buckets.items():
+        if topic not in seen:
+            ordered.append((topic, bucket_items))
+    return ordered
 
 
 def _build_render_context(
@@ -43,6 +80,7 @@ def _build_render_context(
         "web_url": f"{base_url}/d/{brief_date}",
         "sales_card": [asdict(s) for s in sales_card_entries],
         "top_items": top_items,
+        "grouped_items": _group_items_by_topic(top_items),
         "overseas_items": overseas_items,
     }
 
