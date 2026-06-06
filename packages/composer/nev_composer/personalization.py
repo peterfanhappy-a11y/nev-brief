@@ -61,26 +61,43 @@ def select_top_n(
     return scored[:n]
 
 
-# Per-topic quotas — keeps brief multi-dimensional instead of all sales.
-# Empirically 35-candidate briefs are 60%+ sales+new_car, which makes the
-# email read as "X 家车企销量公告" rather than industry/tech/market overview.
+# Per-topic quotas — keeps brief multi-dimensional. User feedback 2026-06-04:
+# also wants visibility into battery / autonomous_driving / smart_cockpit /
+# chassis / exterior / OTA sub-topics. Total quota sum (≈25) > target n=10
+# so rich data fills naturally; thin data shrinks brief honestly.
 _TOPIC_QUOTAS: dict[str, int] = {
-    "sales": 1,        # 销量整合：所有 sales 类只保留 importance Top 1
-    "new_car": 3,      # 新车上市
-    "tech": 3,         # 技术趋势（电池/智驾/OTA 等子类未来细分）
-    "policy": 2,       # 政策动向
-    "overseas": 2,     # 海外动态
+    # 综合
+    "sales": 1,                # 销量整合（hard cap 1）
+    "new_car": 3,              # 新车上市
+    "policy": 2,
+    "overseas": 2,
     "supply_chain": 1,
     "recall": 1,
     "finance": 1,
     "people": 1,
+    # 技术细分（用户诉求）
+    "battery_tech": 2,         # 电池
+    "smart_cockpit": 2,        # 智能座舱
+    "autonomous_driving": 2,   # 智能驾驶
+    "chassis": 1,              # 底盘
+    "exterior_design": 1,      # 外观/风阻
+    "ota_update": 1,           # OTA
+    "tech": 2,                 # 兜底通用技术（降权，避免泛 tech 占位）
 }
 
-# Bucket priority when a candidate carries multiple topics — sales first so
-# articles tagged both [sales, new_car] go to sales (compressed), not new_car.
+# Bucket priority when a candidate carries multiple topics.细分 > 粗粒度 > sales。
+# Articles tagged [tech, autonomous_driving] go to autonomous_driving bucket
+# (specific), not tech (generic). [sales, new_car] still compressed to sales.
 _TOPIC_PRIORITY: tuple[str, ...] = (
-    "sales", "recall", "policy", "tech", "supply_chain",
-    "overseas", "new_car", "finance", "people",
+    # 细分技术优先（避免被 tech/new_car 吸收）
+    "battery_tech", "autonomous_driving", "smart_cockpit",
+    "ota_update", "chassis", "exterior_design",
+    # 然后销量压缩
+    "sales", "recall", "policy",
+    # 然后其他
+    "supply_chain", "overseas", "new_car", "finance", "people",
+    # 兜底 tech 最后
+    "tech",
 )
 
 # Hard-cap buckets: backfill cannot exceed quota. User asked for diversity
@@ -90,6 +107,8 @@ _TOPIC_PRIORITY: tuple[str, ...] = (
 _HARD_CAP_TOPICS: frozenset[str] = frozenset({
     "sales", "new_car", "tech", "policy", "overseas",
     "supply_chain", "recall", "finance", "people",
+    "battery_tech", "smart_cockpit", "autonomous_driving",
+    "chassis", "exterior_design", "ota_update",
 })
 
 

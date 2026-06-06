@@ -29,8 +29,31 @@ Rivian, Lucid, Polestar, Hyundai/现代, Kia/起亚, BMW/宝马,
 Mercedes/奔驰, Audi/奥迪, Porsche/保时捷
 (其他视情况识别)
 
-【主题枚举】
-new_car, sales, policy, tech, overseas, people, finance, recall, supply_chain
+【主题枚举 — 选 1-3 个最贴切的，**优先选细分维度**，避免笼统的 "tech"】
+- new_car            : 新车发布/上市/曝光/预售
+- sales              : 销量/交付/价格策略/购车权益
+- policy             : 政策/补贴/法规/国标
+- overseas           : 海外动态/出口/国际市场
+- people             : 高管变动/创始人专访
+- finance            : 融资/IPO/财报/并购/股价
+- recall             : 召回/质量投诉/事故
+- supply_chain       : 供应链/上游材料/合资工厂
+- battery_tech       : 电池技术（固态/CTC/CTP/快充/能量密度/钠电池/4680）
+- smart_cockpit      : 智能座舱（HMI/语音助手/HUD/车机系统/鸿蒙/AR-HUD）
+- autonomous_driving : 智能驾驶（FSD/L2/L3/L4/Autopilot/智驾/激光雷达/NOA/城市领航）
+- chassis            : 底盘调教（悬挂/转向/CDC/空气悬架/操控/赛道/线控）
+- exterior_design    : 外观/风阻（造型/风阻系数/CD值/车身设计/灯光）
+- ota_update         : OTA 升级（固件/车机版本/功能解锁/V1.x/V2.x）
+- tech               : **兜底**——仅在以上细分都不匹配时使用
+
+【判断技巧】
+- 文章提到"电池/续航/能量密度/快充" → battery_tech
+- 文章提到"FSD/智驾/L2/L3/NOA/激光雷达/Autopilot" → autonomous_driving
+- 文章提到"座舱/语音/车机/HMI/HUD" → smart_cockpit
+- 文章提到"OTA/固件/版本升级" → ota_update
+- 文章提到"悬架/底盘/操控/CDC" → chassis
+- 文章提到"风阻/造型/CD 值" → exterior_design
+- 含细分维度时优先用细分，避免堆 tech
 
 【严格 JSON 输出】
 {

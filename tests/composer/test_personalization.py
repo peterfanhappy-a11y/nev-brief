@@ -162,7 +162,7 @@ def test_diverse_select_diverse_data_fills_to_n():
 
 def test_diverse_select_all_hard_caps_enforced():
     """All topics are hard-cap — brief shrinks honestly rather than piling
-    one topic to 10. 10 tech + 5 new_car → 3 tech + 3 new_car = 6 items total."""
+    one topic to 10. 10 tech (quota 2) + 5 new_car (quota 3) = 5 items total."""
     today = date.today()
     user = UserPreferences(brands=[], topics=[])
     cands = [_cand(cluster_id=f"t{i}", topics=["tech"], global_imp=90.0 - i)
@@ -172,6 +172,6 @@ def test_diverse_select_all_hard_caps_enforced():
     top = select_diverse_top_n(cands, user, today, n=10, today=today)
     tech_count = sum(1 for c in top if "tech" in c["topics"])
     new_car_count = sum(1 for c in top if "new_car" in c["topics"])
-    assert tech_count == 3
+    assert tech_count == 2  # tech quota lowered to discourage fallback bucket
     assert new_car_count == 3
-    assert len(top) == 6  # hard caps respected; no padding past quotas
+    assert len(top) == 5  # 2 + 3, hard caps respected

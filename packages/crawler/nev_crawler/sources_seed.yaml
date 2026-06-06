@@ -2,6 +2,35 @@
 # 修改后运行: uv run python -m nev_crawler.source_loader sync
 
 sources:
+  # === NEV-pure 媒体（高质量信源 — 添加于 2026-06-04 用户反馈后）===
+  - name: "第一电动"
+    type: html
+    url: "https://www.d1ev.com/news"
+    authority: 9
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+    extra:
+      # subagent 验证：20 条/页，server-rendered，覆盖电池/智驾/座舱/OTA
+      list_selector: ".article--wraped"
+      title_selector: ".article_p a"
+      link_selector: ".article_p a"
+      link_attr: "href"
+
+  - name: "第一电动技术"
+    type: html
+    url: "https://www.d1ev.com/news/jishu"
+    authority: 9
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+    extra:
+      # 同模板，technical 子频道 — 重点电池/智驾/OTA/三电
+      list_selector: ".article--wraped"
+      title_selector: ".article_p a"
+      link_selector: ".article_p a"
+      link_attr: "href"
+
   # === 国内综合媒体 (8) ===
   - name: "36氪汽车"
     type: rss

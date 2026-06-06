@@ -263,12 +263,21 @@ brands:
     is_hot: false
 
 topics:
-  - new_car
-  - sales
-  - policy
-  - tech
-  - overseas
-  - people
-  - finance
-  - recall
-  - supply_chain
+  # 粗粒度（保持兼容）
+  - new_car            # 新车上市/发布/曝光/预售
+  - sales              # 销量/交付/价格策略/购车权益
+  - policy             # 政策/补贴/法规/标准
+  - overseas           # 海外动态/出口/国际市场
+  - people             # 高管变动/人物专访
+  - finance            # 融资/IPO/财报/并购/股价
+  - recall             # 召回/质量投诉/事故
+  - supply_chain       # 供应链/上游材料/合资工厂
+  # 技术细分（用户诉求 2026-06-04）
+  - battery_tech       # 电池技术: 固态电池/CTC/CTP/快充/能量密度/钠电池
+  - smart_cockpit      # 智能座舱: HMI/语音助手/HUD/车机系统/鸿蒙座舱/AR-HUD
+  - autonomous_driving # 智能驾驶: FSD/L2/L3/L4/Autopilot/智驾/无人驾驶/激光雷达/NOA
+  - chassis            # 底盘调教: 悬挂/转向/CDC/空气悬架/操控/赛道/线控
+  - exterior_design    # 外观/风阻: 造型/风阻系数/CD值/车身设计/灯光
+  - ota_update         # OTA 功能: 固件升级/车机更新/功能解锁/版本号
+  # 兜底
+  - tech               # 其他通用技术（不属于上述细分时使用）
