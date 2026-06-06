@@ -6,7 +6,8 @@ per the brief schema.
 from __future__ import annotations
 
 TITLE_MAX = 25
-SUMMARY_MAX = 120
+# User feedback 2026-06-05: 摘要字数 +10% (120 → 132) for more detail
+SUMMARY_MAX = 132
 
 
 def count_chars(text: str) -> int:

@@ -103,13 +103,18 @@ _TOPIC_PRIORITY: tuple[str, ...] = (
 # Hard-cap buckets: backfill cannot exceed quota. User asked for diversity
 # (sales 1, new_car/tech 1-3, etc.) — letting backfill pile into one topic
 # defeats the purpose. Better to ship 6 diverse items than 10 same-topic ones.
-# Total quota sum is 15 (1+3+3+2+2+1+1+1+1), so when data is rich we still hit 10.
 _HARD_CAP_TOPICS: frozenset[str] = frozenset({
     "sales", "new_car", "tech", "policy", "overseas",
     "supply_chain", "recall", "finance", "people",
     "battery_tech", "smart_cockpit", "autonomous_driving",
     "chassis", "exterior_design", "ota_update",
 })
+
+# Brand cap: user feedback 2026-06-05 — 比亚迪/特斯拉 6 条占 Top 10 太多。
+# Each brand may appear in at most 2 of the selected 10 items. Applied to
+# every brand in candidate.brands (a cluster mentioning [BYD, Li Auto] counts
+# against both quotas).
+_BRAND_CAP_PER_BRIEF = 2
 
 
 def _primary_bucket(candidate: dict[str, Any]) -> str:
@@ -144,21 +149,35 @@ def select_diverse_top_n(
 
     selected: list[dict[str, Any]] = []
     bucket_count: dict[str, int] = {}
+    brand_count: dict[str, int] = {}
     used_ids: set[str] = set()
+
+    def _brand_cap_violated(cand: dict[str, Any]) -> bool:
+        """Any brand in the candidate already at the per-brief cap."""
+        for b in (cand.get("brands") or []):
+            if brand_count.get(b, 0) >= _BRAND_CAP_PER_BRIEF:
+                return True
+        return False
+
+    def _admit(cand: dict[str, Any], bucket: str) -> None:
+        selected.append(cand)
+        bucket_count[bucket] = bucket_count.get(bucket, 0) + 1
+        for b in (cand.get("brands") or []):
+            brand_count[b] = brand_count.get(b, 0) + 1
+        used_ids.add(str(cand.get("cluster_id", "")))
 
     for c in scored:
         if len(selected) >= n:
             break
+        if _brand_cap_violated(c):
+            continue
         bucket = _primary_bucket(c)
-        quota = _TOPIC_QUOTAS.get(bucket, 1)  # unknown topics: 1 each
+        quota = _TOPIC_QUOTAS.get(bucket, 1)
         if bucket_count.get(bucket, 0) >= quota:
             continue
-        selected.append(c)
-        bucket_count[bucket] = bucket_count.get(bucket, 0) + 1
-        used_ids.add(str(c.get("cluster_id", "")))
+        _admit(c, bucket)
 
-    # Backfill if quotas left us under target. Respects hard-cap topics
-    # (e.g. sales) so we don't smuggle compressed-topic items back in.
+    # Backfill respects both hard-cap topics AND brand caps.
     if len(selected) < n:
         for c in scored:
             if len(selected) >= n:
@@ -166,10 +185,11 @@ def select_diverse_top_n(
             cid = str(c.get("cluster_id", ""))
             if cid in used_ids:
                 continue
+            if _brand_cap_violated(c):
+                continue
             bucket = _primary_bucket(c)
             if bucket in _HARD_CAP_TOPICS:
-                continue  # never exceed hard cap, even when short on items
-            selected.append(c)
-            used_ids.add(cid)
+                continue
+            _admit(c, bucket)
 
     return selected

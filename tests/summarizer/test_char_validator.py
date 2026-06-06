@@ -19,7 +19,7 @@ def test_count_chars_basic():
 
 def test_constants():
     assert TITLE_MAX == 25
-    assert SUMMARY_MAX == 120
+    assert SUMMARY_MAX == 132  # raised 10% per user feedback 2026-06-05
 
 
 def test_is_within_limit():

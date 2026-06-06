@@ -143,6 +143,42 @@ def test_diverse_select_hard_cap_sales_even_when_thin():
     assert top[0]["cluster_id"] == "s0"  # highest score wins the slot
 
 
+def test_diverse_select_brand_cap_max_2_per_brand():
+    """User feedback: 比亚迪 3 条太多. Brand appears at most 2 times in Top 10."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    # 5 BYD candidates spread across different topics — should select only 2
+    cands = [
+        _cand(cluster_id="byd1", brands=["BYD"], topics=["new_car"], global_imp=90),
+        _cand(cluster_id="byd2", brands=["BYD"], topics=["battery_tech"], global_imp=85),
+        _cand(cluster_id="byd3", brands=["BYD"], topics=["autonomous_driving"], global_imp=80),
+        _cand(cluster_id="byd4", brands=["BYD"], topics=["overseas"], global_imp=75),
+        _cand(cluster_id="byd5", brands=["BYD"], topics=["finance"], global_imp=70),
+        _cand(cluster_id="nio1", brands=["NIO"], topics=["new_car"], global_imp=60),
+        _cand(cluster_id="li1", brands=["Li Auto"], topics=["battery_tech"], global_imp=55),
+    ]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    byd_count = sum(1 for c in top if "BYD" in (c.get("brands") or []))
+    assert byd_count == 2, f"expected BYD ≤ 2, got {byd_count}"
+
+
+def test_diverse_select_brand_cap_multibrand_cluster_counts_all():
+    """Cluster with brands=[BYD, NIO] counts toward BOTH brand quotas."""
+    today = date.today()
+    user = UserPreferences(brands=[], topics=[])
+    cands = [
+        _cand(cluster_id="byd_x_nio", brands=["BYD", "NIO"], topics=["new_car"], global_imp=90),
+        _cand(cluster_id="byd2", brands=["BYD"], topics=["overseas"], global_imp=85),
+        _cand(cluster_id="byd3", brands=["BYD"], topics=["finance"], global_imp=80),  # would be 3rd BYD
+        _cand(cluster_id="nio2", brands=["NIO"], topics=["battery_tech"], global_imp=75),
+        _cand(cluster_id="nio3", brands=["NIO"], topics=["autonomous_driving"], global_imp=70),  # would be 3rd NIO
+    ]
+    top = select_diverse_top_n(cands, user, today, n=10, today=today)
+    cluster_ids = [c["cluster_id"] for c in top]
+    assert "byd3" not in cluster_ids  # BYD already at 2 (multibrand + byd2)
+    assert "nio3" not in cluster_ids  # NIO already at 2
+
+
 def test_diverse_select_diverse_data_fills_to_n():
     """When data covers multiple topics, brief naturally fills to n=10."""
     today = date.today()
