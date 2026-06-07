@@ -13,7 +13,7 @@ from nev_shared.logger import get_logger
 from nev_composer.personalization import UserPreferences, select_diverse_top_n
 from nev_composer.personalization import _primary_bucket  # noqa: PLC2701 — reused for grouping
 from nev_composer.renderer import render_html, render_text
-from nev_composer.sales_card import fetch_latest_sales, rank_for_user
+from nev_composer.sales_card import extract_from_candidates, fetch_latest_sales, rank_for_user
 from nev_composer.storage import (
     ActiveSubscriber,
     fetch_active_subscribers,
@@ -134,6 +134,14 @@ def run_for_date(
         ]
 
     sales_entries = fetch_latest_sales(conn, brief_date)
+    if not sales_entries:
+        # Fallback: extract from today's candidates' key_data.values.brand_sales.
+        # vehicle_sales_daily may be empty when CAAM/CPCA monthly extracts haven't
+        # populated it yet — this lets the daily brief surface sales numbers
+        # straight from the curated candidates.
+        sales_entries = extract_from_candidates(candidates)
+        if sales_entries:
+            log.info("sales_card_from_candidates", n=len(sales_entries))
     base_url = os.environ.get("WEB_BASE_URL", "https://nev-brief.com")
 
     composed = 0
