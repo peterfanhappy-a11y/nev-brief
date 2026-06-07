@@ -25,6 +25,18 @@ def test_rank_followed_first():
     assert out[0].brand_code == "NIO"
 
 
+def test_followed_group_sorted_by_units_desc():
+    entries = [
+        _entry("BYD", "比亚迪", 376990),
+        _entry("Li Auto", "理想", 33350),
+        _entry("Geely", "吉利", 133355),
+        _entry("Tesla", "特斯拉", 85982),
+    ]
+    out = rank_for_user(entries, user_brands=["Li Auto", "BYD"])
+    # Followed group: BYD before Li Auto (units desc), then unfollowed desc
+    assert [e.brand_code for e in out] == ["BYD", "Li Auto", "Geely", "Tesla"]
+
+
 def test_others_sorted_by_units():
     entries = [
         _entry("BYD", "比亚迪", 300_000),
@@ -36,9 +48,15 @@ def test_others_sorted_by_units():
 
 
 def test_caps_at_top_k_max():
-    entries = [_entry(f"B{i}", f"name{i}", 100_000 - i*1000) for i in range(10)]
+    entries = [_entry(f"B{i}", f"name{i}", 100_000 - i*1000) for i in range(15)]
     out = rank_for_user(entries, user_brands=[], top_k_max=6)
     assert len(out) == 6
+
+
+def test_default_cap_is_10():
+    entries = [_entry(f"B{i}", f"name{i}", 100_000 - i*1000) for i in range(15)]
+    out = rank_for_user(entries, user_brands=[])
+    assert len(out) == 10
 
 
 def test_returns_all_if_below_top_k_min():

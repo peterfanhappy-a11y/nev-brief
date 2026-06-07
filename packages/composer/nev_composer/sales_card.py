@@ -94,17 +94,26 @@ def rank_for_user(
     entries: list[SalesEntry],
     user_brands: list[str],
     top_k_min: int = 4,
-    top_k_max: int = 6,
+    top_k_max: int = 10,
 ) -> list[SalesEntry]:
     """Reorder so user-followed brands come first; trim to [top_k_min, top_k_max].
 
-    Followed brands keep their input order; un-followed sorted by units desc.
+    Both followed and unfollowed groups are sorted by units desc within their
+    group, so the list always reads monotonically inside each section.
     If total entries < top_k_min, return all (no padding).
+
+    top_k_max bumped to 10 (2026-06-07) so monthly CPCA TOP10 fully renders;
+    daily / sparse sources naturally fall below 10 and self-trim.
     """
     if not entries:
         return []
     user_set = set(user_brands)
-    followed = [e for e in entries if e.brand_code in user_set]
+    # Within each group, sort by units desc — otherwise a followed micro-brand
+    # appears above an unfollowed mega-brand and the list reads as unsorted.
+    followed = sorted(
+        (e for e in entries if e.brand_code in user_set),
+        key=lambda e: -e.units,
+    )
     others = sorted(
         (e for e in entries if e.brand_code not in user_set),
         key=lambda e: -e.units,
