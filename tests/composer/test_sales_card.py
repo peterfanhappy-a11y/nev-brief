@@ -15,26 +15,37 @@ def _entry(code, name, units, yoy=None, wow=None):
     return SalesEntry(brand_code=code, brand_name=name, units=units, yoy=yoy, wow=wow)
 
 
-def test_rank_followed_first():
+def test_rank_pure_units_desc_ignores_user_brands():
+    # 2026-06-07: sales card is a market TOP N — followed brands no longer
+    # jump the queue. Pure units desc.
     entries = [
         _entry("BYD", "比亚迪", 300_000),
         _entry("Tesla", "特斯拉", 55_000),
         _entry("NIO", "蔚来", 21_000),
     ]
     out = rank_for_user(entries, user_brands=["NIO"])
-    assert out[0].brand_code == "NIO"
+    assert [e.brand_code for e in out] == ["BYD", "Tesla", "NIO"]
 
 
-def test_followed_group_sorted_by_units_desc():
+def test_rank_top10_real_may_2026():
+    # Regression: actual May 2026 CPCA data should render strictly by units desc.
     entries = [
         _entry("BYD", "比亚迪", 376990),
         _entry("Li Auto", "理想", 33350),
-        _entry("Geely", "吉利", 133355),
-        _entry("Tesla", "特斯拉", 85982),
+        _entry("Geely", "吉利新能源", 133355),
+        _entry("Tesla", "特斯拉中国", 85982),
+        _entry("Leapmotor", "零跑", 81569),
+        _entry("AITO", "鸿蒙智行", 46122),
+        _entry("NIO", "蔚来", 37705),
+        _entry("Zeekr", "极氪", 34377),
+        _entry("Chery", "奇瑞新能源", 100304),
+        _entry("Changan", "长安新能源", 92400),
     ]
-    out = rank_for_user(entries, user_brands=["Li Auto", "BYD"])
-    # Followed group: BYD before Li Auto (units desc), then unfollowed desc
-    assert [e.brand_code for e in out] == ["BYD", "Li Auto", "Geely", "Tesla"]
+    out = rank_for_user(entries, user_brands=["BYD", "Tesla", "AITO", "NIO", "Li Auto"])
+    assert [e.brand_code for e in out] == [
+        "BYD", "Geely", "Chery", "Changan", "Tesla",
+        "Leapmotor", "AITO", "NIO", "Zeekr", "Li Auto",
+    ]
 
 
 def test_others_sorted_by_units():

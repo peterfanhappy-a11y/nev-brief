@@ -92,35 +92,22 @@ def extract_from_candidates(
 
 def rank_for_user(
     entries: list[SalesEntry],
-    user_brands: list[str],
+    user_brands: list[str],  # noqa: ARG001 — kept for API stability
     top_k_min: int = 4,
     top_k_max: int = 10,
 ) -> list[SalesEntry]:
-    """Reorder so user-followed brands come first; trim to [top_k_min, top_k_max].
+    """Sort all entries by units desc, trim to top_k_max.
 
-    Both followed and unfollowed groups are sorted by units desc within their
-    group, so the list always reads monotonically inside each section.
+    User feedback 2026-06-07: sales card is a market snapshot, not a
+    personalization surface — TOP N means TOP N by absolute volume, so a
+    followed micro-brand never displaces an unfollowed mega-brand. The
+    user_brands argument is retained for API stability but unused.
+
     If total entries < top_k_min, return all (no padding).
-
-    top_k_max bumped to 10 (2026-06-07) so monthly CPCA TOP10 fully renders;
-    daily / sparse sources naturally fall below 10 and self-trim.
     """
     if not entries:
         return []
-    user_set = set(user_brands)
-    # Within each group, sort by units desc — otherwise a followed micro-brand
-    # appears above an unfollowed mega-brand and the list reads as unsorted.
-    followed = sorted(
-        (e for e in entries if e.brand_code in user_set),
-        key=lambda e: -e.units,
-    )
-    others = sorted(
-        (e for e in entries if e.brand_code not in user_set),
-        key=lambda e: -e.units,
-    )
-    combined = followed + others
-    # Aim for top_k_max when data is plentiful; fall back to all when below top_k_min
-    if len(combined) < top_k_min:
-        return combined
-    k = min(top_k_max, len(combined))
-    return combined[:k]
+    ranked = sorted(entries, key=lambda e: -e.units)
+    if len(ranked) < top_k_min:
+        return ranked
+    return ranked[:min(top_k_max, len(ranked))]
