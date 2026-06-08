@@ -10,13 +10,25 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 Set-Location $ProjectRoot
 
-# uv 必须在 PATH 中
+# Locate uv. PATH first (rare under Task Scheduler -NoProfile), then the
+# common install locations. Mirror ops/launchd/run-daily.sh.
 $UvPath = (Get-Command uv -ErrorAction SilentlyContinue).Source
 if (-not $UvPath) {
-    $UvPath = "$env:USERPROFILE\.cargo\bin\uv.exe"
+    $candidates = @(
+        "$env:USERPROFILE\.local\bin\uv.exe",                # uv self-installer (most common)
+        "$env:USERPROFILE\.cargo\bin\uv.exe",                # cargo install
+        "$env:LOCALAPPDATA\Programs\uv\uv.exe",              # uv self-installer alt
+        "$env:USERPROFILE\miniconda3\Scripts\uv.exe",        # conda base
+        "$env:USERPROFILE\anaconda3\Scripts\uv.exe",         # anaconda base
+        "$env:USERPROFILE\scoop\shims\uv.exe",               # scoop
+        "$env:ProgramFiles\uv\uv.exe"                        # system-wide install
+    )
+    foreach ($cand in $candidates) {
+        if (Test-Path $cand) { $UvPath = $cand; break }
+    }
 }
-if (-not (Test-Path $UvPath)) {
-    "[$(Get-Date -Format 'u')] FATAL: uv not found" | Tee-Object -Append $LogFile
+if (-not $UvPath -or -not (Test-Path $UvPath)) {
+    "[$(Get-Date -Format 'u')] FATAL: uv not found in PATH or common install locations" | Tee-Object -Append $LogFile
     exit 1
 }
 
