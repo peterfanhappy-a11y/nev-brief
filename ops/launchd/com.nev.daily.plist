@@ -5,18 +5,21 @@
     <key>Label</key>
     <string>com.nev.daily</string>
 
+    <!-- 由 install-daily.sh 把 REPLACE_ME 替换成 $HOME 实际值 -->
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/REPLACE_ME/.local/bin/uv</string>
-        <string>run</string>
-        <string>python</string>
-        <string>-m</string>
-        <string>nev_orchestrator</string>
-        <string>daily</string>
+        <string>/bin/bash</string>
+        <string>REPLACE_ME/nev-brief/ops/launchd/run-daily.sh</string>
     </array>
 
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PROJECT_ROOT</key>
+        <string>REPLACE_ME/nev-brief</string>
+    </dict>
+
     <key>WorkingDirectory</key>
-    <string>/Users/REPLACE_ME/nev-brief</string>
+    <string>REPLACE_ME/nev-brief</string>
 
     <key>StartCalendarInterval</key>
     <dict>
@@ -27,9 +30,9 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/REPLACE_ME/nev-brief/logs/launchd-daily.log</string>
+    <string>REPLACE_ME/nev-brief/logs/launchd-daily.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/REPLACE_ME/nev-brief/logs/launchd-daily.err</string>
+    <string>REPLACE_ME/nev-brief/logs/launchd-daily.err</string>
 
     <key>RunAtLoad</key>
     <false/>
