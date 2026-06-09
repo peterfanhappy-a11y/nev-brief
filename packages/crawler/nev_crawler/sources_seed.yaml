@@ -46,6 +46,7 @@ sources:
     authority: 8
     locale: zh
     category: media
+    enabled: false  # 2026-06-08 re-audit: RSS timeout/dead; huxiu has no auto-specific channel feed
     crawl_cron: "0 22 * * *"
 
   - name: "未来汽车日报"
@@ -54,22 +55,23 @@ sources:
     authority: 9
     locale: zh
     category: media
+    enabled: false  # 2026-06-08 re-audit: 404 (site dead). 36氪汽车 RSS 已覆盖大部分内容
     crawl_cron: "0 22 * * *"
 
-  - name: "晚点 Auto"
+  - name: "晚点 LatePost"
     type: html
-    url: "https://www.latepost.com/news/auto"
+    url: "https://www.latepost.com/"
     authority: 9
     locale: zh
     category: media
-    enabled: false  # TODO: 原 URL 已 404，需查 latepost.com 新栏目结构
     crawl_cron: "0 22 * * *"
     extra:
-      list_selector: "article.news-item"
-      title_selector: "h3 a"
-      link_selector: "h3 a"
+      # 2026-06-08 re-audit: /news/auto 不存在；首页 Newsletter-li 是 server-rendered
+      # 3 篇/次，混合主题（NEV-relevance 过滤会丢非 NEV 文章）
+      list_selector: "div.Newsletter-li"
+      title_selector: "a span.Newsletter-li-title"
+      link_selector: "a"
       link_attr: "href"
-      time_selector: ".publish-time"
 
   - name: "电动星球 News"
     type: rsshub
@@ -85,15 +87,23 @@ sources:
     authority: 7
     locale: zh
     category: media
+    enabled: false  # 2026-06-08 re-audit: socket connection closed unexpectedly; 整个域名 unreachable
     crawl_cron: "0 22 * * *"
 
   - name: "车东西"
-    type: rss
-    url: "https://www.chedongxi.com/feed"
+    type: html
+    url: "https://www.chedongxi.com/"
     authority: 7
     locale: zh
     category: media
     crawl_cron: "0 22 * * *"
+    extra:
+      # 2026-06-08 改 RSS → HTML scrape：原 /feed HTTP 500。首页 top-img-title-list
+      # 是 server-rendered 4 篇头条（理想/小鹏/宁德/ 自驾），quality > quantity
+      list_selector: "ul.top-img-title-list > li"
+      title_selector: "a"
+      link_selector: "a"
+      link_attr: "href"
 
   - name: "量子位"
     type: rss
