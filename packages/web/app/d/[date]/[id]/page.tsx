@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import {
   fetchCandidates,
   findCandidateByPrefix,
   humanDate,
   isValidBriefDate,
+  siteBaseUrl,
 } from "@/lib/briefs";
 import { topicLabel } from "@/lib/topics";
 
@@ -15,16 +17,53 @@ type Params = Promise<{ date: string; id: string }>;
 
 const ID_PREFIX_RE = /^[0-9a-f]{4,32}$/i;
 
-export async function generateMetadata({ params }: { params: Params }) {
+export async function generateMetadata({
+  params,
+}: {
+  params: Params;
+}): Promise<Metadata> {
   const { date, id } = await params;
   if (!isValidBriefDate(date) || !ID_PREFIX_RE.test(id)) {
     return { title: "NEV 早报" };
   }
   const candidates = await fetchCandidates(date);
-  const c = candidates ? findCandidateByPrefix(candidates, id) : null;
+  const item = candidates ? findCandidateByPrefix(candidates, id) : null;
+  if (!item) return { title: "NEV 早报" };
+
+  const base = siteBaseUrl();
+  const canonical = `${base}/d/${date}/${item.cluster_id.slice(0, 8)}`;
+  const title = `${item.title} · NEV 早报`;
+  const description = item.summary.slice(0, 200);
+
   return {
-    title: c ? `${c.title} · NEV 早报` : "NEV 早报",
-    description: c?.summary,
+    title,
+    description,
+    alternates: { canonical },
+    robots: { index: true, follow: true },
+    openGraph: {
+      type: "article",
+      url: canonical,
+      siteName: "NEV 早报",
+      title: item.title,
+      description,
+      locale: "zh_CN",
+      images: [
+        {
+          url: `${base}/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
+          width: 1200,
+          height: 630,
+          alt: item.title,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: item.title,
+      description,
+      images: [
+        `${base}/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
+      ],
+    },
   };
 }
 
@@ -44,15 +83,24 @@ export default async function ClusterDetailPage({
 
   const keyData = item.key_data;
   const keyDataRows: { label: string; value: string }[] = [];
-  if (keyData?.type === "sales" && Array.isArray((keyData.values as { brand_sales?: unknown })?.brand_sales)) {
+  if (
+    keyData?.type === "sales" &&
+    Array.isArray((keyData.values as { brand_sales?: unknown })?.brand_sales)
+  ) {
     const bs = (keyData.values as { brand_sales: unknown[] }).brand_sales;
     for (const r of bs) {
       if (typeof r !== "object" || r === null) continue;
       const row = r as Record<string, unknown>;
       const brand = typeof row.brand === "string" ? row.brand : "—";
-      const units = typeof row.units === "number" ? row.units.toLocaleString("en-US") : "—";
+      const units =
+        typeof row.units === "number"
+          ? row.units.toLocaleString("en-US")
+          : "—";
       const period = typeof row.period === "string" ? row.period : "";
-      const yoy = typeof row.yoy_pct === "number" ? ` (${row.yoy_pct > 0 ? "+" : ""}${row.yoy_pct}% YoY)` : "";
+      const yoy =
+        typeof row.yoy_pct === "number"
+          ? ` (${row.yoy_pct > 0 ? "+" : ""}${row.yoy_pct}% YoY)`
+          : "";
       keyDataRows.push({
         label: brand,
         value: `${units} 辆${period ? ` · ${period}` : ""}${yoy}`,

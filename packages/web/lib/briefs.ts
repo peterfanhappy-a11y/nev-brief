@@ -128,6 +128,47 @@ export function humanDate(briefDate: string): string {
   return `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
 }
 
+export function siteBaseUrl(): string {
+  return (
+    process.env.WEB_BASE_URL ??
+    process.env.NEXT_PUBLIC_WEB_BASE_URL ??
+    "https://nev-brief.com"
+  );
+}
+
+/**
+ * Closest brief_date strictly before and after `briefDate` in daily_briefs.
+ * Used to render prev/next day navigation; nulls when none exists. Caller
+ * should handle the empty-day case at the destination page (it already
+ * renders the "尚未生成" empty card).
+ */
+export async function fetchNeighborDates(briefDate: string): Promise<{
+  prev: string | null;
+  next: string | null;
+}> {
+  const sb = getSupabaseAdmin();
+  const [prevRes, nextRes] = await Promise.all([
+    sb
+      .from("daily_briefs")
+      .select("brief_date")
+      .lt("brief_date", briefDate)
+      .order("brief_date", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    sb
+      .from("daily_briefs")
+      .select("brief_date")
+      .gt("brief_date", briefDate)
+      .order("brief_date", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  return {
+    prev: prevRes.data?.brief_date ?? null,
+    next: nextRes.data?.brief_date ?? null,
+  };
+}
+
 export function formatUnits(n: number): string {
   return n.toLocaleString("en-US");
 }
