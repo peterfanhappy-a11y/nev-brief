@@ -113,6 +113,22 @@ sources:
     category: media
     crawl_cron: "0 22 * * *"
 
+  - name: "盖世汽车"
+    type: html
+    url: "https://m.gasgoo.com/news/"
+    authority: 8
+    locale: zh
+    category: media
+    crawl_cron: "0 22 * * *"
+    extra:
+      # 2026-06-11 audit：www. 域 302 重定向（geo-detect），m. 域 server-rendered 17 篇头条
+      # 需 mobile UA，否则被重定向到 en.gasgoo.com
+      list_selector: ".artList li"
+      title_selector: "dt b a"
+      link_selector: "dt b a"
+      link_attr: "href"
+      user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+
   # === 国内垂类网站 (3) ===
   - name: "汽车之家资讯"
     type: html

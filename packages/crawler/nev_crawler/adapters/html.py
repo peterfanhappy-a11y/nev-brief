@@ -46,7 +46,7 @@ class HTMLAdapter(Adapter):
             link_node = li.css_first(extra["link_selector"])
             if not title_node or not link_node:
                 continue
-            href = link_node.attributes.get(extra["link_attr"], "")
+            href = (link_node.attributes.get(extra["link_attr"]) or "").strip()
             if not href:
                 continue
             article_url = urljoin(url, href)
