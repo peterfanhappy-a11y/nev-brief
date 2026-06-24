@@ -79,7 +79,7 @@ export default async function OGImage({ params }: { params: Params }) {
     item.title.length > 60 ? item.title.slice(0, 60) + "…" : item.title;
 
   const textPayload =
-    "🚗NEV 早报·· nev-brief.com📰" +
+    "🚗NEV 早报·· aivizens.com📰" +
     dateHuman +
     titleClipped +
     summary +
@@ -197,7 +197,7 @@ export default async function OGImage({ params }: { params: Params }) {
           }}
         >
           <div style={{ display: "flex" }}>{`📰 ${item.primary_source || "多源汇总"}`}</div>
-          <div style={{ display: "flex" }}>nev-brief.com</div>
+          <div style={{ display: "flex" }}>aivizens.com</div>
         </div>
       </div>
     ),

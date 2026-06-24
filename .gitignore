@@ -40,3 +40,6 @@ logs/
 
 # Local artifacts (preview / scratch)
 preview.html
+
+.vercel
+.env*

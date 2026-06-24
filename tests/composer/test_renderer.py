@@ -18,7 +18,7 @@ def _sample_ctx():
                 {"name": "36氪", "url": "https://36kr.com/x"},
                 {"name": "电车汇", "url": "https://dcwauto.com/y"},
             ],
-            "web_url": "https://nev-brief.com/d/2026-05-31/cl1",
+            "web_url": "https://aivizens.com/d/2026-05-31/cl1",
         },
         {
             "title": "Tesla Model Y 焕新版6月交付",
@@ -26,16 +26,16 @@ def _sample_ctx():
             "brands": ["Tesla"],
             "topics": ["new_car"],
             "source_links": [{"name": "Reuters", "url": "https://reuters.com/z"}],
-            "web_url": "https://nev-brief.com/d/2026-05-31/cl2",
+            "web_url": "https://aivizens.com/d/2026-05-31/cl2",
         },
     ]
     return {
         "brief_date": "2026-05-31",
         "brief_date_human": "2026年5月31日",
         "subscriber_email": "test@example.com",
-        "manage_url": "https://nev-brief.com/manage?token=abc",
-        "unsubscribe_url": "https://nev-brief.com/unsubscribe?token=abc",
-        "web_url": "https://nev-brief.com/d/2026-05-31",
+        "manage_url": "https://aivizens.com/manage?token=abc",
+        "unsubscribe_url": "https://aivizens.com/unsubscribe?token=abc",
+        "web_url": "https://aivizens.com/d/2026-05-31",
         "sales_card": [
             {"brand_code": "BYD", "brand_name": "比亚迪", "units": 305000, "yoy": 0.25, "wow": None},
             {"brand_code": "Tesla", "brand_name": "特斯拉", "units": 55000, "yoy": -0.03, "wow": 0.12},
@@ -43,7 +43,7 @@ def _sample_ctx():
         "top_items": top_items,
         "grouped_items": _group_items_by_topic(top_items),
         "overseas_items": [
-            {"title": "Rivian R2 EPA认证", "web_url": "https://nev-brief.com/d/2026-05-31/cl3"},
+            {"title": "Rivian R2 EPA认证", "web_url": "https://aivizens.com/d/2026-05-31/cl3"},
         ],
     }
 
@@ -56,7 +56,7 @@ def test_html_includes_brand_color():
 
 def test_html_includes_unsubscribe_url():
     out = render_html(_sample_ctx())
-    assert "https://nev-brief.com/unsubscribe?token=abc" in out
+    assert "https://aivizens.com/unsubscribe?token=abc" in out
 
 
 def test_html_renders_all_top_items():
@@ -95,7 +95,7 @@ def test_text_no_html_tags():
 
 def test_text_includes_unsubscribe_url():
     out = render_text(_sample_ctx())
-    assert "https://nev-brief.com/unsubscribe?token=abc" in out
+    assert "https://aivizens.com/unsubscribe?token=abc" in out
 
 
 def test_text_overseas_section_when_present():

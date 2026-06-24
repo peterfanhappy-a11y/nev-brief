@@ -4,7 +4,7 @@ from __future__ import annotations
 import httpx
 
 # 默认对外标识为机器人（合规友好，便于站长溯源）
-USER_AGENT = "NEV-Brief-Bot/1.0 (+https://nev-brief.com/about)"
+USER_AGENT = "NEV-Brief-Bot/1.0 (+https://aivizens.com/about)"
 
 # 浏览器伪装 UA — 仅用于明确拒绝 Bot 的合规来源（如行业协会公开信息）
 BROWSER_UA = (

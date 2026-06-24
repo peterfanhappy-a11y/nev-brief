@@ -132,7 +132,7 @@ export function siteBaseUrl(): string {
   return (
     process.env.WEB_BASE_URL ??
     process.env.NEXT_PUBLIC_WEB_BASE_URL ??
-    "https://nev-brief.com"
+    "https://aivizens.com"
   );
 }
 

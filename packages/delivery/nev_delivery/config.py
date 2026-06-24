@@ -1,14 +1,18 @@
 """Delivery-specific config: from address, from name, unsubscribe header.
 
-These are constants for MVP; once a custom domain is set up they should move
-to env vars (FROM_EMAIL / FROM_NAME).
+All three are env-overridable so Mac mini and Vercel can stay in lockstep
+without code changes when the verified domain or web URL flips.
 """
 from __future__ import annotations
 
-# MVP: 使用 Resend 自有域名（不需要验证 DNS）。Gmail 不挑剔 from。
-# 后续：买域名后改 morning-brief@<your-domain>，并在 Resend Dashboard 验证 DNS。
-FROM_EMAIL = "onboarding@resend.dev"
-FROM_NAME = "NEV 早报"
+import os
 
-# RFC 8058 List-Unsubscribe header — Gmail 会自动渲染顶部退订按钮
-LIST_UNSUBSCRIBE_PREFIX = "https://nev-brief.vercel.app/unsubscribe?token="
+# Use Resend's own domain until aivizens.com is verified in Resend Dashboard.
+# Then set RESEND_FROM_EMAIL=morning-brief@aivizens.com in Mac mini's .env.
+FROM_EMAIL = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev")
+FROM_NAME = os.environ.get("RESEND_FROM_NAME", "NEV 早报")
+
+# RFC 8058 List-Unsubscribe header — Gmail renders the top-bar unsubscribe.
+# Must match a live route on whichever domain WEB_BASE_URL points to.
+_web_base = os.environ.get("WEB_BASE_URL", "https://aivizens.com").rstrip("/")
+LIST_UNSUBSCRIBE_PREFIX = f"{_web_base}/unsubscribe?token="

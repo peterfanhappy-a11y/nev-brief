@@ -70,7 +70,7 @@ def _build_render_context(
     sales_card_entries: list,
     brief_date: date,
 ) -> dict[str, Any]:
-    base_url = os.environ.get("WEB_BASE_URL", "https://nev-brief.com")
+    base_url = os.environ.get("WEB_BASE_URL", "https://aivizens.com")
     return {
         "brief_date": str(brief_date),
         "brief_date_human": brief_date.strftime("%Y年%m月%d日"),
@@ -142,7 +142,7 @@ def run_for_date(
         sales_entries = extract_from_candidates(candidates)
         if sales_entries:
             log.info("sales_card_from_candidates", n=len(sales_entries))
-    base_url = os.environ.get("WEB_BASE_URL", "https://nev-brief.com")
+    base_url = os.environ.get("WEB_BASE_URL", "https://aivizens.com")
 
     composed = 0
     failed = 0
