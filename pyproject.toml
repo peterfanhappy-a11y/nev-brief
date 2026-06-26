@@ -10,6 +10,8 @@ dependencies = [
     "nev-pipeline",
     "nev-summarizer",
     "nev-composer",
+    "nev-delivery",
+    "nev-orchestrator",
 ]
 
 [tool.uv.workspace]
@@ -23,6 +25,8 @@ nev-crawler = { workspace = true }
 nev-pipeline = { workspace = true }
 nev-summarizer = { workspace = true }
 nev-composer = { workspace = true }
+nev-delivery = { workspace = true }
+nev-orchestrator = { workspace = true }
 
 [dependency-groups]
 dev = [
