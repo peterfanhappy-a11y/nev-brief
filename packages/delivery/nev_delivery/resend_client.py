@@ -13,6 +13,7 @@ import resend
 import resend.exceptions as resend_exc
 from nev_shared.config import get_settings
 from nev_shared.logger import get_logger
+from nev_shared.net import no_proxy_env
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -89,8 +90,13 @@ def send_email(
             "Idempotency-Key": idempotency_key,
         },
     }
+    # resend SDK uses requests internally with no trust_env hook, so strip
+    # proxy env vars for the duration of this call (process-local pop, restored
+    # on exit) — keeps Clash / SOCKS proxy out of the loop without affecting
+    # other programs on the host.
     try:
-        result = resend.Emails.send(params)
+        with no_proxy_env():
+            result = resend.Emails.send(params)
     except resend_exc.ResendError as e:
         _classify_and_raise(e)
         raise  # unreachable — satisfy type checker

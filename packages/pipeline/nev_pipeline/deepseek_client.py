@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 
+import httpx
 from nev_shared.config import get_settings
 from nev_shared.logger import get_logger
 from openai import (
@@ -47,7 +48,13 @@ _HTTPX_LOG.setLevel(logging.WARNING)
 
 def _client() -> AsyncOpenAI:
     s = get_settings()
-    return AsyncOpenAI(api_key=s.deepseek_api_key, base_url=s.deepseek_base_url)
+    # Inject a httpx client with trust_env=False so the openai SDK does not
+    # pick up HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the shell environment.
+    return AsyncOpenAI(
+        api_key=s.deepseek_api_key,
+        base_url=s.deepseek_base_url,
+        http_client=httpx.AsyncClient(trust_env=False),
+    )
 
 
 @retry(

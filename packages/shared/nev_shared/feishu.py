@@ -41,7 +41,7 @@ def send_alert(*, level: AlertLevel, title: str, body: str) -> None:
 
     payload = _build_payload(level, title, body)
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=10.0, trust_env=False) as client:
             resp = client.post(
                 webhook_url,
                 content=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

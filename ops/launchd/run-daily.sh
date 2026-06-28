@@ -12,13 +12,11 @@ LOG_FILE="$LOG_DIR/daily-$(date +%Y%m%d).log"
 
 mkdir -p "$LOG_DIR"
 
-# Strip any inherited proxy env. Supabase/DeepSeek/Resend/news sources are
-# reachable directly; routing through a SOCKS proxy only adds failure modes
-# (e.g. httpx requires the optional `socksio` package for SOCKS, missing it
-# bombs the whole crawl). NO_PROXY=* belt-and-suspenders.
-unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
-export NO_PROXY="*"
-export no_proxy="*"
+# Proxy isolation is done inside Python (trust_env=False on every httpx client,
+# no_proxy_env() contextmanager around the resend SDK call). This shell keeps
+# whatever HTTP_PROXY/HTTPS_PROXY/ALL_PROXY the cron environment inherits — we
+# do NOT unset them globally because that would surprise anyone reusing this
+# script outside cron and is unnecessary given the in-process opt-out.
 
 # 定位 uv：先 PATH，再常见安装点
 UV_BIN="$(command -v uv 2>/dev/null || true)"

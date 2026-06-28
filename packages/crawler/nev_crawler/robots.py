@@ -31,7 +31,7 @@ class RobotsChecker:
         rp = RobotFileParser()
         rp.set_url(url)
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
+            async with httpx.AsyncClient(timeout=self._timeout, trust_env=False) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
                     rp.parse(resp.text.splitlines())

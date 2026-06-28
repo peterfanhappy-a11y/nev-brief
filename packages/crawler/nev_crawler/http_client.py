@@ -14,6 +14,9 @@ BROWSER_UA = (
 
 
 def make_client(timeout: float = 30.0, user_agent: str | None = None) -> httpx.AsyncClient:
+    # trust_env=False: ignore HTTP_PROXY/HTTPS_PROXY/ALL_PROXY from the shell
+    # so cron runs don't get hijacked into a SOCKS proxy that needs the optional
+    # `socksio` extra. Direct connection is the right behavior for news fetch.
     return httpx.AsyncClient(
         headers={
             "User-Agent": user_agent or USER_AGENT,
@@ -22,4 +25,5 @@ def make_client(timeout: float = 30.0, user_agent: str | None = None) -> httpx.A
         timeout=httpx.Timeout(timeout, connect=10.0),
         http2=True,
         follow_redirects=True,
+        trust_env=False,
     )
