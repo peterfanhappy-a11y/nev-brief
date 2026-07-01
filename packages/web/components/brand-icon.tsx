@@ -1,10 +1,7 @@
-// Brand logo renderer.
-//
-// For brands in the simple-icons OSS package (https://simpleicons.org — brand
-// owners contribute or approve their SVGs), we reference the icon by name and
-// let the package own the actual artwork. Brands that aren't in the package
-// yet fall back to a plain colored-circle monogram (a generic design, not the
-// brand's trademark).
+// Brand logo renderer with three-tier resolution:
+//   1. LOCAL_PNG — user-supplied PNG in /public/brand/companies/ (highest priority)
+//   2. simple-icons — brand SVGs from the simple-icons OSS package
+//   3. MONOGRAM   — generic colored-circle + character fallback
 import {
   siBytedance,
   siHuawei,
@@ -21,6 +18,15 @@ type SimpleIcon = {
   slug: string;
 };
 
+// Local PNGs the user obtained + placed under /public/brand/companies/.
+// These take precedence over simple-icons whenever both are available.
+const LOCAL_PNG: Record<string, string> = {
+  alibaba: "/brand/companies/alibaba.png",
+  tencent: "/brand/companies/tencent.png",
+  deepseek: "/brand/companies/deepseek.png",
+  xiaohongshu: "/brand/companies/xiaohongshu.png",
+};
+
 // Douyin and TikTok are the same product/logo under different regional brands
 // operated by the same company, so we reuse the TikTok icon for the douyin slug.
 const BRAND_ICONS: Record<string, SimpleIcon | undefined> = {
@@ -32,16 +38,10 @@ const BRAND_ICONS: Record<string, SimpleIcon | undefined> = {
   kuaishou: siKuaishou,
 };
 
-// Generic colored-circle monogram for brands not (yet) in simple-icons, or
-// where simple-icons only carries a sub-brand (alibabacloud, tencentqq) that
-// misrepresents the parent company. The character + color here is a plain
-// design fallback, not a reproduction of the brand's trademarked logo.
-const MONOGRAM: Record<string, { char: string; bg: string }> = {
-  alibaba: { char: "阿", bg: "#FF6A00" },
-  tencent: { char: "腾", bg: "#0052D9" },
-  deepseek: { char: "DS", bg: "#4D6BFE" },
-  xiaohongshu: { char: "红", bg: "#FE2C55" },
-};
+// Generic colored-circle monogram for brands not covered by LOCAL_PNG or
+// simple-icons. The character + color is a plain design fallback, not a
+// reproduction of the brand's trademarked artwork.
+const MONOGRAM: Record<string, { char: string; bg: string }> = {};
 
 export function BrandIcon({
   slug,
@@ -56,6 +56,26 @@ export function BrandIcon({
   className?: string;
   title?: string;
 }) {
+  const localSrc = LOCAL_PNG[slug];
+  if (localSrc) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={localSrc}
+        alt={title ?? slug}
+        style={{
+          height: size,
+          width: "auto",
+          maxWidth: size * 3,
+          objectFit: "contain",
+        }}
+        className={className}
+        loading="lazy"
+        decoding="async"
+      />
+    );
+  }
+
   const icon = BRAND_ICONS[slug];
   if (icon) {
     return (
