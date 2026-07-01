@@ -1,10 +1,11 @@
 import Link from "next/link";
+import { BrandIcon } from "@/components/brand-icon";
 
-const SOCIAL = [
-  { name: "微博", href: "#", icon: "W" },
-  { name: "抖音", href: "#", icon: "D" },
-  { name: "小红书", href: "#", icon: "X" },
-  { name: "快手", href: "#", icon: "K" },
+const SOCIAL: { slug: string; name: string; href: string }[] = [
+  { slug: "sinaweibo", name: "微博", href: "#" },
+  { slug: "douyin", name: "抖音", href: "#" },
+  { slug: "xiaohongshu", name: "小红书", href: "#" },
+  { slug: "kuaishou", name: "快手", href: "#" },
 ];
 
 export default function Footer() {
@@ -21,13 +22,13 @@ export default function Footer() {
           <div className="flex items-center gap-3">
             {SOCIAL.map((s) => (
               <a
-                key={s.name}
+                key={s.slug}
                 href={s.href}
                 aria-label={s.name}
                 title={s.name}
-                className="inline-flex items-center justify-center h-10 w-10 rounded-full border border-gray-200 bg-white text-sm font-semibold text-gray-700 hover:bg-gray-900 hover:text-white transition-colors"
+                className="inline-flex items-center justify-center h-11 w-11 rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-gray-900 hover:text-white hover:border-gray-900 transition-colors"
               >
-                {s.icon}
+                <BrandIcon slug={s.slug} size={22} title={s.name} />
               </a>
             ))}
           </div>

@@ -2,14 +2,15 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import AiSubscribeForm from "@/components/ai-subscribe-form";
 import LatestPostsGrid from "@/components/latest-posts-grid";
+import { BrandIcon } from "@/components/brand-icon";
 
-const COMPANIES = [
-  "字节跳动",
-  "阿里巴巴",
-  "腾讯",
-  "DeepSeek",
-  "小米",
-  "华为",
+const COMPANIES: { slug: string; name: string }[] = [
+  { slug: "bytedance", name: "字节跳动" },
+  { slug: "alibaba", name: "阿里巴巴" },
+  { slug: "tencent", name: "腾讯" },
+  { slug: "deepseek", name: "DeepSeek" },
+  { slug: "xiaomi", name: "小米" },
+  { slug: "huawei", name: "华为" },
 ];
 
 export default function AiTrendsHome() {
@@ -37,14 +38,15 @@ export default function AiTrendsHome() {
             <p className="text-sm text-gray-500 mb-4">
               已有 <span className="font-semibold text-gray-900">100,000+</span> 读者，来自这些公司：
             </p>
-            <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">
+            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5">
               {COMPANIES.map((c) => (
-                <span
-                  key={c}
-                  className="inline-flex items-center rounded-full border border-gray-200 bg-white px-4 py-1.5 text-sm text-gray-700"
+                <div
+                  key={c.slug}
+                  className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
                 >
-                  {c}
-                </span>
+                  <BrandIcon slug={c.slug} size={24} title={c.name} />
+                  <span className="text-sm font-medium">{c.name}</span>
+                </div>
               ))}
             </div>
           </div>
