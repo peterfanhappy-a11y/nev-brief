@@ -1,23 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { verifyTurnstile } from "@/lib/turnstile";
 import { sendAiWelcomeEmail } from "@/lib/ai-welcome-email";
 
 export const runtime = "nodejs";
 
+// AI 趋势订阅：不用 Cloudflare Turnstile — 前端用 hold-to-verify modal
+// (15s 长按 + 二次点击) 挡住自动化脚本；如未来遭遇滥用可再加 IP rate limit。
 const Body = z.object({
   email: z.string().email().toLowerCase().trim().max(254),
-  turnstile_token: z.string().min(1).max(2048),
 });
-
-function getClientIp(req: Request): string {
-  return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    req.headers.get("x-real-ip") ??
-    "unknown"
-  );
-}
 
 export async function POST(req: Request) {
   let body;
@@ -25,12 +17,6 @@ export async function POST(req: Request) {
     body = Body.parse(await req.json());
   } catch {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
-  }
-
-  const ip = getClientIp(req);
-  const turnstileOk = await verifyTurnstile(body.turnstile_token, ip);
-  if (!turnstileOk) {
-    return NextResponse.json({ error: "turnstile_failed" }, { status: 403 });
   }
 
   const sb = getSupabaseAdmin();
