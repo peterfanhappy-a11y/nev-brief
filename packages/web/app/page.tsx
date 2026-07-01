@@ -35,7 +35,7 @@ export default function AiTrendsHome() {
           {/* Trust bar */}
           <div className="mt-16">
             <p className="text-sm text-gray-500 mb-4">
-              已有 <span className="font-semibold text-gray-900">1,000,000+</span> 读者，来自这些公司：
+              已有 <span className="font-semibold text-gray-900">100,000+</span> 读者，来自这些公司：
             </p>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">
               {COMPANIES.map((c) => (

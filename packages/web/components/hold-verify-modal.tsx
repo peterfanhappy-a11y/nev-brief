@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const HOLD_DURATION_MS = 15000;
+const HOLD_DURATION_MS = 5000;
 
 type Props = {
   open: boolean;
@@ -121,7 +121,7 @@ export default function HoldVerifyModal({ open, onClose, onConfirmed }: Props) {
             onPointerLeave={stopHold}
             onPointerCancel={stopHold}
             className="relative w-full h-16 rounded-full bg-gray-100 border border-gray-200 overflow-hidden select-none touch-none focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-            aria-label="按住此按钮 15 秒以确认"
+            aria-label="按住此按钮 5 秒以确认"
             aria-valuenow={percent}
             aria-valuemin={0}
             aria-valuemax={100}

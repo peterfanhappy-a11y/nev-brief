@@ -16,7 +16,7 @@ export default function Footer() {
             <img src="/brand/logo.svg" alt="AIVIZENS" className="h-10 w-auto" />
           </Link>
           <p className="max-w-xl text-sm text-gray-600 leading-relaxed">
-            每日 3 分钟，跟上最新 AI 新闻、趋势与工具。加入 100 万+ 专业人士。
+            每日 5 分钟，跟上最新 AI 新闻、趋势与工具。加入 10 万+ 专业人士。
           </p>
           <div className="flex items-center gap-3">
             {SOCIAL.map((s) => (
