@@ -21,7 +21,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const arr = (row.candidates as unknown[] | null) ?? [];
     if (arr.length === 0) continue;
     dateEntries.push({
-      url: `${base}/d/${row.brief_date}`,
+      url: `${base}/nev/d/${row.brief_date}`,
       lastModified: row.updated_at
         ? new Date(row.updated_at as string)
         : undefined,
@@ -32,6 +32,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     { url: base, changeFrequency: "weekly", priority: 1.0 },
+    { url: `${base}/nev`, changeFrequency: "weekly", priority: 0.9 },
     ...dateEntries,
   ];
 }

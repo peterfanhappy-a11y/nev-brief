@@ -62,7 +62,7 @@ export default function SubscribeForm() {
     setStatus("submitting");
     setErrorMsg("");
     try {
-      const res = await fetch("/api/subscribe", {
+      const res = await fetch("/api/nev/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

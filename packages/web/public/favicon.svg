@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- favicon: v1 的 A 图标简化 -->
+  <defs>
+    <linearGradient id="favgrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="10" fill="#0F172A"/>
+  <g transform="translate(4,4)">
+    <polygon points="20,0 40,40 0,40" fill="url(#favgrad)"/>
+    <rect x="10" y="24" width="20" height="4" fill="#fff"/>
+  </g>
+</svg>

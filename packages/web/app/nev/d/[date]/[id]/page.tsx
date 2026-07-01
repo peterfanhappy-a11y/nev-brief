@@ -31,7 +31,7 @@ export async function generateMetadata({
   if (!item) return { title: "NEV 早报" };
 
   const base = siteBaseUrl();
-  const canonical = `${base}/d/${date}/${item.cluster_id.slice(0, 8)}`;
+  const canonical = `${base}/nev/d/${date}/${item.cluster_id.slice(0, 8)}`;
   const title = `${item.title} · NEV 早报`;
   const description = item.summary.slice(0, 200);
 
@@ -49,7 +49,7 @@ export async function generateMetadata({
       locale: "zh_CN",
       images: [
         {
-          url: `${base}/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
+          url: `${base}/nev/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
           width: 1200,
           height: 630,
           alt: item.title,
@@ -61,7 +61,7 @@ export async function generateMetadata({
       title: item.title,
       description,
       images: [
-        `${base}/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
+        `${base}/nev/d/${date}/${item.cluster_id.slice(0, 8)}/opengraph-image`,
       ],
     },
   };
@@ -117,7 +117,7 @@ export default async function ClusterDetailPage({
     <main className="min-h-screen px-6 py-12 bg-gray-50">
       <div className="max-w-3xl mx-auto">
         <nav className="text-sm mb-6">
-          <Link href={`/d/${date}`} className="text-nev-blue hover:underline">
+          <Link href={`/nev/d/${date}`} className="text-nev-blue hover:underline">
             ← 返回 {humanDate(date)} 早报
           </Link>
         </nav>
@@ -193,7 +193,7 @@ export default async function ClusterDetailPage({
         </article>
 
         <footer className="mt-8 text-center text-xs text-gray-400">
-          <Link href="/" className="hover:text-nev-blue">
+          <Link href="/nev" className="hover:text-nev-blue">
             订阅每日 NEV 早报 →
           </Link>
         </footer>

@@ -32,7 +32,7 @@ export async function generateMetadata({
   const candidates = await fetchCandidates(date);
   const dateHuman = humanDate(date);
   const base = siteBaseUrl();
-  const canonical = `${base}/d/${date}`;
+  const canonical = `${base}/nev/d/${date}`;
 
   const title = `NEV 早报 · ${dateHuman}`;
   const description =
@@ -58,7 +58,7 @@ export async function generateMetadata({
       locale: "zh_CN",
       images: [
         {
-          url: `${base}/d/${date}/opengraph-image`,
+          url: `${base}/nev/d/${date}/opengraph-image`,
           width: 1200,
           height: 630,
           alt: title,
@@ -69,7 +69,7 @@ export async function generateMetadata({
       card: "summary_large_image",
       title,
       description,
-      images: [`${base}/d/${date}/opengraph-image`],
+      images: [`${base}/nev/d/${date}/opengraph-image`],
     },
   };
 }
@@ -95,7 +95,7 @@ function CandidateCard({
       </div>
       <h2 className="text-lg font-semibold text-gray-900 mb-2">
         <Link
-          href={`/d/${briefDate}/${item.cluster_id.slice(0, 8)}`}
+          href={`/nev/d/${briefDate}/${item.cluster_id.slice(0, 8)}`}
           className="hover:text-nev-blue"
         >
           {item.title}
@@ -139,14 +139,14 @@ function DayNav({
   return (
     <nav className="flex items-center justify-between text-sm py-4 border-t border-gray-100 mt-8">
       {prev ? (
-        <Link href={`/d/${prev}`} className="text-nev-blue hover:underline">
+        <Link href={`/nev/d/${prev}`} className="text-nev-blue hover:underline">
           ← 前一天 {humanDate(prev)}
         </Link>
       ) : (
         <span className="text-gray-300">← 没有更早的早报</span>
       )}
       {next ? (
-        <Link href={`/d/${next}`} className="text-nev-blue hover:underline">
+        <Link href={`/nev/d/${next}`} className="text-nev-blue hover:underline">
           后一天 {humanDate(next)} →
         </Link>
       ) : (
@@ -182,7 +182,7 @@ export default async function DailyBriefPage({
             当日早报尚未生成，请稍后再来。
           </div>
           <DayNav prev={neighbors.prev} next={neighbors.next} />
-          <Link href="/" className="text-nev-blue text-sm mt-2 inline-block">
+          <Link href="/nev" className="text-nev-blue text-sm mt-2 inline-block">
             ← 返回首页
           </Link>
         </div>
@@ -253,7 +253,7 @@ export default async function DailyBriefPage({
         <DayNav prev={neighbors.prev} next={neighbors.next} />
 
         <footer className="mt-8 text-center text-xs text-gray-400">
-          <Link href="/" className="hover:text-nev-blue">
+          <Link href="/nev" className="hover:text-nev-blue">
             订阅每日 NEV 早报 →
           </Link>
         </footer>

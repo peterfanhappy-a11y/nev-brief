@@ -76,8 +76,8 @@ def _build_render_context(
         "brief_date_human": brief_date.strftime("%Y年%m月%d日"),
         "subscriber_email": sub.email,
         "manage_url": f"{base_url}/manage?token={sub.unsubscribe_token}",
-        "unsubscribe_url": f"{base_url}/unsubscribe?token={sub.unsubscribe_token}",
-        "web_url": f"{base_url}/d/{brief_date}",
+        "unsubscribe_url": f"{base_url}/unsubscribe?token={sub.unsubscribe_token}&product=nev",
+        "web_url": f"{base_url}/nev/d/{brief_date}",
         "sales_card": [asdict(s) for s in sales_card_entries],
         "top_items": top_items,
         "grouped_items": _group_items_by_topic(top_items),
@@ -98,13 +98,13 @@ def _split_overseas(top_items: list[dict[str, Any]]) -> tuple[list[dict], list[d
 
 
 def _add_web_urls(items: list[dict], brief_date: date, base_url: str) -> list[dict]:
-    """Annotate each item with a web_url pointing to /d/[date]/[short-cluster-id]."""
+    """Annotate each item with a web_url pointing to /nev/d/[date]/[short-cluster-id]."""
     out = []
     for item in items:
         cluster_id = str(item.get("cluster_id", ""))
         out.append({
             **item,
-            "web_url": f"{base_url}/d/{brief_date}/{cluster_id[:8]}",
+            "web_url": f"{base_url}/nev/d/{brief_date}/{cluster_id[:8]}",
         })
     return out
 

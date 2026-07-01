@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "NEV 早报 · 新能源汽车行业每日精选",
-  description: "每天早上 8:00 送达 · 10 条精选新闻 + 主要车企日销量数据",
+  title: "AIVIZENS · 每日 AI 精选",
+  description: "每日 5 分钟，学会 AI。最新 AI 资讯、行业趋势与实用工具。",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

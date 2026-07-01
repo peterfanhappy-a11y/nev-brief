@@ -16,7 +16,7 @@ function ErrorCard({ title, msg }: { title: string; msg: string }) {
       <div className="max-w-md w-full bg-white rounded-lg shadow-sm border border-gray-100 p-8">
         <h1 className="text-xl font-semibold mb-2">{title}</h1>
         <p className="text-gray-600 text-sm">{msg}</p>
-        <Link href="/" className="text-nev-blue text-sm mt-4 inline-block">
+        <Link href="/nev" className="text-nev-blue text-sm mt-4 inline-block">
           ← 返回首页
         </Link>
       </div>
@@ -79,10 +79,10 @@ export default async function ManagePage({
         </div>
 
         <div className="flex justify-between text-sm">
-          <Link href={`/unsubscribe?token=${token}`} className="text-red-600">
+          <Link href={`/unsubscribe?token=${token}&product=nev`} className="text-red-600">
             退订 NEV 早报
           </Link>
-          <Link href="/" className="text-gray-500">
+          <Link href="/nev" className="text-gray-500">
             返回首页
           </Link>
         </div>

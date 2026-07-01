@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" width="240" height="48">
+  <!-- v2: 闪电 ⚡ + 字标，能量/速度感 -->
+  <defs>
+    <linearGradient id="v2grad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#EF4444"/>
+    </linearGradient>
+  </defs>
+  <!-- 闪电 -->
+  <g transform="translate(6,4)">
+    <polygon points="22,0 4,26 16,26 12,40 32,14 20,14 26,0"
+             fill="url(#v2grad)" stroke="#0F172A" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+  <!-- 字标 -->
+  <text x="56" y="33" font-family="Inter, 'Helvetica Neue', Arial, sans-serif"
+        font-size="22" font-weight="800" letter-spacing="1.5" fill="#0F172A">AIVIZENS</text>
+</svg>
