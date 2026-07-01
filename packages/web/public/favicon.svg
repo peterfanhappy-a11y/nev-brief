@@ -1,14 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <!-- favicon: v1 的 A 图标简化 -->
-  <defs>
-    <linearGradient id="favgrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#4F46E5"/>
-      <stop offset="100%" stop-color="#0EA5E9"/>
-    </linearGradient>
-  </defs>
+  <!-- favicon: v3 棱镜简化版 -->
   <rect width="48" height="48" rx="10" fill="#0F172A"/>
-  <g transform="translate(4,4)">
-    <polygon points="20,0 40,40 0,40" fill="url(#favgrad)"/>
-    <rect x="10" y="24" width="20" height="4" fill="#fff"/>
+  <g transform="translate(4,6)">
+    <line x1="0" y1="18" x2="8" y2="18" stroke="#94A3B8" stroke-width="2"/>
+    <polygon points="18,0 36,36 0,36" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+    <line x1="26" y1="18" x2="40" y2="8" stroke="#EF4444" stroke-width="2"/>
+    <line x1="26" y1="18" x2="42" y2="18" stroke="#10B981" stroke-width="2"/>
+    <line x1="26" y1="18" x2="40" y2="28" stroke="#3B82F6" stroke-width="2"/>
   </g>
 </svg>
