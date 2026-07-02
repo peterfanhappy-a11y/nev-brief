@@ -13,6 +13,8 @@ const COMPANIES: { slug: string; name: string }[] = [
   { slug: "huawei", name: "华为" },
 ];
 
+const LOGO_HEIGHT = 36;
+
 export default function AiTrendsHome() {
   return (
     <main className="min-h-screen bg-white">
@@ -38,14 +40,15 @@ export default function AiTrendsHome() {
             <p className="text-sm text-gray-500 mb-4">
               已有 <span className="font-semibold text-gray-900">100,000+</span> 读者，来自这些公司：
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-5">
+            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 opacity-80 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
               {COMPANIES.map((c) => (
                 <div
                   key={c.slug}
-                  className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition-colors"
+                  className="flex items-center justify-center"
+                  style={{ height: LOGO_HEIGHT }}
+                  title={c.name}
                 >
-                  <BrandIcon slug={c.slug} size={24} title={c.name} />
-                  <span className="text-sm font-medium">{c.name}</span>
+                  <BrandIcon slug={c.slug} size={LOGO_HEIGHT} title={c.name} />
                 </div>
               ))}
             </div>

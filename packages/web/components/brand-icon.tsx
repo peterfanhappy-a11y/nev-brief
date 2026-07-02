@@ -1,58 +1,34 @@
-// Brand logo renderer with three-tier resolution:
-//   1. LOCAL_PNG — user-supplied PNG in /public/brand/companies/ (highest priority)
-//   2. simple-icons — brand SVGs from the simple-icons OSS package
-//   3. MONOGRAM   — generic colored-circle + character fallback
-import {
-  siBytedance,
-  siHuawei,
-  siKuaishou,
-  siSinaweibo,
-  siTiktok,
-  siXiaomi,
-} from "simple-icons";
+// Brand logo renderer with two-tier resolution:
+//   1. LOCAL_PNG — user-supplied PNG in /public/brand/companies/ (preferred)
+//   2. MONOGRAM  — generic colored-circle + character fallback (currently empty;
+//                  every brand in use has a PNG asset)
+type MonogramSpec = { char: string; bg: string };
 
-type SimpleIcon = {
-  path: string;
-  title: string;
-  hex: string;
-  slug: string;
-};
-
-// Local PNGs the user obtained + placed under /public/brand/companies/.
-// These take precedence over simple-icons whenever both are available.
+// Local PNGs live under /public/brand/companies/. Every brand shown on the
+// AI landing (hero trust bar + footer socials) is served from here.
 const LOCAL_PNG: Record<string, string> = {
+  bytedance: "/brand/companies/bytedance.png",
   alibaba: "/brand/companies/alibaba.png",
   tencent: "/brand/companies/tencent.png",
   deepseek: "/brand/companies/deepseek.png",
+  xiaomi: "/brand/companies/xiaomi.png",
+  huawei: "/brand/companies/huawei.png",
+  weibo: "/brand/companies/weibo.png",
+  wechat: "/brand/companies/wechat.png",
+  douyin: "/brand/companies/douyin.png",
   xiaohongshu: "/brand/companies/xiaohongshu.png",
 };
 
-// Douyin and TikTok are the same product/logo under different regional brands
-// operated by the same company, so we reuse the TikTok icon for the douyin slug.
-const BRAND_ICONS: Record<string, SimpleIcon | undefined> = {
-  bytedance: siBytedance,
-  xiaomi: siXiaomi,
-  huawei: siHuawei,
-  sinaweibo: siSinaweibo,
-  douyin: siTiktok,
-  kuaishou: siKuaishou,
-};
-
-// Generic colored-circle monogram for brands not covered by LOCAL_PNG or
-// simple-icons. The character + color is a plain design fallback, not a
-// reproduction of the brand's trademarked artwork.
-const MONOGRAM: Record<string, { char: string; bg: string }> = {};
+const MONOGRAM: Record<string, MonogramSpec> = {};
 
 export function BrandIcon({
   slug,
   size = 32,
-  colorMode = "mono",
   className = "",
   title,
 }: {
   slug: string;
   size?: number;
-  colorMode?: "mono" | "brand";
   className?: string;
   title?: string;
 }) {
@@ -66,31 +42,13 @@ export function BrandIcon({
         style={{
           height: size,
           width: "auto",
-          maxWidth: size * 3,
+          maxWidth: size * 3.5,
           objectFit: "contain",
         }}
         className={className}
         loading="lazy"
         decoding="async"
       />
-    );
-  }
-
-  const icon = BRAND_ICONS[slug];
-  if (icon) {
-    return (
-      <svg
-        role="img"
-        viewBox="0 0 24 24"
-        width={size}
-        height={size}
-        fill={colorMode === "brand" ? `#${icon.hex}` : "currentColor"}
-        className={className}
-        aria-label={title ?? icon.title}
-      >
-        <title>{title ?? icon.title}</title>
-        <path d={icon.path} />
-      </svg>
     );
   }
 
