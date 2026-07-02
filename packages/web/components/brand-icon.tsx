@@ -16,7 +16,7 @@ const LOCAL_PNG: Record<string, string> = {
   weibo: "/brand/companies/weibo.png",
   wechat: "/brand/companies/wechat.png",
   douyin: "/brand/companies/douyin.png",
-  xiaohongshu: "/brand/companies/xiaohongshu.png",
+  xiaohongshu: "/brand/companies/xiaohongshu.png?v=2",
 };
 
 const MONOGRAM: Record<string, MonogramSpec> = {};
