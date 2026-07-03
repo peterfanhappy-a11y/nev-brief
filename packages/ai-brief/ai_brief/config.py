@@ -67,8 +67,11 @@ STAGE2_TEMPERATURE = 0.4
 CANDIDATE_WINDOW_HOURS = 24
 
 
-def get_model() -> str:
-    """DeepSeek 模型名。走 nev_shared 共享配置（默认 deepseek-chat）。"""
-    from nev_shared.config import get_settings
+# DeepSeek 模型：deepseek-chat 是当前有效的通用模型。不用 settings.deepseek_model
+# （共享 .env 里可能是 NEV 用的别名 deepseek-v4-pro，AI 管线的 API 会拒绝）。
+# 需要覆盖时设 DEEPSEEK_MODEL_AI 环境变量。
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL_AI", "deepseek-chat")
 
-    return get_settings().deepseek_model
+
+def get_model() -> str:
+    return DEEPSEEK_MODEL

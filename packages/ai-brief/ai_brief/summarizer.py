@@ -51,7 +51,7 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
       "significance": "意义：为什么这条重要，≤70字"
     }
   ],
-  "tools": [ {"ref": 3, "one_liner": "这个工具能做什么，≤28字"} ],   // 0-5 条，从 tools 候选选
+  "tools": [ {"ref": 3, "name": "工具中文名/产品名，≤12字", "one_liner": "这个工具能做什么，≤28字"} ],  // 0-5 条
   "daily_tip": {"title": "≤14字", "body": "一条可立即上手的 AI 使用技巧/教程，≤180字"},
   "quick_hits": [ {"ref": 5, "text": "一句话速览这条新闻，≤36字"} ]   // 3-5 条，从 quick_hits 候选选
 }
@@ -127,6 +127,10 @@ def _assemble(
             theme = Theme(theme_key)
         except ValueError:
             continue
+        sig = str(f.get("significance", "")).strip()
+        for prefix in ("意义：", "意义:"):  # LLM 有时自带前缀，模板已有 label，去重
+            if sig.startswith(prefix):
+                sig = sig[len(prefix):].strip()
         featured.append(
             FeaturedItem(
                 theme=theme,
@@ -134,7 +138,7 @@ def _assemble(
                 headline=str(f.get("headline", ""))[:40],
                 details=[str(d) for d in (f.get("details") or []) if str(d).strip()][:5]
                 or ["详情待补"],
-                significance=str(f.get("significance", ""))[:160],
+                significance=sig[:160],
                 url=c.url,
                 source_name=c.source_name,
                 og_image=c.og_image,
@@ -147,9 +151,10 @@ def _assemble(
         ra = ref_map.get(t.get("ref"))
         if ra is None:
             continue
+        name = str(t.get("name", "")).strip() or ra.candidate.title
         tools.append(
             Tool(
-                name=ra.candidate.title[:40],
+                name=name[:40],
                 one_liner=str(t.get("one_liner", ""))[:60],
                 url=ra.candidate.url,
             )
