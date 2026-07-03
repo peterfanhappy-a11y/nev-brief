@@ -65,3 +65,10 @@ STAGE2_TEMPERATURE = 0.4
 
 # 24h 抓取窗口（select 拉取候选时用）
 CANDIDATE_WINDOW_HOURS = 24
+
+
+def get_model() -> str:
+    """DeepSeek 模型名。走 nev_shared 共享配置（默认 deepseek-chat）。"""
+    from nev_shared.config import get_settings
+
+    return get_settings().deepseek_model
