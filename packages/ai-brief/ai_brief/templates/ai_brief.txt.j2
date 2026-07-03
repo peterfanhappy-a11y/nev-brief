@@ -1,0 +1,55 @@
+{{ brief.subject }}
+{{ brief.preheader }}
+
+AIVIZENS 趋势 · {{ date_human }}
+{{ banner_tagline }}
+{{ author_name }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+今日 AI 简报
+━━━━━━━━━━━━━━━━━━━━━━━━
+{% for b in brief.intro_bullets %}
+{{ b }}
+{% endfor %}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+今日精选
+━━━━━━━━━━━━━━━━━━━━━━━━
+{% for item in brief.featured %}
+【{{ item.theme_label }}】{{ item.headline }}
+{% for d in item.details %}  - {{ d }}
+{% endfor %}  意义：{{ item.significance }}
+  原文（{{ item.source_name }}）：{{ item.url }}
+
+{% endfor %}
+━━━━━━━━━━━━━━━━━━━━━━━━
+今日速览
+━━━━━━━━━━━━━━━━━━━━━━━━
+{% if brief.tools %}
+[热门 AI 工具]
+{% for t in brief.tools %}  · {{ t.name }} — {{ t.one_liner }}（{{ t.url }}）
+{% endfor %}
+{% endif %}
+{% if brief.daily_tip %}
+[每日课堂 · {{ brief.daily_tip.title }}]
+  {{ brief.daily_tip.body }}
+{% endif %}
+{% if brief.quick_hits %}
+[AI 其他]
+{% for q in brief.quick_hits %}  · {{ q.text }}{% if q.url %}（{{ q.url }}）{% endif %}
+{% endfor %}
+{% endif %}
+{% if brief.yesterday_top %}
+━━━━━━━━━━━━━━━━━━━━━━━━
+如果您错过了：{{ brief.yesterday_top.headline }}
+{{ brief.yesterday_top.url }}
+{% endif %}
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+今天的内容怎么样？
+  很棒：{{ rate_base }}?d={{ delivery_id }}&s=3
+  还行：{{ rate_base }}?d={{ delivery_id }}&s=2
+  一般：{{ rate_base }}?d={{ delivery_id }}&s=1
+
+由 AIVIZENS 出品 · 每日 5 分钟看懂 AI
+一键退订：{{ unsubscribe_url }}
