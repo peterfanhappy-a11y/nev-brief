@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "nev-contracts",
     "nev-shared",
+    "nev-crawler",
     "httpx[http2]>=0.27",
     "selectolax>=0.3",
     "feedparser>=6.0",
@@ -21,6 +22,7 @@ dependencies = [
 [tool.uv.sources]
 nev-contracts = { workspace = true }
 nev-shared    = { workspace = true }
+nev-crawler   = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
