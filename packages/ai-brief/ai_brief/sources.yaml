@@ -1,0 +1,120 @@
+# AIVIZENS AI 趋势 — 信源配置（包内自含，不进 DB）
+#
+# type:
+#   rss        — feed，逐条目 → 抓文章页正文
+#   html_list  — 列表页，CSS 选择器出 URL → 抓文章页正文
+# authority: 1-10，Stage-1 去重时优先保留高权威源
+# enabled:   false 的源被跳过（探测未通过 / 需 Mac mini 验证）
+#
+# 探测记录（2026-07-02，Windows + Clash）：
+#   ✅ 确认可用：OpenAI/DeepMind/TechCrunch/VentureBeat/TheVerge/MIT-TR/量子位/InfoQ
+#   ⚠️ 本机超时（疑 Clash，Mac mini 需复验）：Hugging Face
+#   🔧 HTML 需选择器（T4 验证）：Anthropic News、36kr AI
+#   ❌ 失效（disabled）：机器之心 /rss 返回 HTML 0 条、虎嗅 RSS 死、新智元 rsshub 不通
+
+sources:
+  # ── 英文一手源 ──────────────────────────────────────────────
+  - name: OpenAI Blog
+    type: rss
+    url: https://openai.com/news/rss.xml
+    locale: en
+    authority: 10
+    enabled: true
+
+  - name: Google DeepMind Blog
+    type: rss
+    url: https://deepmind.google/blog/rss.xml
+    locale: en
+    authority: 10
+    enabled: true
+
+  - name: Anthropic News
+    type: html_list
+    url: https://www.anthropic.com/news
+    locale: en
+    authority: 10
+    enabled: false   # T4：Next.js 站，需确认列表选择器 / __NEXT_DATA__
+    extra:
+      link_selector: "a[href^='/news/']"
+      link_attr: href
+
+  - name: TechCrunch AI
+    type: rss
+    url: https://techcrunch.com/category/artificial-intelligence/feed/
+    locale: en
+    authority: 8
+    enabled: true
+
+  - name: VentureBeat AI
+    type: rss
+    url: https://venturebeat.com/category/ai/feed/
+    locale: en
+    authority: 7
+    enabled: true
+
+  - name: The Verge AI
+    type: rss
+    url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+    locale: en
+    authority: 7
+    enabled: true
+
+  - name: Hugging Face Blog
+    type: rss
+    url: https://huggingface.co/blog/feed.xml
+    locale: en
+    authority: 8
+    enabled: true   # ⚠️ 本机超时，Mac mini 首跑需确认可达
+
+  - name: MIT Tech Review AI
+    type: rss
+    url: https://www.technologyreview.com/topic/artificial-intelligence/feed
+    locale: en
+    authority: 8
+    enabled: true
+
+  # ── 中文源 ─────────────────────────────────────────────────
+  - name: 量子位
+    type: rss
+    url: https://www.qbitai.com/feed
+    locale: zh
+    authority: 8
+    enabled: true
+
+  - name: InfoQ 中文
+    type: rss
+    url: https://www.infoq.cn/feed
+    locale: zh
+    authority: 7
+    enabled: true
+
+  - name: 36kr AI
+    type: html_list
+    url: https://36kr.com/information/AI/
+    locale: zh
+    authority: 8
+    enabled: false   # T4：客户端渲染，需确认选择器 / rsshub 兜底
+    extra:
+      link_selector: "a.article-item-title"
+      link_attr: href
+
+  - name: 机器之心
+    type: rss
+    url: https://www.jiqizhixin.com/rss
+    locale: zh
+    authority: 9
+    enabled: false   # ❌ /rss 返回 HTML 0 条，需另找 feed 或 HTML 列表
+
+  - name: 虎嗅 AI
+    type: rss
+    url: https://www.huxiu.com/rss/0.xml
+    locale: zh
+    authority: 7
+    enabled: false   # ❌ RSS 已死（NEV 审计亦确认）
+
+  - name: 新智元
+    type: rss
+    url: https://rsshub.app/wechat/ce/xinzhiyuan
+    locale: zh
+    authority: 7
+    enabled: false   # ❌ 公共 rsshub 不通，需自建 rsshub 或放弃

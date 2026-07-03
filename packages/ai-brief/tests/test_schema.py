@@ -1,0 +1,94 @@
+"""AiBriefContent schema 回环 + 校验测试。"""
+from __future__ import annotations
+
+import pytest
+from ai_brief.schema import (
+    AiBriefContent,
+    DailyTip,
+    FeaturedItem,
+    QuickHit,
+    Theme,
+    Tool,
+    YesterdayTop,
+)
+from pydantic import ValidationError
+
+
+def _minimal_featured() -> FeaturedItem:
+    return FeaturedItem(
+        theme=Theme.MODEL_RESEARCH,
+        theme_label="模型研究",
+        headline="OpenAI 发布 o5",
+        details=["详情一", "详情二"],
+        significance="这很重要因为它改变了推理成本结构。",
+        url="https://openai.com/news/o5",
+        source_name="OpenAI Blog",
+        og_image="https://openai.com/img/o5.png",
+        article_id="abc-123",
+    )
+
+
+def test_minimal_valid_brief() -> None:
+    brief = AiBriefContent(
+        brief_date="2026-07-02",
+        subject="OpenAI 发布 o5：一次对话写完整个 App",
+        preheader="另外：Anthropic 拿下五角大楼合同",
+        intro_bullets=["🧠 o5 发布"],
+        featured=[_minimal_featured()],
+    )
+    assert brief.version == 1
+    assert brief.featured[0].theme == Theme.MODEL_RESEARCH
+    assert brief.tools == []
+    assert brief.yesterday_top is None
+
+
+def test_json_roundtrip() -> None:
+    brief = AiBriefContent(
+        brief_date="2026-07-02",
+        subject="主题",
+        preheader="另外：第二条",
+        intro_bullets=["🧠 a", "🛠 b"],
+        featured=[_minimal_featured()],
+        tools=[Tool(name="Cursor", one_liner="AI 代码编辑器", url="https://cursor.com")],
+        daily_tip=DailyTip(title="写周报", body="用三段式 prompt。"),
+        quick_hits=[QuickHit(text="某公司融资 1 亿", url="https://x.com/a")],
+        yesterday_top=YesterdayTop(headline="昨日头条", url="https://x.com/y"),
+    )
+    dumped = brief.model_dump_json()
+    restored = AiBriefContent.model_validate_json(dumped)
+    assert restored == brief
+
+
+def test_featured_requires_at_least_one() -> None:
+    with pytest.raises(ValidationError):
+        AiBriefContent(
+            brief_date="2026-07-02",
+            subject="主题",
+            preheader="另外：x",
+            intro_bullets=["a"],
+            featured=[],
+        )
+
+
+def test_featured_max_four() -> None:
+    with pytest.raises(ValidationError):
+        AiBriefContent(
+            brief_date="2026-07-02",
+            subject="主题",
+            preheader="另外：x",
+            intro_bullets=["a"],
+            featured=[_minimal_featured()] * 5,
+        )
+
+
+def test_bad_theme_rejected() -> None:
+    with pytest.raises(ValidationError):
+        FeaturedItem(
+            theme="nonsense",  # type: ignore[arg-type]
+            theme_label="x",
+            headline="h",
+            details=["d"],
+            significance="s",
+            url="https://x.com",
+            source_name="src",
+        )

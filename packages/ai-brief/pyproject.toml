@@ -1,0 +1,38 @@
+[project]
+name = "ai-brief"
+version = "0.1.0"
+description = "AIVIZENS AI 趋势 — 每日 AI 简报独立管线"
+requires-python = ">=3.12"
+dependencies = [
+    "nev-contracts",
+    "nev-shared",
+    "httpx[http2]>=0.27",
+    "selectolax>=0.3",
+    "feedparser>=6.0",
+    "psycopg[binary]>=3.1",
+    "resend>=0.8.0",
+    "tenacity>=8.0",
+    "pydantic>=2.0",
+    "jinja2>=3.1",
+    "pyyaml>=6.0",
+    "structlog",
+]
+
+[tool.uv.sources]
+nev-contracts = { workspace = true }
+nev-shared    = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ai_brief"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "golden: hits real DeepSeek API (skipped unless DEEPSEEK_API_KEY present)",
+    "real_resend: hits Resend API (skipped unless RESEND_API_KEY present)",
+    "network: real network calls — opt-in only",
+]
