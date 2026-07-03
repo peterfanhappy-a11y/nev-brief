@@ -68,10 +68,15 @@ async def _cmd_daily(args: argparse.Namespace) -> int:
 async def _cmd_crawl(_args: argparse.Namespace) -> int:
     conn = connect()
     try:
-        articles = await crawl_runner.crawl_all()
-        n = storage.insert_articles(conn, articles)
-        conn.commit()
-        print(f"OK crawl fetched={len(articles)} new={n}")
+        total_new = 0
+
+        def _sink(articles) -> None:  # noqa: ANN001 — 每源增量落库
+            nonlocal total_new
+            total_new += storage.insert_articles(conn, articles)
+            conn.commit()
+
+        fetched = await crawl_runner.crawl_all(on_source=_sink)
+        print(f"OK crawl fetched={len(fetched)} new={total_new}")
         return 0
     finally:
         conn.close()

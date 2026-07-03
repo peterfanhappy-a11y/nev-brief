@@ -143,15 +143,25 @@ async def crawl_source(
     return articles
 
 
-async def crawl_all(sources: list[dict] | None = None) -> list[AiArticle]:
-    """抓取所有 enabled 源，返回全部 AiArticle。源之间串行（各自内部已限速）。"""
+async def crawl_all(
+    sources: list[dict] | None = None,
+    on_source=None,  # noqa: ANN001 — Callable[[list[AiArticle]], None]，每源抓完回调（用于增量落库）
+) -> list[AiArticle]:
+    """抓取所有 enabled 源，返回全部 AiArticle。源之间串行（各自内部已限速）。
+
+    on_source 若提供，每源抓完立即回调该源的 articles —— runner 用它增量 insert+commit，
+    这样 10 分钟的抓取中途网络中断也不会丢已抓到的源。
+    """
     srcs = sources if sources is not None else load_sources()
     robots = RobotsChecker(user_agent=config.CRAWL_USER_AGENT)
     out: list[AiArticle] = []
     async with _make_client() as client:
         for source in srcs:
             try:
-                out.extend(await crawl_source(client, robots, source))
+                got = await crawl_source(client, robots, source)
+                out.extend(got)
+                if on_source is not None and got:
+                    on_source(got)
             except Exception as e:  # noqa: BLE001 — 单源失败不炸全局
                 log.error("ai_crawl.source_error", source=source.get("name"), error=str(e)[:160])
     log.info("ai_crawl.all_done", sources=len(srcs), articles=len(out))

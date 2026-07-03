@@ -56,11 +56,18 @@ async def run_daily(
 
     # ── 1. crawl ──────────────────────────────────────────────
     if not skip_crawl:
-        articles = await crawl_runner.crawl_all()
-        r.crawled = storage.insert_articles(conn, articles)
-        conn.commit()
+        # 每源抓完立即 insert+commit，中途中断不丢已抓的源
+        total_new = 0
+
+        def _sink(articles) -> None:  # noqa: ANN001
+            nonlocal total_new
+            total_new += storage.insert_articles(conn, articles)
+            conn.commit()
+
+        fetched = await crawl_runner.crawl_all(on_source=_sink)
+        r.crawled = total_new
         r.steps.append("crawl")
-        log.info("ai_runner.crawled", new=r.crawled, fetched=len(articles))
+        log.info("ai_runner.crawled", new=r.crawled, fetched=len(fetched))
 
     # ── 2. select (Stage-1) ───────────────────────────────────
     candidates = storage.fetch_candidates(conn, window_hours=24)
