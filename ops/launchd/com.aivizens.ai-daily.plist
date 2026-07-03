@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aivizens.ai-daily</string>
+
+    <!-- 由 install-ai-daily.sh 把 REPLACE_ME 替换成 $HOME 实际值 -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>REPLACE_ME/nev-brief/ops/launchd/run-ai-daily.sh</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PROJECT_ROOT</key>
+        <string>REPLACE_ME/nev-brief</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>REPLACE_ME/nev-brief</string>
+
+    <!-- 06:10 触发，与 NEV daily(06:00) 错峰，避免两条产线抢 DeepSeek/带宽 -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>6</integer>
+        <key>Minute</key>
+        <integer>10</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>REPLACE_ME/nev-brief/logs/ai-daily.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>REPLACE_ME/nev-brief/logs/ai-daily.err.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>
