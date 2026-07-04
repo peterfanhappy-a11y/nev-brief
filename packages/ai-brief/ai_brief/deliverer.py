@@ -5,6 +5,7 @@ subject 从行内读（每日动态）；幂等键 ai-{date}-{sub}；退订 URL 
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 import psycopg
@@ -30,7 +31,10 @@ class SendResult:
 
 
 def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
-    idempotency_key = f"ai-{d.brief_date.isoformat()}-{d.subscriber_id}"
+    # 生产用 ai-{date}-{sub}（每订阅者每日唯一，防重发）。测试当天想重发看新版时，
+    # 设 AI_IDEMPOTENCY_SUFFIX=v2 拿到新 key 绕过 Resend 24h 去重。
+    suffix = os.environ.get("AI_IDEMPOTENCY_SUFFIX", "")
+    idempotency_key = f"ai-{d.brief_date.isoformat()}-{d.subscriber_id}{('-' + suffix) if suffix else ''}"
     unsub_url = f"{config.UNSUBSCRIBE_PREFIX}{d.unsubscribe_token}&product=ai"
 
     try:
