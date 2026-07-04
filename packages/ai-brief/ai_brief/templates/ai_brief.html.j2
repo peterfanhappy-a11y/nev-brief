@@ -88,8 +88,8 @@
 
   {{ divider() }}
 
-  <!-- ⑤ 今日速览（窄横幅 + 三个圆角边框卡）-->
-  {{ section_header('今 日 速 览') }}
+  <!-- ⑤ 工具学习（窄横幅 + 两个圆角边框卡：热门AI工具 / 热门AI课堂）-->
+  {{ section_header('工 具 学 习') }}
   {% if brief.tools %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
@@ -107,21 +107,10 @@
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
     <tr><td style="padding:16px 20px;">
-      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">🎓 每日课堂 · {{ brief.daily_tip.title }}</div>
-      <div style="font-size:14px;line-height:1.75;color:#374151;">{{ brief.daily_tip.body }}</div>
-    </td></tr></table>
-  </td></tr>
-  {% endif %}
-  {% if brief.quick_hits %}
-  <tr><td style="padding:12px 0;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
-    <tr><td style="padding:16px 20px;">
-      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">📰 AI 其他</div>
-      {% for q in brief.quick_hits %}
-      <div style="font-size:14px;line-height:1.8;color:#374151;margin-bottom:4px;">
-        • {% if q.url %}<a href="{{ q.url }}" style="color:#374151;text-decoration:none;">{{ q.text }}</a>{% else %}{{ q.text }}{% endif %}
+      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">🎓 热门 AI 课堂</div>
+      <div style="font-size:14px;line-height:1.75;color:#374151;">
+        <span style="font-weight:800;color:#111827;">{{ brief.daily_tip.title }}</span>{{ brief.daily_tip.body }}
       </div>
-      {% endfor %}
     </td></tr></table>
   </td></tr>
   {% endif %}

@@ -53,7 +53,7 @@ def test_render_html_all_sections() -> None:
     assert "早上好" in html and "AI 洞察" in html  # 问候语 + 导语引子
     # 窄横幅 section header（含空格分隔）
     assert "今 日 精 选" in html
-    assert "今 日 速 览" in html
+    assert "工 具 学 习" in html
     # 主题板块
     assert "GPT-5 发布" in html
     assert "https://img/gpt5.jpg" in html  # 有图
@@ -63,10 +63,11 @@ def test_render_html_all_sections() -> None:
     # therundown 式标签
     assert "详情：" in html
     assert "为什么重要：" in html
-    # 速览
+    # 工具学习
+    assert "工 具 学 习" in html
     assert "Cursor" in html
-    assert "每日课堂" in html
-    assert "某公司融资 1 亿" in html
+    assert "热门 AI 课堂" in html
+    assert "某公司融资 1 亿" not in html  # AI其他/quick_hits 已从模板移除
     # 昨日最热
     assert "如果您错过了" in html
     assert "昨日头条" in html
@@ -110,7 +111,7 @@ def test_render_omits_optional_sections() -> None:
     brief = _brief(tools=[], daily_tip=None, quick_hits=[], yesterday_top=None)
     html, _ = render(brief, date(2026, 7, 2), delivery_id="d", unsubscribe_token="t")
     assert "如果您错过了" not in html
-    assert "每日课堂" not in html
+    assert "热门 AI 课堂" not in html
     assert "热门 AI 工具" not in html
     # featured 仍在
     assert "今日精选" in html

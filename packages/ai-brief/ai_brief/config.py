@@ -38,13 +38,19 @@ SOCIAL_ICONS = [
     ("小红书", f"{WEB_BASE_URL}/brand/companies/xiaohongshu.png", "#"),
 ]
 
-# ── 四大主题（固定顺序 + 展示元数据）──────────────────────────────────
-# key 对应 schema.Theme；label 展示名；emoji 用于 intro bullets；color 用于无图色块兜底。
+# ── 今日精选 四大模块（固定顺序 + 展示元数据）─────────────────────────
+# key 对应 schema.Theme（内部键暂沿用旧名，内容生成重构时再改）；label 展示名；
+# emoji 用于 intro bullets；color 用于分类标签文字色。
+# 模块含义（内容生成方式下一轮定义）：
+#   today_ai       今日AI     — 过去 24h 最重要 TOP3 新闻（结构待定，本轮先单条）
+#   ai_masters     AI大神     — 24h 内最有观点/抓眼球的 AI 大神最新发表
+#   llm_research    大模型研究 — 大模型相关研究
+#   agent_research  智能体研究 — 智能体（agent）相关研究
 THEMES: list[dict[str, str]] = [
-    {"key": "model_research", "label": "模型研究", "emoji": "🧠", "color": "#4F46E5"},
-    {"key": "product_tools", "label": "产品工具", "emoji": "🛠", "color": "#0EA5E9"},
-    {"key": "skills_efficiency", "label": "Skills 效率", "emoji": "⚡", "color": "#F59E0B"},
-    {"key": "ethics_regulation", "label": "伦理监管", "emoji": "⚖️", "color": "#10B981"},
+    {"key": "model_research", "label": "今日AI", "emoji": "📰", "color": "#4F46E5"},
+    {"key": "product_tools", "label": "AI大神", "emoji": "🎤", "color": "#DB2777"},
+    {"key": "skills_efficiency", "label": "大模型研究", "emoji": "🧠", "color": "#0EA5E9"},
+    {"key": "ethics_regulation", "label": "智能体研究", "emoji": "🤖", "color": "#10B981"},
 ]
 THEME_ORDER = [t["key"] for t in THEMES]
 THEME_META = {t["key"]: t for t in THEMES}

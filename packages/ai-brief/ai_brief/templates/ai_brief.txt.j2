@@ -26,7 +26,7 @@ AIVIZENS 趋势 · {{ date_human }}
 
 {% endfor %}
 ━━━━━━━━━━━━━━━━━━━━━━━━
-今日速览
+工具学习
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {% if brief.tools %}
 [热门 AI 工具]
@@ -34,13 +34,8 @@ AIVIZENS 趋势 · {{ date_human }}
 {% endfor %}
 {% endif %}
 {% if brief.daily_tip %}
-[每日课堂 · {{ brief.daily_tip.title }}]
-  {{ brief.daily_tip.body }}
-{% endif %}
-{% if brief.quick_hits %}
-[AI 其他]
-{% for q in brief.quick_hits %}  · {{ q.text }}{% if q.url %}（{{ q.url }}）{% endif %}
-{% endfor %}
+[热门 AI 课堂]
+  {{ brief.daily_tip.title }}{{ brief.daily_tip.body }}
 {% endif %}
 {% if brief.yesterday_top %}
 ━━━━━━━━━━━━━━━━━━━━━━━━
