@@ -4,7 +4,7 @@
 <meta name="color-scheme" content="light">
 <title>{{ brief.subject }}</title>
 </head>
-<body style="margin:0;padding:0;background:#f2f2f2;font-family:-apple-system,'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,'PingFang SC','Microsoft YaHei',Helvetica,Arial,sans-serif;">
 <!-- preheader（隐藏预览文字）-->
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">{{ brief.preheader }}</div>
 
@@ -18,36 +18,36 @@
 </td></tr>
 {% endmacro %}
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f2;">
-<tr><td align="center" style="padding:20px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+<tr><td align="center" style="padding:16px 10px;">
+<table role="presentation" width="660" cellpadding="0" cellspacing="0" style="width:660px;max-width:660px;background:#ffffff;">
 
-  <!-- ① Header：logo 居中 + 日期/阅读时长（无社交图标）-->
-  <tr><td style="padding:32px 28px 20px;text-align:center;">
-    <img src="{{ logo_email_url }}" height="34" alt="AIVIZENS 趋势" style="display:block;margin:0 auto;">
-    <div style="font-size:11px;color:#9ca3af;margin-top:8px;letter-spacing:1px;">Together with 不凡的数智生活</div>
-    <div style="font-size:12px;color:#9ca3af;margin-top:10px;letter-spacing:1px;">{{ date_human }} · 5 分钟阅读</div>
+  <!-- ① Header：大 logo 居中 + 日期/阅读时长（无社交图标）-->
+  <tr><td style="padding:28px 28px 22px;text-align:center;">
+    <img src="{{ logo_email_url }}" width="240" alt="AIVIZENS 趋势" style="display:block;margin:0 auto;width:240px;max-width:70%;height:auto;">
+    <div style="font-size:11px;color:#9ca3af;margin-top:12px;letter-spacing:1px;">Together with 不凡的数智生活</div>
+    <div style="font-size:12px;color:#9ca3af;margin-top:8px;letter-spacing:1px;">{{ date_human }} · 5 分钟阅读</div>
   </td></tr>
 
-  {{ divider() }}
-
-  <!-- ② 欢迎 + 作者 -->
-  <tr><td style="padding:22px 28px 6px;">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-      <td style="vertical-align:middle;"><img src="{{ author_photo_url }}" width="38" height="38" alt="{{ author_name }}" style="border-radius:50%;display:block;"></td>
-      <td style="vertical-align:middle;padding-left:10px;font-size:14px;color:#374151;font-weight:600;">{{ author_name }}</td>
-    </tr></table>
-    <p style="margin:16px 0 4px;font-size:15px;line-height:1.75;color:#374151;">
-      欢迎回来！以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。
-    </p>
-  </td></tr>
-
-  <!-- ③ 今日 AI 简报 bullets -->
-  <tr><td style="padding:8px 28px 18px;">
-    <div style="font-size:12px;font-weight:700;color:#6b7280;letter-spacing:2px;margin-bottom:10px;">今日 AI 简报</div>
-    {% for b in brief.intro_bullets %}
-    <div style="font-size:14px;line-height:1.9;color:#374151;">{{ b }}</div>
-    {% endfor %}
+  <!-- ②③ 欢迎 + 今日简报（同一张圆角边框卡）-->
+  <tr><td style="padding:6px 28px 4px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+      <tr><td style="padding:18px 20px 10px;">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="vertical-align:middle;"><img src="{{ author_photo_url }}" width="38" height="38" alt="{{ author_name }}" style="border-radius:50%;display:block;"></td>
+          <td style="vertical-align:middle;padding-left:10px;font-size:14px;color:#374151;font-weight:600;">{{ author_name }}</td>
+        </tr></table>
+        <p style="margin:14px 0 4px;font-size:15px;line-height:1.75;color:#374151;">
+          欢迎回来！以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。
+        </p>
+      </td></tr>
+      <tr><td style="padding:4px 20px 18px;">
+        <div style="font-size:12px;font-weight:800;color:#111827;letter-spacing:2px;margin-bottom:8px;">今日 AI 简报</div>
+        {% for b in brief.intro_bullets %}
+        <div style="font-size:14px;line-height:1.9;color:#374151;">{{ b }}</div>
+        {% endfor %}
+      </td></tr>
+    </table>
   </td></tr>
 
   <!-- ④ 今日精选（窄横幅 + 每条一张圆角边框卡，含分类标签）-->
@@ -86,34 +86,41 @@
 
   {{ divider() }}
 
-  <!-- ⑤ 今日速览（窄横幅）-->
+  <!-- ⑤ 今日速览（窄横幅 + 三个圆角边框卡）-->
   {{ section_header('今 日 速 览') }}
   {% if brief.tools %}
-  <tr><td style="padding:18px 28px 6px;">
-    <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:10px;">🔥 热门 AI 工具</div>
-    {% for t in brief.tools %}
-    <div style="font-size:14px;line-height:1.7;color:#374151;margin-bottom:6px;">
-      <a href="{{ t.url }}" style="color:#111827;font-weight:700;text-decoration:none;">{{ t.name }}</a> — {{ t.one_liner }}
-    </div>
-    {% endfor %}
+  <tr><td style="padding:12px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+    <tr><td style="padding:16px 20px;">
+      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:10px;">🔥 热门 AI 工具</div>
+      {% for t in brief.tools %}
+      <div style="font-size:14px;line-height:1.7;color:#374151;margin-bottom:6px;">
+        <a href="{{ t.url }}" style="color:#111827;font-weight:700;text-decoration:none;">{{ t.name }}</a> — {{ t.one_liner }}
+      </div>
+      {% endfor %}
+    </td></tr></table>
   </td></tr>
   {% endif %}
   {% if brief.daily_tip %}
-  {% if brief.tools %}{{ divider() }}{% endif %}
-  <tr><td style="padding:16px 28px;">
-    <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">🎓 每日课堂 · {{ brief.daily_tip.title }}</div>
-    <div style="font-size:14px;line-height:1.75;color:#374151;">{{ brief.daily_tip.body }}</div>
+  <tr><td style="padding:12px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+    <tr><td style="padding:16px 20px;">
+      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">🎓 每日课堂 · {{ brief.daily_tip.title }}</div>
+      <div style="font-size:14px;line-height:1.75;color:#374151;">{{ brief.daily_tip.body }}</div>
+    </td></tr></table>
   </td></tr>
   {% endif %}
   {% if brief.quick_hits %}
-  {{ divider() }}
-  <tr><td style="padding:16px 28px;">
-    <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">📰 AI 其他</div>
-    {% for q in brief.quick_hits %}
-    <div style="font-size:14px;line-height:1.8;color:#374151;margin-bottom:4px;">
-      • {% if q.url %}<a href="{{ q.url }}" style="color:#374151;text-decoration:none;">{{ q.text }}</a>{% else %}{{ q.text }}{% endif %}
-    </div>
-    {% endfor %}
+  <tr><td style="padding:12px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+    <tr><td style="padding:16px 20px;">
+      <div style="font-size:14px;font-weight:800;color:#111827;margin-bottom:8px;">📰 AI 其他</div>
+      {% for q in brief.quick_hits %}
+      <div style="font-size:14px;line-height:1.8;color:#374151;margin-bottom:4px;">
+        • {% if q.url %}<a href="{{ q.url }}" style="color:#374151;text-decoration:none;">{{ q.text }}</a>{% else %}{{ q.text }}{% endif %}
+      </div>
+      {% endfor %}
+    </td></tr></table>
   </td></tr>
   {% endif %}
 
