@@ -49,17 +49,21 @@ def test_render_html_all_sections() -> None:
         _brief(), date(2026, 7, 2), delivery_id="d-123", unsubscribe_token="tok-9"
     )
     # 品牌 + 作者
-    assert "AIVIZENS 趋势" in html
     assert "Fan" in html and "Fans" in html  # apostrophe 被 autoescape 成 &#39;
     assert "不凡的数智生活" in html
+    assert "欢迎回来" in html and "AI 洞察" in html  # 新欢迎语
+    # 窄横幅 section header（含空格分隔）
+    assert "今 日 精 选" in html
+    assert "今 日 速 览" in html
     # 主题板块
-    assert "今日精选" in html
     assert "GPT-5 发布" in html
     assert "https://img/gpt5.jpg" in html  # 有图
     assert "欧盟 AI 法案生效" in html
-    # 无图色块兜底：应出现 theme color 背景 + label
-    assert "伦理监管" in html
-    assert "#10B981" in html  # ethics_regulation 颜色
+    # 主题 label 用小字彩色文本（非宽横幅），颜色仍在
+    assert "#10B981" in html  # ethics_regulation label 颜色
+    # therundown 式标签
+    assert "详情：" in html
+    assert "为什么重要：" in html
     # 速览
     assert "Cursor" in html
     assert "每日课堂" in html
