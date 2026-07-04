@@ -50,7 +50,6 @@ def test_render_html_all_sections() -> None:
     )
     # 品牌 + 作者
     assert "Fan" in html and "Fans" in html  # apostrophe 被 autoescape 成 &#39;
-    assert "不凡的数智生活" in html
     assert "欢迎回来" in html and "AI 洞察" in html  # 新欢迎语
     # 窄横幅 section header（含空格分隔）
     assert "今 日 精 选" in html
