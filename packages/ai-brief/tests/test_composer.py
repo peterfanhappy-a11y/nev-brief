@@ -101,7 +101,7 @@ def test_render_text_version() -> None:
         _brief(), date(2026, 7, 2), delivery_id="d-1", unsubscribe_token="t-1"
     )
     assert "AIVIZENS 趋势" in text
-    assert "【模型研究】GPT-5 发布" in text
+    assert "【今日AI】GPT-5 发布" in text  # label 从 config 取（MODEL_RESEARCH → 今日AI）
     assert "https://openai.com/gpt5" in text
     assert "s=3" in text
     assert "product=ai" in text

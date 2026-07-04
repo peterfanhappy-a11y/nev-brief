@@ -19,7 +19,7 @@ AIVIZENS 趋势 · {{ date_human }}
 今日精选
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {% for item in brief.featured %}
-【{{ item.theme_label }}】{{ item.headline }}
+【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}
 {% endfor %}  意义：{{ item.significance }}
   原文（{{ item.source_name }}）：{{ item.url }}

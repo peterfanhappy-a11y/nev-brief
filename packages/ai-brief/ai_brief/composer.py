@@ -26,6 +26,12 @@ def _theme_color(theme) -> str:  # noqa: ANN001
     return config.THEME_META.get(key, {}).get("color", "#4F46E5")
 
 
+def _theme_label(theme) -> str:  # noqa: ANN001
+    """渲染时从 config 实时取标签，而非用 brief 里存的旧值（改标签立即生效）。"""
+    key = theme.value if hasattr(theme, "value") else str(theme)
+    return config.THEME_META.get(key, {}).get("label", key)
+
+
 def _make_env(autoescape: bool) -> jinja2.Environment:
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(config.TEMPLATES_DIR)),
@@ -34,6 +40,7 @@ def _make_env(autoescape: bool) -> jinja2.Environment:
         lstrip_blocks=True,
     )
     env.globals["theme_color"] = _theme_color
+    env.globals["theme_label"] = _theme_label
     return env
 
 
