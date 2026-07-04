@@ -37,12 +37,11 @@
           <td style="vertical-align:middle;padding-left:10px;font-size:14px;color:#374151;font-weight:600;">{{ author_name }}</td>
         </tr></table>
         <p style="margin:16px 0 10px;font-size:16px;line-height:1.8;color:#111827;font-weight:700;">
-          早上好{% if greeting_name %}，{{ greeting_name }}{% endif %}！
+          早上好{% if greeting_name %}，{{ greeting_name }}{% endif %}！以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。
         </p>
         {% if brief.editorial %}
         <p style="margin:0 0 4px;font-size:15px;line-height:1.85;color:#374151;">{{ brief.editorial }}</p>
         {% endif %}
-        <p style="margin:10px 0 0;font-size:14px;line-height:1.75;color:#6b7280;">以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。</p>
       </td></tr>
       <tr><td style="padding:6px 22px 20px;">
         <div style="font-size:12px;font-weight:800;color:#111827;letter-spacing:2px;margin-bottom:8px;">今日 AI 简报</div>
@@ -147,14 +146,8 @@
     <div style="font-size:11px;color:#9ca3af;margin-top:10px;">很棒 · 还行 · 一般</div>
   </td></tr>
 
-  <!-- ⑧ Footer：社交图标 + 退订 -->
-  <tr><td style="padding:24px 28px 30px;background:#111827;text-align:center;">
-    <img src="{{ logo_email_url }}" height="24" alt="AIVIZENS" style="display:block;margin:0 auto 14px;filter:brightness(0) invert(1);">
-    <div style="margin-bottom:14px;">
-      {% for name, icon_url, href in social_icons %}
-      <a href="{{ href }}" style="text-decoration:none;padding:0 6px;"><img src="{{ icon_url }}" width="22" height="22" alt="{{ name }}" style="border-radius:4px;vertical-align:middle;"></a>
-      {% endfor %}
-    </div>
+  <!-- ⑧ Footer：仅文字（无 logo / 无社交图标）-->
+  <tr><td style="padding:26px 28px 30px;background:#111827;text-align:center;">
     <div style="font-size:12px;color:#9ca3af;line-height:1.7;">
       由 AIVIZENS 出品 · 每日 5 分钟看懂 AI<br>
       <a href="{{ unsubscribe_url }}" style="color:#9ca3af;">一键退订</a> ·
