@@ -50,7 +50,7 @@ def test_render_html_all_sections() -> None:
     )
     # 品牌 + 作者
     assert "Fan" in html and "Fans" in html  # apostrophe 被 autoescape 成 &#39;
-    assert "欢迎回来" in html and "AI 洞察" in html  # 新欢迎语
+    assert "早上好" in html and "AI 洞察" in html  # 问候语 + 导语引子
     # 窄横幅 section header（含空格分隔）
     assert "今 日 精 选" in html
     assert "今 日 速 览" in html
@@ -75,6 +75,24 @@ def test_render_html_all_sections() -> None:
     assert "d=d-123&amp;s=1" in html
     # 退订 URL 是变量插值，& 被 autoescape 成 &amp;
     assert "tok-9&amp;product=ai" in html
+
+
+def test_greeting_name_from_email() -> None:
+    from ai_brief.composer import greeting_name
+    assert greeting_name("peter.fan.happy@gmail.com") == "Peter"
+    assert greeting_name("Alice@x.com") == "Alice"
+    assert greeting_name("123456@x.com") == ""       # 无字母 → 空
+    assert greeting_name("a@x.com") == ""             # 太短 → 空
+
+
+def test_render_editorial_and_greeting_name() -> None:
+    from ai_brief.schema import AiBriefContent
+    b = _brief()
+    b = AiBriefContent(**{**b.model_dump(), "editorial": "OpenAI 今日发布 o5，一次对话即可生成完整应用。"})
+    html, _ = render(b, date(2026, 7, 2), delivery_id="d", unsubscribe_token="t",
+                     email="peter.fan.happy@gmail.com")
+    assert "早上好，Peter！" in html
+    assert "OpenAI 今日发布 o5" in html
 
 
 def test_render_text_version() -> None:

@@ -41,6 +41,7 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
 {
   "subject": "邮件主题：当日最重磅新闻改写成最抓眼球的中文标题，≤22字，让人一看就想点开",
   "preheader": "以「另外：」开头 + 第二重磅新闻的吸睛短标题，≤28字",
+  "editorial": "编辑导语：2-3 句话把当天最重磅的头条讲清楚（发生了什么、为什么重要），像 The Rundown 开头那段，专业有洞见，≤120字。不要用「今天」「以下」这类套话开头，直接切入新闻。",
   "intro_bullets": ["每个 featured 主题一句话导读，带 emoji 开头，≤20字", ...],
   "featured": [
     {
@@ -183,6 +184,7 @@ def _assemble(
         brief_date=brief_date,
         subject=str(raw.get("subject", ""))[:44] or (featured[0].headline if featured else "AI 简报"),
         preheader=str(raw.get("preheader", ""))[:60],
+        editorial=str(raw.get("editorial", "")).strip()[:220],
         intro_bullets=intro[: len(featured)] or intro[:1],
         featured=featured,
         tools=tools[:5],

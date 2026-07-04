@@ -65,6 +65,7 @@ class AiBriefContent(BaseModel):
     brief_date: str  # YYYY-MM-DD
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
+    editorial: str = Field(default="", max_length=220)  # 编辑导语：2-3 句讲清当天头条
     intro_bullets: list[str] = Field(min_length=1, max_length=4)
     featured: list[FeaturedItem] = Field(min_length=1, max_length=4)
     tools: list[Tool] = Field(default_factory=list, max_length=5)

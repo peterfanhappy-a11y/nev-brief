@@ -2,8 +2,11 @@
 {{ brief.preheader }}
 
 AIVIZENS 趋势 · {{ date_human }}
-{{ banner_tagline }}
 {{ author_name }}
+
+早上好{% if greeting_name %}，{{ greeting_name }}{% endif %}！
+{% if brief.editorial %}{{ brief.editorial }}
+{% endif %}以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。
 
 ━━━━━━━━━━━━━━━━━━━━━━━━
 今日 AI 简报

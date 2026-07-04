@@ -41,6 +41,20 @@ def _date_human(d: date) -> str:
     return f"{d.year}年{d.month}月{d.day}日 {_WEEKDAYS[d.weekday()]}"
 
 
+def greeting_name(email: str) -> str:
+    """从邮箱推断称呼名。peter.fan.happy@x → Peter；取不到像样的名就返回空串。"""
+    local = (email or "").split("@")[0]
+    token = ""
+    for ch in local:
+        if ch.isalpha():
+            token += ch
+        elif token:
+            break
+    if len(token) < 2 or len(token) > 20:
+        return ""
+    return token[:1].upper() + token[1:].lower()
+
+
 def _base_ctx(brief: AiBriefContent, brief_date: date) -> dict:
     return {
         "brief": brief,
@@ -61,10 +75,12 @@ def render(
     *,
     delivery_id: str,
     unsubscribe_token: str,
+    email: str = "",
 ) -> tuple[str, str]:
     """渲染单封邮件，返回 (html, text)。"""
     ctx = _base_ctx(brief, brief_date)
     ctx["delivery_id"] = delivery_id
+    ctx["greeting_name"] = greeting_name(email)
     ctx["unsubscribe_url"] = f"{config.UNSUBSCRIBE_PREFIX}{unsubscribe_token}&product=ai"
     html = _make_env(autoescape=True).get_template("ai_brief.html.j2").render(**ctx)
     text = _make_env(autoescape=False).get_template("ai_brief.txt.j2").render(**ctx)
@@ -101,7 +117,7 @@ def compose_for_date(
         ) or str(uuid4())
         html, text = render(
             brief, brief_date,
-            delivery_id=did, unsubscribe_token=sub.unsubscribe_token,
+            delivery_id=did, unsubscribe_token=sub.unsubscribe_token, email=sub.email,
         )
         storage.upsert_delivery(
             conn,
