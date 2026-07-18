@@ -39,46 +39,50 @@ def _filename_index(filename: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _brand_banner(aspect: float, width: int = 1200) -> tuple[bytes, str]:
-    """生成一张干净无文字的品牌渐变横幅（当所有候选图都是文字截图时兜底）。"""
-    from PIL import Image
-
-    h = int(width / aspect)
-    c0, c1 = (79, 70, 229), (14, 165, 233)  # 品牌靛蓝 → 天蓝
-    im = Image.new("RGB", (width, h))
-    px = im.load()
-    for x in range(width):
-        t = x / max(1, width - 1)
-        col = tuple(int(c0[i] + (c1[i] - c0[i]) * t) for i in range(3))
-        for y in range(h):
-            px[x, y] = col
-    buf = io.BytesIO()
-    im.save(buf, "JPEG", quality=85)
-    return buf.getvalue(), "image/jpeg"
+def _richness(im) -> float:  # noqa: ANN001
+    """一横带里「非近白像素」的占比：正文页多为白底黑字→低；hero 图/照片→高。"""
+    g = im.convert("L")
+    if g.width > 200:
+        g = g.resize((200, max(1, int(200 * g.height / g.width))))
+    hist = g.histogram()
+    total = sum(hist) or 1
+    white = sum(hist[235:])  # 近白
+    return 1.0 - white / total
 
 
-def _to_banner(data: bytes, aspect: float, max_width: int = 1200) -> tuple[bytes, str]:
-    """把（多为长截图的）头图居中裁成 宽:高=aspect 的矮横幅 JPEG。失败原样返回。"""
+def _find_hero_band(data: bytes, aspect: float, max_width: int = 1200) -> tuple[bytes, str]:
+    """从（多为整页长截图的）图里找出最像配图的横带 → 裁成 宽:高=aspect 的矮横幅。
+
+    正文是白底黑字、非白占比低；hero 图/照片非白占比高。在顶部 ~2/3 滑窗取「非白占比最高」
+    的一带（避开深处正文），既定位了 hero 又天然避开大段文字。失败回退居中裁剪。
+    """
     try:
         from PIL import Image
 
         im = Image.open(io.BytesIO(data)).convert("RGB")
         w, h = im.size
-        target_h = w / aspect
-        if h > target_h:  # 太高 → 裁高（取中间横带）
-            top = int((h - target_h) / 2)
-            im = im.crop((0, top, w, top + int(target_h)))
-        else:             # 已经够矮/够宽 → 裁宽以匹配比例
-            target_w = int(h * aspect)
-            left = int((w - target_w) / 2)
-            im = im.crop((left, 0, left + target_w, h))
-        if im.width > max_width:
-            im = im.resize((max_width, int(im.height * max_width / im.width)))
+        band_h = max(1, int(w / aspect))
+        if h <= int(band_h * 1.25):  # 本就不高 → 居中 cover 裁
+            top = max(0, (h - band_h) // 2)
+            band = im.crop((0, top, w, min(h, top + band_h)))
+        else:
+            limit = int(h * 0.68)  # hero 通常在顶部 2/3
+            step = max(1, band_h // 3)
+            best_y, best = 0, -1.0
+            y = 0
+            while y + band_h <= min(h, limit + band_h):
+                s = _richness(im.crop((0, y, w, y + band_h)))
+                if s > best:
+                    best, best_y = s, y
+                y += step
+            band = im.crop((0, best_y, w, best_y + band_h))
+        if band.width > max_width:
+            band = band.resize((max_width, int(band.height * max_width / band.width)))
         buf = io.BytesIO()
-        im.save(buf, "JPEG", quality=85)
+        band.save(buf, "JPEG", quality=85)
         return buf.getvalue(), "image/jpeg"
     except Exception as e:  # noqa: BLE001
-        log.warning("ai_digest.banner_failed", err=str(e)[:120])
+        log.warning("ai_digest.hero_band_failed", err=str(e)[:120])
         return data, "image/png"
 
 
@@ -92,35 +96,21 @@ def _attachments_by_index(email: DigestEmail) -> dict[int, Attachment]:
 
 
 def _pick_and_upload(
-    candidates: list[tuple[int, Attachment, str]],  # (index, attachment, caption)
+    candidates: list[tuple[int, bytes, str, str]],  # (index, image_bytes, content_type, caption)
     *,
     mode: str,
     brief_date: str,
     module: str,
 ) -> tuple[str | None, str]:
-    """Qwen 选图 → 上传 → (public_url, alt)。无候选返回 (None, "")。"""
+    """Qwen 从已备好的候选图里选 1 张 → 上传 → (public_url, alt)。图已按模块处理好，直接传。"""
     if not candidates:
         return None, ""
-    images = [(a.data, a.content_type) for _, a, _ in candidates]
-    captions = [cap for _, _, cap in candidates]
+    images = [(data, ctype) for _, data, ctype, _ in candidates]
+    captions = [cap for _, _, _, cap in candidates]
     pick = image_judge.pick_image(images, captions, mode=mode)
-
-    # today_ai：pick=-1 表示所有候选都是文字截图 → 用干净品牌横幅兜底
-    if pick == -1 and mode == "today_ai":
-        data, ctype = _brand_banner(config.TODAY_AI_BANNER_ASPECT)
-        path = uploader.image_path(brief_date, "today-ai-brand", data, ctype)
-        url = uploader.upload_image(data, ctype, path=path)
-        log.info("ai_digest.today_ai_brand_fallback", brief_date=brief_date)
-        return url, ""
-
     if pick < 0 or pick >= len(candidates):
         pick = 0
-    _, att, caption = candidates[pick]
-
-    data, ctype = att.data, att.content_type
-    if mode == "today_ai":  # 今日AI 头图裁成矮横幅（源多为长截图）；AI大神保持完整
-        data, ctype = _to_banner(att.data, config.TODAY_AI_BANNER_ASPECT)
-
+    _, data, ctype, caption = candidates[pick]
     path = uploader.image_path(brief_date, module, data, ctype)
     url = uploader.upload_image(data, ctype, path=path)
     return url, caption
@@ -143,8 +133,15 @@ async def _build_today_ai(brief_date: str) -> tuple[DigestSection | None, conden
     if result is None:
         return None, None
 
+    # 源图多是整页长截图 → 先从每张里裁出最像配图的 hero 横幅带，再让 Qwen 在这些干净带里选
     by_idx = _attachments_by_index(email)
-    candidates = [(it.index, by_idx[it.index], it.headline) for it in items if it.index in by_idx]
+    candidates: list[tuple[int, bytes, str, str]] = []
+    for it in items:
+        att = by_idx.get(it.index)
+        if att is None:
+            continue
+        band, ctype = _find_hero_band(att.data, config.TODAY_AI_BANNER_ASPECT)
+        candidates.append((it.index, band, ctype, it.headline))
     header_url, alt = _pick_and_upload(
         candidates, mode="today_ai", brief_date=brief_date, module="today-ai"
     )
@@ -174,10 +171,10 @@ async def _build_ai_masters(brief_date: str) -> DigestSection | None:
         return None
     stories: list[DigestStory] = [story for _, story in picks]
 
-    # 头图只能来自被选中且有图的条目（即被选中的后5条 index 6-10）
+    # 头图只能来自被选中且有图的条目（即被选中的后5条 index 6-10）；推文截图保持完整，不裁 hero 带
     by_idx = _attachments_by_index(email)
-    candidates = [
-        (it.index, by_idx[it.index], it.headline)
+    candidates: list[tuple[int, bytes, str, str]] = [
+        (it.index, by_idx[it.index].data, by_idx[it.index].content_type, it.headline)
         for it, _ in picks if it.has_image and it.index in by_idx
     ]
     header_url, alt = _pick_and_upload(

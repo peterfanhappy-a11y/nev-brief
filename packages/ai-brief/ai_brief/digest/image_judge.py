@@ -39,11 +39,8 @@ def _downscale(data: bytes, content_type: str) -> tuple[bytes, str]:
 
 _CRITERIA = {
     "today_ai": (
-        "严格优先选【几乎没有文字】的一张：产品 Hero 图、概念插画、示意图、真实照片都可以。"
-        "坚决避开任何网页/文章/App 界面的截图、带大段文字或 UI 文本的图。"
-        "在满足少文字的前提下，再挑最能代表新闻主题的那张。"
-        "特别注意：如果这几张【全都是】网页/文章/App 截图或都含大段文字、没有一张干净的图，"
-        "就输出「选择=-1」（表示都不合格，改用品牌兜底图）。"
+        "这些都是从新闻里裁出的横幅候选图。选出【文字最少、画面最干净、最像一张配图/照片/插画】的一张，"
+        "尽量避开大段正文文字或满是 UI 文本的那张；在此前提下再挑最能代表新闻主题的。"
     ),
     "ai_masters": "选出内容最饱满、信息量最大、画面最完整的一张（优先展示完整推文/观点的截图）。",
 }
@@ -62,7 +59,7 @@ def pick_image(
     api_key: str | None = None,
     base_url: str | None = None,
     model: str | None = None,
-    timeout: float = 120.0,
+    timeout: float = 180.0,
 ) -> int:
     """从 images 里挑 1 张，返回下标。images[i]=(bytes, content_type)。"""
     if not images:

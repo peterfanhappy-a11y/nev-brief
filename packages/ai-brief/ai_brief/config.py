@@ -39,6 +39,10 @@ class AiSettings(BaseSettings):
     ai_imap_proxy: str = ""   # Gmail 在 GFW 后需经 HTTP 代理隧道；空则回退 HTTPS_PROXY 环境变量
     ai_image_bucket: str = "ai-brief-images"
 
+    # 发件身份（aivizens.com 需在 Resend 已验证）。可用 RESEND_FROM_EMAIL_AI 覆盖。
+    resend_from_email_ai: str = "aivizens.daily@aivizens.com"
+    resend_from_name_ai: str = "AIVIZENS 趋势"
+
     qwen_api_key: str = Field(
         default="", validation_alias=AliasChoices("qwen_api_key", "dashscope_api_key")
     )
@@ -51,12 +55,9 @@ def ai_settings() -> AiSettings:
     return AiSettings()
 
 # ── 发件身份 ──────────────────────────────────────────────────────────
-# aivizens.com 在 Resend 已验证；未配置时回落到 NEV 的验证发件地址。
-FROM_EMAIL = os.environ.get(
-    "RESEND_FROM_EMAIL_AI",
-    os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
-)
-FROM_NAME = os.environ.get("RESEND_FROM_NAME_AI", "AIVIZENS 趋势")
+# 走 AiSettings 从 .env 读（os.environ 读不到 .env-only 值，之前误发成 onboarding@resend.dev）。
+FROM_EMAIL = ai_settings().resend_from_email_ai
+FROM_NAME = ai_settings().resend_from_name_ai
 
 # ── Web 基址 ──────────────────────────────────────────────────────────
 WEB_BASE_URL = os.environ.get("WEB_BASE_URL", "https://aivizens.com").rstrip("/")
