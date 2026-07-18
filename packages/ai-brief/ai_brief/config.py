@@ -6,12 +6,49 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from pathlib import Path
+
+from pydantic import AliasChoices, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # 包根目录（config.py → ai_brief → ai-brief）
 PACKAGE_ROOT = Path(__file__).resolve().parent
 SOURCES_YAML = PACKAGE_ROOT / "sources.yaml"
 TEMPLATES_DIR = PACKAGE_ROOT / "templates"
+
+# 工程根 .env（与 nev_shared.config 同一份）。pydantic-settings 只把 .env 灌进
+# Settings 对象、不写 os.environ，故 digest/qwen 这些 .env-only 的密钥必须走这里读。
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+class AiSettings(BaseSettings):
+    """AI-brief 专属 .env 配置（IMAP / Qwen / digest 源）。字段名不区分大小写映射环境变量。"""
+
+    model_config = SettingsConfigDict(
+        env_file=str(_PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    ai_digest_sender: str = "paul.fan.2200@gmail.com"
+    ai_gmail_imap_host: str = "imap.gmail.com"
+    ai_gmail_imap_user: str = ""
+    ai_gmail_imap_password: str = ""
+    ai_imap_proxy: str = ""   # Gmail 在 GFW 后需经 HTTP 代理隧道；空则回退 HTTPS_PROXY 环境变量
+    ai_image_bucket: str = "ai-brief-images"
+
+    qwen_api_key: str = Field(
+        default="", validation_alias=AliasChoices("qwen_api_key", "dashscope_api_key")
+    )
+    qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    qwen_vl_model: str = "qwen3.7-plus"
+
+
+@lru_cache
+def ai_settings() -> AiSettings:
+    return AiSettings()
 
 # ── 发件身份 ──────────────────────────────────────────────────────────
 # aivizens.com 在 Resend 已验证；未配置时回落到 NEV 的验证发件地址。
@@ -54,6 +91,58 @@ THEMES: list[dict[str, str]] = [
 ]
 THEME_ORDER = [t["key"] for t in THEMES]
 THEME_META = {t["key"]: t for t in THEMES}
+
+# ── Digest 摄取（今日AI / AI大神 从 Gmail digest 邮件取内容）───────────
+# Mac mini headless 用 IMAP + 应用专用密码读 Gmail（MCP 只在 Claude 会话里可用）。
+# 密钥走 AiSettings 从 .env 读（os.environ 里没有）。subject 前缀是常量。
+DIGEST_EVENTS_SUBJECT_PREFIX = "ai-events-digest-"     # + YYYY-MM-DD(GMT+8)
+DIGEST_BUILDER_SUBJECT_PREFIX = "follow-builder-digest-"
+
+# 压缩字数上限（软约束，DeepSeek prompt 里也会写）
+TODAY_AI_SUMMARY_CHARS = 150      # 今日AI 每条正文
+AI_MASTERS_SUMMARY_CHARS = 120    # AI大神 每条正文
+AI_MASTERS_PICK_TOP5 = 2          # 前5条选几条
+AI_MASTERS_PICK_FIRE5 = 3         # 后5条选几条
+# 今日AI 头图裁成矮横幅（宽:高），源图多是长截图 → 裁成 banner；越大越矮
+TODAY_AI_BANNER_ASPECT = 3.0
+
+
+# 下列从 .env 读的值用函数暴露（延迟到调用时读，便于测试注入 / 避免 import 期固化）
+def digest_sender() -> str:
+    return ai_settings().ai_digest_sender
+
+
+def imap_host() -> str:
+    return ai_settings().ai_gmail_imap_host
+
+
+def imap_user() -> str:
+    return ai_settings().ai_gmail_imap_user
+
+
+def imap_password() -> str:
+    return ai_settings().ai_gmail_imap_password
+
+
+def imap_proxy() -> str:
+    return ai_settings().ai_imap_proxy
+
+
+def qwen_api_key() -> str:
+    return ai_settings().qwen_api_key
+
+
+def qwen_base_url() -> str:
+    return ai_settings().qwen_base_url
+
+
+def qwen_vl_model() -> str:
+    return ai_settings().qwen_vl_model
+
+
+def image_bucket() -> str:
+    return ai_settings().ai_image_bucket
+
 
 # ── 抓取行为 ──────────────────────────────────────────────────────────
 CRAWL_USER_AGENT = "AIVIZENS-Bot/1.0 (+https://aivizens.com/about)"

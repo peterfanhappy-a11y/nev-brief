@@ -18,6 +18,17 @@ AIVIZENS 趋势 · {{ date_human }}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 今日精选
 ━━━━━━━━━━━━━━━━━━━━━━━━
+{% for section in [brief.today_ai, brief.ai_masters] %}
+{% if section %}
+《{{ theme_label(section.theme) }}》
+{% for s in section.stories %}
+{{ loop.index }}. {{ s.headline }}{% if s.label %} — {{ s.label }}{% endif %}
+
+   {{ s.summary }}
+   原文：{{ s.url }}
+{% endfor %}
+{% endif %}
+{% endfor %}
 {% for item in brief.featured %}
 【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}

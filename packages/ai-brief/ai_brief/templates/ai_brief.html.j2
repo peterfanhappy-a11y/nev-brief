@@ -18,6 +18,31 @@
 </td></tr>
 {% endmacro %}
 
+{% macro digest_section(section) %}
+{% if section %}
+<tr><td style="padding:12px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+    <tr><td style="padding:12px 18px 0;">
+      <span style="font-size:11px;font-weight:700;color:{{ theme_color(section.theme) }};letter-spacing:2px;">{{ theme_label(section.theme) }}</span>
+    </td></tr>
+    {% if section.header_image %}
+    <tr><td style="padding:10px 18px 4px;">
+      <img src="{{ section.header_image }}" width="627" alt="{{ section.header_image_alt }}" style="display:block;width:100%;height:auto;border-radius:8px;">
+    </td></tr>
+    {% endif %}
+    {% for s in section.stories %}
+    <tr><td style="padding:14px 18px;{% if not loop.first %}border-top:1px solid #e5e7eb;{% endif %}">
+      {% if s.label %}<div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:5px;letter-spacing:1px;">{{ s.label }}</div>{% endif %}
+      <a href="{{ s.url }}" style="text-decoration:none;"><span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ s.headline }}</span></a>
+      <div style="font-size:14px;line-height:1.75;color:#374151;margin-top:6px;">{{ s.summary }}</div>
+      <div style="margin-top:8px;"><a href="{{ s.url }}" style="font-size:12px;color:#4F46E5;text-decoration:none;font-weight:600;">阅读原文 →</a></div>
+    </td></tr>
+    {% endfor %}
+  </table>
+</td></tr>
+{% endif %}
+{% endmacro %}
+
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
 <tr><td align="center" style="padding:16px 10px;">
 <table role="presentation" width="667" cellpadding="0" cellspacing="0" style="width:667px;max-width:667px;background:#ffffff;">
@@ -52,8 +77,11 @@
     </table>
   </td></tr>
 
-  <!-- ④ 今日精选（窄横幅 + 每条一张圆角边框卡，含分类标签）-->
+  <!-- 4. 今日精选：模块 1&2 digest 驱动（各一张卡=头图+多条 story）；
+       模块 3&4 走 featured（内容生成待定义，暂空则省略）-->
   {{ section_header('今 日 精 选') }}
+  {{ digest_section(brief.today_ai) }}
+  {{ digest_section(brief.ai_masters) }}
   {% for item in brief.featured %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">

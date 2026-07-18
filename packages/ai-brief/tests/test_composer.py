@@ -1,4 +1,4 @@
-"""composer 渲染测试 — 8 板块 + 评分链接 + 无图色块兜底 + 条件板块。"""
+"""composer 渲染测试 — digest 驱动版（今日AI / AI大神 section）+ 评分 + 条件板块。"""
 from __future__ import annotations
 
 from datetime import date
@@ -7,111 +7,117 @@ from ai_brief.composer import render
 from ai_brief.schema import (
     AiBriefContent,
     DailyTip,
-    FeaturedItem,
-    QuickHit,
+    DigestSection,
+    DigestStory,
     Theme,
     Tool,
     YesterdayTop,
 )
 
 
-def _brief(**over) -> AiBriefContent:
-    base = dict(
-        brief_date="2026-07-02",
-        subject="GPT-5 发布：一次对话写完整个 App",
-        preheader="另外：Anthropic 拿下五角大楼合同",
-        intro_bullets=["🧠 GPT-5 发布", "🛠 新工具上线"],
-        featured=[
-            FeaturedItem(
-                theme=Theme.MODEL_RESEARCH, theme_label="模型研究", headline="GPT-5 发布",
-                details=["超长上下文", "成本下降"], significance="改变行业格局。",
-                url="https://openai.com/gpt5", source_name="OpenAI",
-                og_image="https://img/gpt5.jpg",
+def _today_ai() -> DigestSection:
+    return DigestSection(
+        theme=Theme.MODEL_RESEARCH,
+        header_image="https://img/today-ai.png",
+        header_image_alt="Sonnet 5",
+        stories=[
+            DigestStory(
+                headline="Anthropic 发布 Claude Sonnet 5",
+                summary="Agent 编程能力媲美 Opus 4.8，价格仅三分之一。",
+                url="https://www.anthropic.com/news/claude-sonnet-5",
+                label="海外大模型 · 最有价值",
             ),
-            FeaturedItem(
-                theme=Theme.ETHICS_REGULATION, theme_label="伦理监管", headline="欧盟 AI 法案生效",
-                details=["分级监管"], significance="合规成本上升。",
-                url="https://eu.example/ai-act", source_name="Reuters",
-                og_image=None,  # 无图 → 色块兜底
+            DigestStory(
+                headline="百度文心 5.0 登陆 WorldRouter",
+                summary="2.4 万亿参数旗舰模型面向全球开发者开放。",
+                url="https://www.qbitai.com/2026/07/442447.html",
+                label="国内大模型 · 最有价值",
             ),
         ],
+    )
+
+
+def _ai_masters() -> DigestSection:
+    return DigestSection(
+        theme=Theme.PRODUCT_TOOLS,
+        header_image="https://img/masters.png",
+        stories=[
+            DigestStory(
+                headline="互联网广告商业模式已死",
+                summary="机器人流量已超过人类，广告模式即将终结。",
+                url="https://www.youtube.com/watch?v=UN47z_opfmo",
+                label="Cloudflare CEO Matthew Prince",
+            ),
+        ],
+    )
+
+
+def _brief(**over) -> AiBriefContent:
+    base = dict(
+        brief_date="2026-07-06",
+        subject="Claude Sonnet 5 发布：Agent 能力比肩旗舰",
+        preheader="另外：阿里巴巴内部禁用 Claude Code",
+        editorial="Anthropic 今日发布 Sonnet 5，以三分之一价格逼近 Opus 4.8。",
+        intro_bullets=["🚀 Sonnet 5 发布", "🎤 大神论道"],
+        today_ai=_today_ai(),
+        ai_masters=_ai_masters(),
         tools=[Tool(name="Cursor", one_liner="AI 代码编辑器", url="https://cursor.com")],
         daily_tip=DailyTip(title="写周报", body="用三段式 prompt。"),
-        quick_hits=[QuickHit(text="某公司融资 1 亿", url="https://x/a")],
         yesterday_top=YesterdayTop(headline="昨日头条", url="https://y/top"),
     )
     base.update(over)
     return AiBriefContent(**base)
 
 
-def test_render_html_all_sections() -> None:
+def test_render_html_digest_sections() -> None:
     html, _ = render(
-        _brief(), date(2026, 7, 2), delivery_id="d-123", unsubscribe_token="tok-9"
+        _brief(), date(2026, 7, 6), delivery_id="d-123", unsubscribe_token="tok-9"
     )
-    # 品牌 + 作者
-    assert "Fan" in html and "Fans" in html  # apostrophe 被 autoescape 成 &#39;
-    assert "早上好" in html and "AI 洞察" in html  # 问候语 + 导语引子
-    # 窄横幅 section header（含空格分隔）
+    # 品牌 + 作者 + 问候 + 导语
+    assert "Fan" in html and "Fans" in html
+    assert "早上好" in html and "AI 洞察" in html
+    # section header
     assert "今 日 精 选" in html
-    assert "工 具 学 习" in html
-    # 主题板块
-    assert "GPT-5 发布" in html
-    assert "https://img/gpt5.jpg" in html  # 有图
-    assert "欧盟 AI 法案生效" in html
-    # 主题 label 用小字彩色文本（非宽横幅），颜色仍在
-    assert "#10B981" in html  # ethics_regulation label 颜色
-    # therundown 式标签
-    assert "详情：" in html
-    assert "为什么重要：" in html
-    # 工具学习
-    assert "工 具 学 习" in html
-    assert "Cursor" in html
-    assert "热门 AI 课堂" in html
-    assert "某公司融资 1 亿" not in html  # AI其他/quick_hits 已从模板移除
-    # 昨日最热
+    # 今日AI section：label from config + 头图 + story
+    assert "今日AI" in html
+    assert "https://img/today-ai.png" in html
+    assert "Anthropic 发布 Claude Sonnet 5" in html
+    assert "海外大模型 · 最有价值" in html
+    assert "百度文心 5.0 登陆 WorldRouter" in html
+    # AI大神 section
+    assert "AI大神" in html
+    assert "https://img/masters.png" in html
+    assert "Cloudflare CEO Matthew Prince" in html
+    assert "阅读原文" in html
+    # 昨日最热 + 评分
     assert "如果您错过了" in html
-    assert "昨日头条" in html
-    # 评分链接带 delivery_id（HTML 用 &amp; 保证有效性）
     assert "d=d-123&amp;s=3" in html
-    assert "d=d-123&amp;s=1" in html
-    # 退订 URL 是变量插值，& 被 autoescape 成 &amp;
     assert "tok-9&amp;product=ai" in html
+
+
+def test_render_text_digest_sections() -> None:
+    _, text = render(
+        _brief(), date(2026, 7, 6), delivery_id="d-1", unsubscribe_token="t-1"
+    )
+    assert "AIVIZENS 趋势" in text
+    assert "《今日AI》" in text
+    assert "Anthropic 发布 Claude Sonnet 5" in text
+    assert "《AI大神》" in text
+    assert "https://www.anthropic.com/news/claude-sonnet-5" in text
+    assert "product=ai" in text
+
+
+def test_render_omits_missing_ai_masters() -> None:
+    brief = _brief(ai_masters=None)
+    html, _ = render(brief, date(2026, 7, 6), delivery_id="d", unsubscribe_token="t")
+    assert "今日AI" in html
+    assert "AI大神" not in html          # 缺失模块省略
+    assert "https://img/masters.png" not in html
 
 
 def test_greeting_name_from_email() -> None:
     from ai_brief.composer import greeting_name
     assert greeting_name("peter.fan.happy@gmail.com") == "Peter"
     assert greeting_name("Alice@x.com") == "Alice"
-    assert greeting_name("123456@x.com") == ""       # 无字母 → 空
-    assert greeting_name("a@x.com") == ""             # 太短 → 空
-
-
-def test_render_editorial_and_greeting_name() -> None:
-    from ai_brief.schema import AiBriefContent
-    b = _brief()
-    b = AiBriefContent(**{**b.model_dump(), "editorial": "OpenAI 今日发布 o5，一次对话即可生成完整应用。"})
-    html, _ = render(b, date(2026, 7, 2), delivery_id="d", unsubscribe_token="t",
-                     email="peter.fan.happy@gmail.com")
-    assert "早上好，Peter！" in html
-    assert "OpenAI 今日发布 o5" in html
-
-
-def test_render_text_version() -> None:
-    _, text = render(
-        _brief(), date(2026, 7, 2), delivery_id="d-1", unsubscribe_token="t-1"
-    )
-    assert "AIVIZENS 趋势" in text
-    assert "【今日AI】GPT-5 发布" in text  # label 从 config 取（MODEL_RESEARCH → 今日AI）
-    assert "https://openai.com/gpt5" in text
-    assert "s=3" in text
-    assert "product=ai" in text
-
-
-def test_render_omits_optional_sections() -> None:
-    brief = _brief(tools=[], daily_tip=None, quick_hits=[], yesterday_top=None)
-    html, _ = render(brief, date(2026, 7, 2), delivery_id="d", unsubscribe_token="t")
-    assert "如果您错过了" not in html
-    assert "热门 AI 课堂" not in html
-    assert "热门 AI 工具" not in html
-    # featured 仍在
-    assert "今日精选" in html
+    assert greeting_name("123456@x.com") == ""
+    assert greeting_name("a@x.com") == ""

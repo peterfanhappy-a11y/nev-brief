@@ -56,8 +56,7 @@ async def _cmd_daily(args: argparse.Namespace) -> int:
         )
         print(
             f"OK daily {r.brief_date} steps={'/'.join(r.steps)} "
-            f"crawled={r.crawled} candidates={r.candidates} featured={r.featured} "
-            f"composed={r.composed} sent={r.sent} failed={r.failed}"
+            f"modules={r.modules} composed={r.composed} sent={r.sent} failed={r.failed}"
             + (f" ABORTED@{r.aborted_at}" if r.aborted_at else "")
         )
         return 1 if r.aborted_at else 0

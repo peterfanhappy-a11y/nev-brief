@@ -59,15 +59,17 @@ def test_json_roundtrip() -> None:
     assert restored == brief
 
 
-def test_featured_requires_at_least_one() -> None:
-    with pytest.raises(ValidationError):
-        AiBriefContent(
-            brief_date="2026-07-02",
-            subject="主题",
-            preheader="另外：x",
-            intro_bullets=["a"],
-            featured=[],
-        )
+def test_featured_allows_empty() -> None:
+    # digest 驱动版：模块1&2 走 today_ai/ai_masters，featured（模块3&4）可为空
+    brief = AiBriefContent(
+        brief_date="2026-07-02",
+        subject="主题",
+        preheader="另外：x",
+        intro_bullets=["a"],
+        featured=[],
+    )
+    assert brief.featured == []
+    assert brief.today_ai is None and brief.ai_masters is None
 
 
 def test_featured_max_four() -> None:

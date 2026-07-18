@@ -21,13 +21,13 @@
     <key>WorkingDirectory</key>
     <string>REPLACE_ME/nev-brief</string>
 
-    <!-- 06:10 触发，与 NEV daily(06:00) 错峰，避免两条产线抢 DeepSeek/带宽 -->
+    <!-- 06:45 触发：等 events digest(约06:08-06:11到) 落地留缓冲，且与 NEV daily(06:00) 错峰 -->
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
         <integer>6</integer>
         <key>Minute</key>
-        <integer>10</integer>
+        <integer>45</integer>
     </dict>
 
     <key>StandardOutPath</key>

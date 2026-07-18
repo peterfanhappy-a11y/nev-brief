@@ -1,0 +1,42 @@
+AI Builders Digest — 2026年7月11日
+========================================
+
+★ [1] GitHub COO Kyle Daigle 深度访谈揭示 AI 编程工具的真实图景：每月1700万PR且指数级增长意味着 AI 让更多非技术人员成为创造者
+   在 Every 的 AI & I 播客中，GitHub COO Kyle Daigle 讨论了 AI 编程工具如何改变开发者生态。GitHub 每月接收 1700 万个 PR 且指数级增长——不是开发者变多，而是 AI 让更多人开始写代码。GitHub 坚持与所有模型商合作、不锁死用户的「反捕鼠器」策略。
+   https://www.youtube.com/playlist?list=PLuMcoKK9mKgHtW
+
+★ [2] Box CEO Aaron Levie 万字长文系统阐述应用层AI四大核心护城河：桥接工作流、模型路由、变革管理、领域GTM
+   Box CEO Aaron Levie 发布 3500+ 字长推，阐述「Applied AI Layer」四大护城河：桥接智能与工作流、在 GPT-5.5 与开源模型间智能路由、推动企业落地 Agent 工作流、建立领域 GTM 壁垒。复杂本身就是护城河。104K 阅读引爆辩论。
+   https://x.com/levie/status/2080000000000000001
+
+★ [3] Sam Altman 宣布传奇研究者 Noam Shazeer 正式加入 OpenAI——Transformer 核心贡献者、Character.AI 创始人重返前线
+   OpenAI CEO Sam Altman 宣布 Noam Shazeer 加入 OpenAI。Shazeer 是 Transformer 架构核心作者、Character.AI 创始人，此番重返一线研究，被视为 OpenAI 在顶尖人才争夺战中的重大胜利。
+   https://x.com/sama/status/2080000000000000002
+
+★ [4] Anthropic 发布 Claude Design 进入所有付费计划 Beta：Web 和桌面端可在画布编辑器做专业级 UI 设计
+   Anthropic 推出 Claude Design，面向所有付费用户开放 Beta。用户可在全新画布编辑器上拖拽、缩放做专业级 UI 设计，再一键交付实现，进一步把 Claude 从对话推向创作工具。
+   https://claude.com/blog/claude-design
+
+★ [5] YC CEO Garry Tan 揭示 AI 对创业格局的结构性重塑：技术创始人获得商业思维，商业创始人获得技术能力
+   YC CEO Garry Tan 认为 AI 让技术创始人获得商业与 GTM 能力、商业创始人借编程助手独立构建产品，创业启动门槛降低但成功门槛升高，最终会诞生更多真正能运作的公司。
+   https://x.com/garrytan/status/2080000000000000005
+
+🔥 [6] Vercel CEO Guillermo Rauch 发出重磅观察：中国开源模型 GLM 5.2 在 Next.js Evals 上正式超越 GPT Opus 4.8
+   Vercel CEO Guillermo Rauch 称中国开源模型 GLM 5.2 在 Next.js Evals 基准上超越 GPT Opus 4.8，开源追赶速度惊人。同时预告 Vercel 的 Agent 框架 eve，旨在让 Agent 走向生产级。
+   https://x.com/rauchg/status/2080000000000000006
+
+🔥 [7] Replit CEO Amjad Masad 公开呼应 Anthropic 的 Claude Design：「用 Claude 做设计，用 Replit 做发布」
+   Replit CEO Amjad Masad 呼应 Claude Design 发布，提出「用 Claude 做设计、用 Replit 做发布」的组合工作流，暗示两家在 AI 应用构建链条上的互补协作。
+   https://x.com/amasad/status/2080000000000000007
+
+🔥 [8] OpenAI Codex 推出史无前例的「双重重置」引发开发者社区狂欢：额度重置 + 可自由使用的重置储备银行
+   OpenAI Codex 推出「双重重置」：一次完整额度重置外加可自由使用的重置储备银行，并支持任意开源模型，不再限于 OpenAI。5500+ 点赞，回应开发者对成本控制与模型自由的诉求。
+   https://x.com/openaidevs/status/2080000000000000008
+
+🔥 [9] Garry Tan 以精确数学测算 Fable 5 禁令的全球生产力损失：每小时损失超千万美元
+   YC CEO Garry Tan 用 500 万 AI 编程日活 × $90/小时 × 17.8% 依赖度测算 Fable 5 禁令的全球生产力损失，指出每小时损失超千万美元，呼吁理性决策。
+   https://x.com/garrytan/status/2080000000000000009
+
+🔥 [10] FPV Ventures 合伙人 Nikunj Kothari 揭露 VC 市场分期融资陷阱：名义估值虚高抬高员工 409A 期权执行价
+   FPV Ventures 合伙人 Nikunj Kothari 连续揭露分期融资陷阱：名义估值虚高导致后续员工 409A 期权执行价被抬高，损害员工利益，并给出应对建议。
+   https://x.com/nikunj/status/2080000000000000010

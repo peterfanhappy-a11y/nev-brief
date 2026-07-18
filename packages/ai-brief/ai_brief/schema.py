@@ -32,6 +32,24 @@ class FeaturedItem(BaseModel):
     article_id: str | None = None  # ai_articles.id 溯源
 
 
+class DigestStory(BaseModel):
+    """digest 模块（今日AI/AI大神）里的一条新闻。正文已由 DeepSeek 压缩。"""
+
+    headline: str = Field(max_length=80)
+    summary: str = Field(max_length=200)  # 今日AI≤150 / AI大神≤120（软约束）
+    url: str
+    label: str = ""  # 分类·价值（今日AI）或 人名/来源（AI大神）
+
+
+class DigestSection(BaseModel):
+    """一个 digest 驱动的模块：1 张头图 + 多条 story。"""
+
+    theme: Theme
+    header_image: str | None = None       # 已转存的 Supabase Storage 公开 URL
+    header_image_alt: str = ""
+    stories: list[DigestStory] = Field(min_length=1, max_length=6)
+
+
 class Tool(BaseModel):
     name: str = Field(max_length=40)
     one_liner: str = Field(max_length=60)
@@ -67,7 +85,11 @@ class AiBriefContent(BaseModel):
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
     editorial: str = Field(default="", max_length=220)  # 编辑导语：2-3 句讲清当天头条
     intro_bullets: list[str] = Field(min_length=1, max_length=4)
-    featured: list[FeaturedItem] = Field(min_length=1, max_length=4)
+    # 今日精选模块①今日AI ②AI大神：digest 驱动（从 Gmail digest 邮件生成）
+    today_ai: DigestSection | None = None
+    ai_masters: DigestSection | None = None
+    # 模块③大模型研究 ④智能体研究：暂由 crawler 供（内容生成方式待定义）
+    featured: list[FeaturedItem] = Field(default_factory=list, max_length=4)
     tools: list[Tool] = Field(default_factory=list, max_length=5)
     daily_tip: DailyTip | None = None
     quick_hits: list[QuickHit] = Field(default_factory=list, max_length=6)

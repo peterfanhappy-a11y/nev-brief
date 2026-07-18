@@ -1,9 +1,11 @@
-"""Daily 步骤驱动 — 串起 crawl → select → summarize → compose → deliver。
+"""Daily 步骤驱动 — digest 驱动版。
 
-单进程内直接调各阶段（不像 NEV orchestrator 用 subprocess）。每步失败发飞书告警。
-dry_run 停在 compose 前（只到生成简报文档，不落投递、不发送）。
+今日AI / AI大神 两模块从 Gmail digest 邮件生成（见 ai_brief.digest.generate）。
+模块③大模型研究 ④智能体研究 + 工具/课堂 内容生成方式尚未定义，暂不产出
+（模板会自动省略空板块），后续和用户逐个定义后再接 crawler/summarizer。
 
-与 NEV daily 完全独立：独立 launchd plist、独立 DB 表、独立发件身份。
+流程：build_digest_modules → 组装 AiBriefContent → upsert → compose → deliver。
+今日AI digest 缺失 = 内容主干缺失 → 告警并中止。与 NEV daily 完全独立。
 """
 from __future__ import annotations
 
@@ -15,11 +17,9 @@ from nev_shared.config import get_settings
 from nev_shared.feishu import AlertLevel, send_alert
 from nev_shared.logger import get_logger
 
-from ai_brief import composer, deliverer, storage
-from ai_brief.crawler import runner as crawl_runner
-from ai_brief.schema import YesterdayTop
-from ai_brief.selector import select
-from ai_brief.summarizer import summarize
+from ai_brief import composer, config, deliverer, storage
+from ai_brief.digest.generate import build_digest_modules
+from ai_brief.schema import AiBriefContent, YesterdayTop
 
 log = get_logger("ai_brief.runner")
 
@@ -27,9 +27,7 @@ log = get_logger("ai_brief.runner")
 @dataclass
 class DailyResult:
     brief_date: str
-    crawled: int = 0
-    candidates: int = 0
-    featured: int = 0
+    modules: int = 0
     composed: int = 0
     sent: int = 0
     failed: int = 0
@@ -44,92 +42,89 @@ def _alert(level: AlertLevel, title: str, body: str) -> None:
         log.warning("ai_runner.alert_failed", title=title)
 
 
+def _yesterday_top(conn: psycopg.Connection, brief_date: date) -> YesterdayTop | None:
+    prev = storage.fetch_previous_brief(conn, brief_date)
+    if not prev:
+        return None
+    ta = prev.get("today_ai") or {}
+    stories = ta.get("stories") or []
+    if stories:
+        s0 = stories[0]
+        if s0.get("headline") and s0.get("url"):
+            return YesterdayTop(headline=s0["headline"], url=s0["url"])
+    # 兼容旧结构（featured）
+    feat = prev.get("featured") or []
+    if feat and feat[0].get("headline") and feat[0].get("url"):
+        return YesterdayTop(headline=feat[0]["headline"], url=feat[0]["url"])
+    return None
+
+
 async def run_daily(
     conn: psycopg.Connection,
     brief_date: date,
     *,
     only_email: str | None = None,
     dry_run: bool = False,
-    skip_crawl: bool = False,
+    skip_crawl: bool = False,  # 保留签名兼容；digest 版不抓取
 ) -> DailyResult:
     r = DailyResult(brief_date=str(brief_date))
+    date_str = str(brief_date)
 
-    # ── 1. crawl ──────────────────────────────────────────────
-    if not skip_crawl:
-        # 每源抓完立即 insert+commit，中途中断不丢已抓的源
-        total_new = 0
-
-        def _sink(articles) -> None:  # noqa: ANN001
-            nonlocal total_new
-            total_new += storage.insert_articles(conn, articles)
-            conn.commit()
-
-        fetched = await crawl_runner.crawl_all(on_source=_sink)
-        r.crawled = total_new
-        r.steps.append("crawl")
-        log.info("ai_runner.crawled", new=r.crawled, fetched=len(fetched))
-
-    # ── 2. select (Stage-1) ───────────────────────────────────
-    candidates = storage.fetch_candidates(conn, window_hours=24)
-    r.candidates = len(candidates)
-    if not candidates:
-        r.aborted_at = "select"
-        _alert(AlertLevel.P1, "AI 简报中止", f"{brief_date} 无候选文章，crawl 可能失败")
+    # ── 1. digest 模块（今日AI / AI大神）─────────────────────────
+    bundle = await build_digest_modules(date_str)
+    if bundle.today_ai is None:
+        r.aborted_at = "digest"
+        _alert(AlertLevel.P1, "AI 简报中止", f"{date_str} 今日AI digest 缺失/解析失败，未发送")
         return r
+    r.steps.append("digest")
+    if bundle.ai_masters is None:
+        _alert(AlertLevel.P2, "AI大神 digest 缺失", f"{date_str} AI大神模块空缺，仅发今日AI")
 
-    selection = await select(candidates)
-    if selection is None or not selection.featured_ids():
-        r.aborted_at = "select"
-        _alert(AlertLevel.P1, "AI 简报中止", f"{brief_date} Stage-1 未选出任何主题内容")
-        return r
-    r.featured = len(selection.featured_ids())
-    r.steps.append("select")
-
-    # ── 3. summarize (Stage-2) ────────────────────────────────
-    prev = storage.fetch_previous_brief(conn, brief_date)
-    yesterday_top = None
-    if prev and prev.get("featured"):
-        top = prev["featured"][0]
-        yesterday_top = YesterdayTop(headline=top["headline"], url=top["url"])
-
-    brief = await summarize(
-        selection, candidates, brief_date=str(brief_date), yesterday_top=yesterday_top
+    # ── 2. 组装 brief 文档 ────────────────────────────────────────
+    intro = bundle.intro_bullets or [s.headline for s in bundle.today_ai.stories]
+    subject = bundle.subject or bundle.today_ai.stories[0].headline
+    brief = AiBriefContent(
+        brief_date=date_str,
+        subject=subject[:44],
+        preheader=bundle.preheader[:60],
+        editorial=bundle.editorial[:220],
+        intro_bullets=intro[:4],
+        today_ai=bundle.today_ai,
+        ai_masters=bundle.ai_masters,
+        featured=[],
+        yesterday_top=_yesterday_top(conn, brief_date),
+        model=config.get_model(),
     )
-    if brief is None:
-        r.aborted_at = "summarize"
-        _alert(AlertLevel.P1, "AI 简报中止", f"{brief_date} Stage-2 生成失败")
-        return r
     storage.upsert_daily_brief(
         conn, brief_date=brief_date, content=brief.model_dump(mode="json"), model=brief.model
     )
     conn.commit()
-    r.steps.append("summarize")
-    log.info("ai_runner.summarized", subject=brief.subject)
+    r.modules = 1 + (1 if bundle.ai_masters else 0)
+    r.steps.append("assemble")
+    log.info("ai_runner.assembled", subject=brief.subject, modules=r.modules)
 
     if dry_run:
-        log.info("ai_runner.dry_run_stop", brief_date=str(brief_date))
+        log.info("ai_runner.dry_run_stop", brief_date=date_str)
         return r
 
-    # ── 4. compose ────────────────────────────────────────────
+    # ── 3. compose ────────────────────────────────────────────────
     comp = composer.compose_for_date(conn, brief_date, only_email=only_email)
     conn.commit()
     r.composed = comp.get("composed", 0)
     r.steps.append("compose")
 
-    # ── 5. deliver ────────────────────────────────────────────
+    # ── 4. deliver ────────────────────────────────────────────────
     send_res = deliverer.send_pending(conn)
     r.sent = send_res.sent
     r.failed = send_res.failed
     r.steps.append("deliver")
 
     if r.failed > 0:
-        _alert(AlertLevel.P1, "AI 简报部分投递失败", f"{brief_date} sent={r.sent} failed={r.failed}")
+        _alert(AlertLevel.P1, "AI 简报部分投递失败", f"{date_str} sent={r.sent} failed={r.failed}")
     else:
         _alert(
-            AlertLevel.INFO,
-            "AI 简报已发送",
-            f"{brief_date} · {brief.subject}\ncandidates={r.candidates} "
-            f"featured={r.featured} sent={r.sent}",
+            AlertLevel.INFO, "AI 简报已发送",
+            f"{date_str} · {brief.subject}\nmodules={r.modules} sent={r.sent}",
         )
     return r
 

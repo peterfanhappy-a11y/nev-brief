@@ -98,13 +98,15 @@ async def test_summarize_none_on_api_fail() -> None:
 
 
 @pytest.mark.asyncio
-async def test_summarize_retries_on_validation_error() -> None:
+async def test_summarize_accepts_empty_featured() -> None:
+    # digest 驱动版：featured（模块3&4）现允许为空，不再触发校验重试
     cands = [_cand("a", "x"), _cand("b", "y"), _cand("c", "z"), _cand("d", "w")]
-    bad = {**LLM_OUT, "featured": []}  # 空 featured → pydantic ValidationError
-    mock = AsyncMock(side_effect=[bad, LLM_OUT])
+    out = {**LLM_OUT, "featured": []}
+    mock = AsyncMock(side_effect=[out])
     with patch.object(summarizer, "extract_json_with_retry", new=mock):
         brief = await summarizer.summarize(
             _selection(), cands, brief_date="2026-07-02", yesterday_top=None
         )
     assert brief is not None
-    assert mock.await_count == 2  # 重试了一次
+    assert brief.featured == []
+    assert mock.await_count == 1  # 不重试
