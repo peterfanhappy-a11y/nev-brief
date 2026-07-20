@@ -16,6 +16,21 @@ from ai_brief.schema import DigestStory
 
 log = get_logger("ai_brief.condenser")
 
+_SENT_END = "。！？!?…”）)"
+
+
+def _clip_sentence(text: str, limit: int) -> str:
+    """把摘要收在 limit 字内，且尽量成句：超限时截到 limit 内最后一个句末标点，
+    避免从句子中间硬切出半截。找不到合适标点才退回硬截。"""
+    t = (text or "").strip()
+    if len(t) <= limit:
+        return t
+    window = t[:limit]
+    cut = max(window.rfind(ch) for ch in _SENT_END)
+    if cut >= limit * 0.45:  # 窗口内有靠后的句末标点 → 收在那里，成完整句
+        return window[: cut + 1]
+    return window.rstrip("，、；：,;: ") + "…"
+
 
 @dataclass
 class TodayAIResult:
@@ -69,7 +84,9 @@ async def condense_today_ai(items: list[EventItem]) -> TodayAIResult | None:
     }
     stories: list[DigestStory] = []
     for it in items:
-        summary = sum_by_idx.get(it.index, "")[: config.TODAY_AI_SUMMARY_CHARS] or it.body[:config.TODAY_AI_SUMMARY_CHARS]
+        summary = _clip_sentence(
+            sum_by_idx.get(it.index, "") or it.body, config.TODAY_AI_SUMMARY_CHARS
+        )
         stories.append(
             DigestStory(headline=it.headline[:80], summary=summary, url=it.url, label=it.label)
         )
@@ -93,7 +110,8 @@ _MASTERS_SYSTEM = """你是 AIVIZENS 的 AI 主编。给你 AI 领域 10 位从�
 2) 对选中 5 条，各产出：
    - person：发声者的姓名/职务/来源（如 "Box CEO Aaron Levie"、"OpenAI Sam Altman"），从原文提取，英文原名保留；
    - headline：一句精炼中文标题，≤24字，抓住这条最核心的观点/事件；
-   - summary：≤120字中文摘要，保留核心观点与依据。公司/产品/人名保留英文原名。
+   - summary：把这条提炼成【一个完整、成句、可独立读懂的核心观点】，≤120字。要点集中在"他说了什么、依据/影响是什么"，
+     必须是完整通顺的句子、以句号收尾，宁可写短也不要写成半截或戛然而止；不要罗列多个要点堆到超字数。公司/产品/人名保留英文原名。
 
 只输出严格 JSON：
 {
@@ -160,8 +178,9 @@ async def select_masters(items: list[BuilderItem]) -> list[tuple[BuilderItem, Di
     for idx in order:
         it = by_idx[idx]
         p = picks_by_idx.get(idx, {})
-        summary = str(p.get("summary", "")).strip()[: config.AI_MASTERS_SUMMARY_CHARS] \
-            or it.body[: config.AI_MASTERS_SUMMARY_CHARS]
+        summary = _clip_sentence(
+            str(p.get("summary", "")).strip() or it.body, config.AI_MASTERS_SUMMARY_CHARS
+        )
         # 上游新格式把人名内嵌进长标题、不再用 [人名] 括号；故 person/headline 由 LLM 提取，
         # 括号残留（旧格式）时回退到 parser 的 it.person / it.headline。
         person = str(p.get("person", "")).strip() or it.person
