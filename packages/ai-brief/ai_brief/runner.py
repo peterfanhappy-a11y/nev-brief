@@ -91,6 +91,9 @@ async def run_daily(
         intro_bullets=intro[:4],
         today_ai=bundle.today_ai,
         ai_masters=bundle.ai_masters,
+        ai_research=bundle.ai_research,
+        ai_engineering=bundle.ai_engineering,
+        agent_tools=bundle.agent_tools,
         featured=[],
         yesterday_top=_yesterday_top(conn, brief_date),
         model=config.get_model(),
@@ -99,7 +102,11 @@ async def run_daily(
         conn, brief_date=brief_date, content=brief.model_dump(mode="json"), model=brief.model
     )
     conn.commit()
-    r.modules = 1 + (1 if bundle.ai_masters else 0)
+    r.modules = 1 + sum(
+        1 for s in (
+            bundle.ai_masters, bundle.ai_research, bundle.ai_engineering, bundle.agent_tools
+        ) if s
+    )
     r.steps.append("assemble")
     log.info("ai_runner.assembled", subject=brief.subject, modules=r.modules)
 

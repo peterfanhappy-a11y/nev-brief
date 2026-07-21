@@ -30,12 +30,23 @@
       <img src="{{ section.header_image }}" width="663" alt="{{ section.header_image_alt }}" style="display:block;width:100%;height:auto;">
     </td></tr>
     {% endif %}
+    {% if section.subtitle %}
+    <tr><td style="padding:12px 18px 0;">
+      <div style="font-size:17px;font-weight:800;color:#111827;line-height:1.5;">{{ section.subtitle }}</div>
+    </td></tr>
+    {% endif %}
     {% for s in section.stories %}
-    <tr><td style="padding:14px 18px;{% if not loop.first %}border-top:1px solid #e5e7eb;{% endif %}">
+    <tr><td style="padding:14px 18px;{% if not loop.first or section.subtitle %}border-top:1px solid #e5e7eb;{% endif %}">
       {% if s.label %}<div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:5px;letter-spacing:1px;">{{ s.label }}</div>{% endif %}
+      {% if s.url %}
       <a href="{{ s.url }}" style="text-decoration:none;"><span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ s.headline }}</span></a>
+      {% else %}
+      <span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ s.headline }}</span>
+      {% endif %}
       <div style="font-size:14px;line-height:1.75;color:#374151;margin-top:6px;">{{ s.summary }}</div>
-      <div style="margin-top:8px;"><a href="{{ s.url }}" style="font-size:12px;color:#4F46E5;text-decoration:none;font-weight:600;">阅读原文 →</a></div>
+      {% if s.url and section.cta_label %}
+      <div style="margin-top:8px;"><a href="{{ s.url }}" style="font-size:12px;color:#4F46E5;text-decoration:none;font-weight:600;">{{ section.cta_label }} →</a></div>
+      {% endif %}
     </td></tr>
     {% endfor %}
   </table>
@@ -116,8 +127,11 @@
 
   {{ divider() }}
 
-  <!-- ⑤ 工具学习（窄横幅 + 两个圆角边框卡：热门AI工具 / 热门AI课堂）-->
+  <!-- ⑤ 工具学习：AI研究 / AI工程 / Agent工具（digest 驱动，同今日精选格式）-->
   {{ section_header('工 具 学 习') }}
+  {{ digest_section(brief.ai_research) }}
+  {{ digest_section(brief.ai_engineering) }}
+  {{ digest_section(brief.agent_tools) }}
   {% if brief.tools %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">

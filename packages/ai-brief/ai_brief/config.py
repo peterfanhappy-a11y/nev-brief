@@ -89,6 +89,10 @@ THEMES: list[dict[str, str]] = [
     {"key": "product_tools", "label": "AI大神", "emoji": "🎤", "color": "#DB2777"},
     {"key": "skills_efficiency", "label": "大模型研究", "emoji": "🧠", "color": "#0EA5E9"},
     {"key": "ethics_regulation", "label": "智能体研究", "emoji": "🤖", "color": "#10B981"},
+    # 工具学习板块
+    {"key": "ai_research", "label": "AI研究", "emoji": "🔬", "color": "#7C3AED"},
+    {"key": "ai_engineering", "label": "AI工程", "emoji": "🛠️", "color": "#EA580C"},
+    {"key": "agent_tools", "label": "Agent工具", "emoji": "🧰", "color": "#0891B2"},
 ]
 THEME_ORDER = [t["key"] for t in THEMES]
 THEME_META = {t["key"]: t for t in THEMES}
@@ -98,14 +102,25 @@ THEME_META = {t["key"]: t for t in THEMES}
 # 密钥走 AiSettings 从 .env 读（os.environ 里没有）。subject 前缀是常量。
 DIGEST_EVENTS_SUBJECT_PREFIX = "ai-events-digest-"     # + YYYY-MM-DD(GMT+8)
 DIGEST_BUILDER_SUBJECT_PREFIX = "follow-builder-digest-"
+# 工具学习板块的 digest 源（同 sender，subject 前缀 + YYYY-MM-DD）
+DIGEST_RESEARCH_SUBJECT_PREFIX = "ai-research-digest-"
+DIGEST_ENGINEERING_SUBJECT_PREFIX = "ai-engineering-digest-"
+DIGEST_AGENT_SUBJECT_PREFIX = "ai-agent-digest-"
 
 # 压缩字数上限（软约束，DeepSeek prompt 里也会写）
+TODAY_AI_TOP_N = 3                # 今日AI 取前几条（上游一次给 8 条，只用 TOP3）
 TODAY_AI_SUMMARY_CHARS = 150      # 今日AI 每条正文
 AI_MASTERS_SUMMARY_CHARS = 120    # AI大神 每条正文
 AI_MASTERS_PICK_TOP5 = 2          # 前5条选几条
 AI_MASTERS_PICK_FIRE5 = 3         # 后5条选几条
-# 今日AI 头图裁成矮横幅（宽:高），源图多是长截图 → 裁成 banner；越大越矮
+AI_RESEARCH_SUMMARY_CHARS = 200   # AI研究 单篇内容
+AI_ENGINEERING_POINT_CHARS = 150  # AI工程 每条核心要点
+AGENT_TOOL_SUMMARY_CHARS = 150    # Agent工具 每个工具介绍
+AGENT_TOOLS_PICK = 2              # 3 个工具选几个
+# 头图横幅裁剪（宽:高），源图多是长截图 → 裁成 banner；越大越矮
 TODAY_AI_BANNER_ASPECT = 3.0
+# 头图上传前缩到的最大宽度（研究图/工程图可能很大，缩小省邮件体积）
+HEADER_IMAGE_MAX_WIDTH = 1000
 
 
 # 下列从 .env 读的值用函数暴露（延迟到调用时读，便于测试注入 / 避免 import 期固化）

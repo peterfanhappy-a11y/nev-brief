@@ -11,7 +11,7 @@ from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
 
 from ai_brief import config
-from ai_brief.digest.models import BuilderItem, EventItem
+from ai_brief.digest.models import AgentTool, BuilderItem, EngineeringLecture, EventItem, ResearchPaper
 from ai_brief.schema import DigestStory
 
 log = get_logger("ai_brief.condenser")
@@ -189,4 +189,103 @@ async def select_masters(items: list[BuilderItem]) -> list[tuple[BuilderItem, Di
             it,
             DigestStory(headline=headline, summary=summary, url=it.url, label=person),
         ))
+    return out
+
+
+# ── AI研究：把选中论文的 Core Takeaways 压成一段可读内容 ────────────────
+
+_RESEARCH_SYSTEM = """你是 AIVIZENS 的 AI 研究主编。给你一篇论文的中文标题与它的 Core Takeaways（核心贡献/方法/影响）。
+请把它提炼成一段【面向从业者、完整成句、可独立读懂】的中文内容，说明这项研究做了什么、怎么做的、为什么重要。
+要求：控制在 180 字以内（务必给结尾句留出空间），通顺连贯、必须以句号收尾、不得写成半截；保留关键结论与数字；公司/产品/模型名保留英文原名。
+
+只输出严格 JSON：{"summary": "≤180字内容"}。只输出 JSON。"""
+
+
+async def condense_research(paper: ResearchPaper) -> DigestStory | None:
+    """把一篇论文压成 AI研究 模块的单条 story。失败回退用原始 takeaways 拼接。"""
+    if paper is None:
+        return None
+    joined = "\n".join(f"{i+1}) {t}" for i, t in enumerate(paper.takeaways))
+    prompt = f"标题：{paper.title}\nCore Takeaways：\n{joined}"
+    raw = await extract_json_with_retry(
+        _RESEARCH_SYSTEM, prompt, model=config.get_model(), max_tokens=1200, temperature=0.4,
+    )
+    summary = ""
+    if raw is not None:
+        summary = str(raw.get("summary", "")).strip()
+    if not summary:
+        summary = " ".join(paper.takeaways)
+    summary = _clip_sentence(summary, config.AI_RESEARCH_SUMMARY_CHARS)
+    label = f"[{paper.source_tag}]" if paper.source_tag else ""
+    return DigestStory(headline=paper.title[:80], summary=summary, url=paper.url, label=label)
+
+
+# ── AI工程：课程要点(主题) + 核心要点(内容)，无需 LLM，直接映射 + 收句 ──
+
+
+def build_engineering_stories(lecture: EngineeringLecture) -> tuple[str, list[DigestStory]]:
+    """返回 (subtitle=课程要点, stories=核心要点各一条)。无链接。"""
+    stories: list[DigestStory] = []
+    for cp in lecture.core_points:
+        stories.append(
+            DigestStory(
+                headline=cp.subtitle[:80],
+                summary=_clip_sentence(cp.body, config.AI_ENGINEERING_POINT_CHARS),
+                url="",
+                label="",
+            )
+        )
+    return lecture.key_point, stories
+
+
+# ── Agent工具：3 选 2 + 每个工具压一段介绍 ─────────────────────────────
+
+_AGENT_SYSTEM = """你是 AIVIZENS 的 AI 工具主编。给你 GitHub Trending 上 3 个 AI/Agent 开源工具，各带名称与「3 要点总结」。
+请：
+1) 从 3 个里选 2 个——标准：对读者的实际工作/学习帮助最大、最值得动手试用。
+2) 对选中的每个工具，把它的 3 要点提炼成【一段完整、成句、可独立读懂】的中文介绍：这个工具是什么、解决什么问题、亮点在哪，尽量写满信息量。
+   控制在 140 字以内（务必给结尾句留空间），通顺连贯、必须以句号收尾、不得写半截。产品/公司/技术名保留英文原名。
+
+只输出严格 JSON：
+{"picks": [ {"rank": 1, "summary": "≤150字介绍"}, {"rank": 3, "summary": "≤150字介绍"} ]}
+rank 用给定编号，恰好 2 个。只输出 JSON。"""
+
+
+def _agent_prompt(tools: list[AgentTool]) -> str:
+    parts = []
+    for t in tools:
+        pts = "\n".join(f"  - {p}" for p in t.points)
+        parts.append(f"[rank={t.rank}] {t.name}（本周 {t.stars} stars）\n{pts}")
+    return "\n\n".join(parts)
+
+
+async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None:
+    """从 3 个工具里选 2 个，返回 story 列表（headline=名称、summary=压缩介绍、url=仓库）。"""
+    if not tools:
+        return None
+    by_rank = {t.rank: t for t in tools}
+    raw = await extract_json_with_retry(
+        _AGENT_SYSTEM, _agent_prompt(tools), model=config.get_model(), max_tokens=1500, temperature=0.4,
+    )
+    picks: list[tuple[int, str]] = []
+    if raw is not None:
+        for p in raw.get("picks", []):
+            if p.get("rank") is None:
+                continue
+            picks.append((int(p["rank"]), str(p.get("summary", "")).strip()))
+    # 回退/收敛：不足 2 个就按榜单顺序补齐
+    chosen: list[int] = [r for r, _ in picks if r in by_rank][: config.AGENT_TOOLS_PICK]
+    sum_by_rank = {r: s for r, s in picks}
+    for t in tools:
+        if len(chosen) >= config.AGENT_TOOLS_PICK:
+            break
+        if t.rank not in chosen:
+            chosen.append(t.rank)
+
+    out: list[DigestStory] = []
+    for r in chosen:
+        t = by_rank[r]
+        summary = _clip_sentence(sum_by_rank.get(r, "") or " ".join(t.points), config.AGENT_TOOL_SUMMARY_CHARS)
+        label = f"⭐ {t.stars} stars/周" if t.stars else ""
+        out.append(DigestStory(headline=t.name[:80], summary=summary, url=t.url, label=label))
     return out

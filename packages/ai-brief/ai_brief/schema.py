@@ -18,6 +18,10 @@ class Theme(str, Enum):
     PRODUCT_TOOLS = "product_tools"
     SKILLS_EFFICIENCY = "skills_efficiency"
     ETHICS_REGULATION = "ethics_regulation"
+    # 工具学习板块
+    AI_RESEARCH = "ai_research"
+    AI_ENGINEERING = "ai_engineering"
+    AGENT_TOOLS = "agent_tools"
 
 
 class FeaturedItem(BaseModel):
@@ -36,17 +40,19 @@ class DigestStory(BaseModel):
     """digest 模块（今日AI/AI大神）里的一条新闻。正文已由 DeepSeek 压缩。"""
 
     headline: str = Field(max_length=80)
-    summary: str = Field(max_length=200)  # 今日AI≤150 / AI大神≤120（软约束）
-    url: str
-    label: str = ""  # 分类·价值（今日AI）或 人名/来源（AI大神）
+    summary: str = Field(max_length=260)  # 今日AI≤150 / AI大神≤120 / AI研究≤200（软约束）
+    url: str = ""  # AI工程 核心要点无链接 → 允许空
+    label: str = ""  # 分类·价值（今日AI）或 人名/来源（AI大神）或 ⭐stars（Agent工具）
 
 
 class DigestSection(BaseModel):
-    """一个 digest 驱动的模块：1 张头图 + 多条 story。"""
+    """一个 digest 驱动的模块：1 张头图 + 可选主题句 + 多条 story。"""
 
     theme: Theme
     header_image: str | None = None       # 已转存的 Supabase Storage 公开 URL
     header_image_alt: str = ""
+    subtitle: str = ""                    # 模块主题句（AI工程=课程要点；其余留空）
+    cta_label: str = "阅读原文"           # story 链接文案（AI研究=阅读论文 / Agent工具=查看仓库）
     stories: list[DigestStory] = Field(min_length=1, max_length=6)
 
 
@@ -88,7 +94,11 @@ class AiBriefContent(BaseModel):
     # 今日精选模块①今日AI ②AI大神：digest 驱动（从 Gmail digest 邮件生成）
     today_ai: DigestSection | None = None
     ai_masters: DigestSection | None = None
-    # 模块③大模型研究 ④智能体研究：暂由 crawler 供（内容生成方式待定义）
+    # 工具学习板块 ③AI研究 ④AI工程 ⑤Agent工具：均 digest 驱动
+    ai_research: DigestSection | None = None
+    ai_engineering: DigestSection | None = None
+    agent_tools: DigestSection | None = None
+    # 旧 crawler 驱动板块（暂空）
     featured: list[FeaturedItem] = Field(default_factory=list, max_length=4)
     tools: list[Tool] = Field(default_factory=list, max_length=5)
     daily_tip: DailyTip | None = None

@@ -13,7 +13,7 @@ import os
 import socket
 import ssl
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
@@ -163,16 +163,19 @@ def _date_key(text: str) -> tuple[int, int, int] | None:
 def fetch_latest(
     sender: str,
     subject_prefix: str,
-    date_str: str,
+    date_str: str | None,
     *,
     host: str | None = None,
     user: str | None = None,
     password: str | None = None,
     mailbox: str = "INBOX",
     timeout: float = 30.0,
+    within_hours: float | None = None,
 ) -> DigestEmail | None:
     """取 from=sender、subject 以 subject_prefix 开头、且日期匹配 date_str 的最新一封。
 
+    date_str=None → 不按日期过滤，取该前缀最新一封（用于日期标签漂移的源做回退）。
+    within_hours 设置时，忽略 Date 早于该窗口的邮件。
     日期匹配容忍零填充漂移（上游 events 用 2026-07-08、builder 用 2026-7-8）。无匹配返回 None。
     """
     host = host or config.imap_host()
@@ -181,7 +184,11 @@ def fetch_latest(
     if not user or not password:
         raise RuntimeError("Gmail IMAP 凭据缺失：设 AI_GMAIL_IMAP_USER / AI_GMAIL_IMAP_PASSWORD")
 
-    target = _date_key(f"x-{date_str}")
+    target = _date_key(f"x-{date_str}") if date_str else None
+    oldest_ok = (
+        datetime.now(timezone.utc) - timedelta(hours=within_hours)
+        if within_hours else None
+    )
     imap = _connect(host, 993, timeout)
     try:
         imap.login(user, password)
@@ -212,6 +219,8 @@ def fetch_latest(
                 dt = datetime.now(timezone.utc)
             if dt is not None and dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
+            if oldest_ok is not None and dt < oldest_ok:
+                continue
             if best_dt is None or dt > best_dt:
                 best_dt, best_uid = dt, uid
 
