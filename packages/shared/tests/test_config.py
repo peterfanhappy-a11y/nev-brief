@@ -69,6 +69,7 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         monkeypatch.delenv(key, raising=False)
 
     env_example = Path(__file__).resolve().parents[3] / ".env.example"
+    repository_env = env_example.with_name(".env")
     monkeypatch.chdir(tmp_path)
     inert_import_environment = {
         "SUPABASE_URL": "https://example.invalid",
@@ -92,6 +93,32 @@ def test_root_env_example_constructs_settings_with_code_defaults(
     for key, value in inert_import_environment.items():
         monkeypatch.setenv(key, value)
 
+    from pydantic_settings.sources.providers.dotenv import DotEnvSettingsSource
+
+    original_is_file = Path.is_file
+    original_read_env_file = DotEnvSettingsSource._read_env_file
+    blocked_dotenv_paths: list[Path] = []
+    loaded_dotenv_paths: list[Path] = []
+
+    def controlled_is_file(path: Path) -> bool:
+        if path.resolve() == repository_env.resolve():
+            return True
+        return original_is_file(path)
+
+    def guarded_read_env_file(
+        source: DotEnvSettingsSource,
+        file_path: Path,
+    ) -> dict[str, str | None]:
+        resolved_path = file_path.resolve()
+        if resolved_path == repository_env.resolve():
+            blocked_dotenv_paths.append(resolved_path)
+            return {}
+        loaded_dotenv_paths.append(resolved_path)
+        return dict(original_read_env_file(source, file_path))
+
+    monkeypatch.setattr(Path, "is_file", controlled_is_file)
+    monkeypatch.setattr(DotEnvSettingsSource, "_read_env_file", guarded_read_env_file)
+
     ai_brief_package = importlib.import_module("ai_brief")
     previous_config_module = sys.modules.pop("ai_brief.config", None)
     missing_attribute = object()
@@ -104,6 +131,8 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         assert ai_config.FROM_EMAIL == "isolated-sender@example.invalid"
         assert ai_config.FROM_NAME == "Isolated Sender"
         assert ai_config.qwen_vl_model() == "test-qwen-model"
+        assert repository_env.resolve() in blocked_dotenv_paths
+        assert repository_env.resolve() not in loaded_dotenv_paths
 
         for key in inert_import_environment:
             monkeypatch.delenv(key, raising=False)
@@ -116,6 +145,8 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         assert settings.crawl_max_qps_per_domain == 1.0
         assert settings.log_level == "INFO"
         assert ai_settings.qwen_vl_model == "qwen3.7-plus"
+        assert env_example.resolve() in loaded_dotenv_paths
+        assert repository_env.resolve() not in loaded_dotenv_paths
     finally:
         sys.modules.pop("ai_brief.config", None)
         if previous_config_module is not None:
