@@ -40,6 +40,7 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         "DEEPSEEK_API_KEY",
         "DEEPSEEK_BASE_URL",
         "DEEPSEEK_MODEL",
+        "DEEPSEEK_MODEL_AI",
         "RESEND_API_KEY",
         "FEISHU_WEBHOOK_URL",
         "SENTRY_DSN",
@@ -47,13 +48,29 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         "ADMIN_TOKEN",
         "CRAWL_MAX_QPS_PER_DOMAIN",
         "LOG_LEVEL",
+        "AI_DIGEST_SENDER",
+        "AI_GMAIL_IMAP_HOST",
+        "AI_GMAIL_IMAP_USER",
+        "AI_GMAIL_IMAP_PASSWORD",
+        "AI_IMAP_PROXY",
+        "AI_IMAGE_BUCKET",
+        "RESEND_FROM_EMAIL_AI",
+        "RESEND_FROM_NAME_AI",
+        "QWEN_API_KEY",
+        "DASHSCOPE_API_KEY",
+        "QWEN_BASE_URL",
+        "QWEN_VL_MODEL",
     ):
         monkeypatch.delenv(key, raising=False)
 
+    from ai_brief.config import AiSettings
+
     env_example = Path(__file__).resolve().parents[3] / ".env.example"
     settings = Settings(_env_file=env_example)  # type: ignore[call-arg]
+    ai_settings = AiSettings(_env_file=env_example)  # type: ignore[call-arg]
 
     assert settings.deepseek_base_url == "https://api.deepseek.com"
     assert settings.deepseek_model == "deepseek-chat"
     assert settings.crawl_max_qps_per_domain == 1.0
     assert settings.log_level == "INFO"
+    assert ai_settings.qwen_vl_model == "qwen3.7-plus"
