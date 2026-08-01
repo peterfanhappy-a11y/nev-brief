@@ -46,3 +46,6 @@ preview.html
 
 # Local Superpowers brainstorming artifacts
 .superpowers/
+
+# Isolated implementation worktrees
+.worktrees/
