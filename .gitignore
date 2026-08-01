@@ -43,3 +43,6 @@ preview.html
 
 .vercel
 .env*
+
+# Local Superpowers brainstorming artifacts
+.superpowers/
