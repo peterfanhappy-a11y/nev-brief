@@ -30,7 +30,8 @@ from ai_brief.storage import Candidate
 
 log = get_logger("ai_brief.summarizer")
 
-SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报。文风参考 The Rundown AI：
+SYSTEM_PROMPT = (
+    """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报。文风参考 The Rundown AI：
 专业、精炼、有洞见，让读者「5 分钟看懂今天 AI 圈发生了什么、为什么重要」。
 
 【翻译与命名】公司/产品/模型名保留英文原名（GPT-5、Claude、Gemini、OpenAI）。译意不译词，
@@ -42,8 +43,11 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
 {
   "subject": "邮件主题：当日最重磅新闻改写成最抓眼球的中文标题，≤22字，让人一看就想点开",
   "preheader": "以「另外：」开头 + 第二重磅新闻的吸睛短标题，≤28字",
-  "editorial": "编辑导语：2-3 句话把当天最重磅的头条讲清楚（发生了什么、为什么重要），像 The Rundown 开头那段，专业有洞见，≤120字。不要用「今天」「以下」这类套话开头，直接切入新闻。",
-  "intro_bullets": ["每个 featured 主题一句话导读，带 emoji 开头，≤20字", ...],
+"""
+    '  "editorial": "编辑导语：2-3 句话把当天最重磅的头条讲清楚（发生了什么、为什么重要），'
+    "像 The Rundown 开头那段，专业有洞见，≤120字。"
+    '不要用「今天」「以下」这类套话开头，直接切入新闻。",\n'
+    """  "intro_bullets": ["每个 featured 主题一句话导读，带 emoji 开头，≤20字", ...],
   "featured": [
     {
       "ref": 0,                    // 对应下方 featured 文章编号
@@ -53,16 +57,21 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
       "significance": "意义：为什么这条重要，≤70字"
     }
   ],
-  "tools": [ {"ref": 3, "name": "工具中文名/产品名，≤12字", "one_liner": "这个工具能做什么，≤28字"} ],  // 0-5 条
-  "daily_tip": {"title": "≤14字", "body": "一条可立即上手的 AI 使用技巧/教程，≤180字"},
-  "quick_hits": [ {"ref": 5, "text": "一句话速览这条新闻，≤36字"} ]   // 3-5 条，从 quick_hits 候选选
-}
+"""
+    '  "tools": [ {"ref": 3, "name": "工具中文名/产品名，≤12字", '
+    '"one_liner": "这个工具能做什么，≤28字"} ],  // 0-5 条\n'
+    """  "daily_tip": {"title": "≤14字", "body": "一条可立即上手的 AI 使用技巧/教程，≤180字"},
+"""
+    '  "quick_hits": [ {"ref": 5, "text": "一句话速览这条新闻，≤36字"} ]   '
+    '// 3-5 条，从 quick_hits 候选选\n'
+    """}
 
 要求：
 - intro_bullets 数量 = featured 数量，一一对应。
 - featured 保持给定顺序与 theme，不要新增/凭空编造文章。
 - daily_tip 可基于给定主题自由发挥，无需对应某篇文章。
-- 只输出 JSON，不要解释。所有 ref 必须是给定编号。"""  # noqa: E501
+- 只输出 JSON，不要解释。所有 ref 必须是给定编号。"""
+)
 
 
 @dataclass
