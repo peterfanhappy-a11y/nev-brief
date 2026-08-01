@@ -5,14 +5,17 @@ from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
-
 from nev_shared.logger import get_logger
 
 log = get_logger("robots")
 
 
 class RobotsChecker:
-    def __init__(self, user_agent: str = "NEV-Brief-Bot/1.0", timeout: float = 10.0):
+    def __init__(
+        self,
+        user_agent: str = "NEV-Brief-Bot/1.0",
+        timeout: float = 10.0,
+    ) -> None:
         self._user_agent = user_agent
         self._timeout = timeout
         self._cache: dict[str, RobotFileParser] = {}

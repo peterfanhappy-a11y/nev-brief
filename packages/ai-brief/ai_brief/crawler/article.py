@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from selectolax.parser import HTMLParser
+from selectolax.parser import HTMLParser, Node
 
 from ai_brief.config import ARTICLE_CONTENT_MAX_CHARS
 
@@ -35,16 +35,18 @@ def extract_title(html: str) -> str | None:
         val = (og.attributes.get("content") or "").strip()
         if val:
             return val
-    if tree.css_first("h1"):
-        txt = tree.css_first("h1").text(strip=True)
+    h1 = tree.css_first("h1")
+    if h1 is not None:
+        txt = h1.text(strip=True)
         if txt:
             return txt
-    if tree.css_first("title"):
-        return tree.css_first("title").text(strip=True) or None
+    title = tree.css_first("title")
+    if title is not None:
+        return title.text(strip=True) or None
     return None
 
 
-def _text_of(node) -> str:  # noqa: ANN001
+def _text_of(node: Node) -> str:
     for tag in _BLOCK_TAGS_TO_DROP:
         for n in node.css(tag):
             n.decompose()
@@ -95,7 +97,11 @@ def extract_content(html: str, max_chars: int = ARTICLE_CONTENT_MAX_CHARS) -> st
     return body_text[:max_chars] if len(body_text) >= 100 else None
 
 
-def parse_article(html: str, *, fallback_title: str | None = None) -> dict:
+def parse_article(
+    html: str,
+    *,
+    fallback_title: str | None = None,
+) -> dict[str, str | None]:
     """一次性解析文章页，返回 {title, content, og_image}。"""
     return {
         "title": extract_title(html) or fallback_title,

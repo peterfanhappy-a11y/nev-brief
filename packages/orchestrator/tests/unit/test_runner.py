@@ -5,8 +5,7 @@ import subprocess
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-import pytest
-from nev_orchestrator.runner import DailyResult, Step, run_daily
+from nev_orchestrator.runner import run_daily
 
 
 def _ok_proc() -> MagicMock:
@@ -90,7 +89,7 @@ def test_run_daily_resume_from_step():
 
     with patch("nev_orchestrator.runner.subprocess.run", side_effect=fake_run), \
          patch("nev_orchestrator.runner.send_alert"):
-        result = run_daily(brief_date=date(2026, 6, 1), resume="compose")
+        run_daily(brief_date=date(2026, 6, 1), resume="compose")
     assert any("nev_composer" in c for c in called_cmds)
     assert any("nev_delivery" in c for c in called_cmds)
     assert not any("nev_crawler" in c for c in called_cmds)

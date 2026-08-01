@@ -1,7 +1,9 @@
 import logging
 import sys
+from typing import cast
 
 import structlog
+from structlog.typing import Processor
 
 
 def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
@@ -12,7 +14,7 @@ def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
         level=getattr(logging, level.upper()),
     )
 
-    processors: list = [
+    processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
@@ -35,4 +37,4 @@ def configure_logging(level: str = "INFO", json_output: bool = True) -> None:
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(name).bind(logger=name)
+    return cast(structlog.stdlib.BoundLogger, structlog.get_logger(name).bind(logger=name))

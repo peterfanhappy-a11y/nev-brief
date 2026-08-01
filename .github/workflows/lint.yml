@@ -6,24 +6,18 @@ on:
     branches: [main]
 
 jobs:
-  python:
+  quality:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-      - run: uv sync
-      - run: uv run ruff check packages/
-      - run: uv run mypy packages/
-
-  typescript:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
+      - run: uv sync
       - run: npm ci
-      - run: npx tsc --noEmit packages/contracts/ts/index.ts
+      - run: make lint
+      - run: make typecheck

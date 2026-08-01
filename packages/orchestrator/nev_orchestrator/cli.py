@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from nev_shared.logger import get_logger
 
@@ -24,7 +24,7 @@ def _parse_date(s: str) -> date:
 
 
 def _cmd_daily(args: argparse.Namespace) -> int:
-    target = args.date or datetime.now(timezone.utc).date()
+    target = args.date or datetime.now(UTC).date()
     result = run_daily(brief_date=target, dry_run=args.dry_run, resume=args.resume)
     print(
         f"daily {target.isoformat()} "

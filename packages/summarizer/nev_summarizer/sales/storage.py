@@ -1,8 +1,9 @@
 """vehicle_sales_daily I/O."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 
 import psycopg
 

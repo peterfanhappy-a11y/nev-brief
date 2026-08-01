@@ -7,11 +7,13 @@ from datetime import date
 from typing import Any
 
 import psycopg
-
 from nev_shared.logger import get_logger
 
-from nev_composer.personalization import UserPreferences, select_diverse_top_n
-from nev_composer.personalization import _primary_bucket  # noqa: PLC2701 — reused for grouping
+from nev_composer.personalization import (
+    UserPreferences,
+    _primary_bucket,  # noqa: PLC2701 — reused for grouping
+    select_diverse_top_n,
+)
 from nev_composer.renderer import render_html, render_text
 from nev_composer.sales_card import extract_from_candidates, fetch_latest_sales, rank_for_user
 from nev_composer.storage import (

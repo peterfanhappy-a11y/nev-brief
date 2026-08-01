@@ -11,7 +11,13 @@ from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
 
 from ai_brief import config
-from ai_brief.digest.models import AgentTool, BuilderItem, EngineeringLecture, EventItem, ResearchPaper
+from ai_brief.digest.models import (
+    AgentTool,
+    BuilderItem,
+    EngineeringLecture,
+    EventItem,
+    ResearchPaper,
+)
 from ai_brief.schema import DigestStory
 
 log = get_logger("ai_brief.condenser")
@@ -265,7 +271,11 @@ async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None
         return None
     by_rank = {t.rank: t for t in tools}
     raw = await extract_json_with_retry(
-        _AGENT_SYSTEM, _agent_prompt(tools), model=config.get_model(), max_tokens=1500, temperature=0.4,
+        _AGENT_SYSTEM,
+        _agent_prompt(tools),
+        model=config.get_model(),
+        max_tokens=1500,
+        temperature=0.4,
     )
     picks: list[tuple[int, str]] = []
     if raw is not None:
@@ -275,7 +285,7 @@ async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None
             picks.append((int(p["rank"]), str(p.get("summary", "")).strip()))
     # 回退/收敛：不足 2 个就按榜单顺序补齐
     chosen: list[int] = [r for r, _ in picks if r in by_rank][: config.AGENT_TOOLS_PICK]
-    sum_by_rank = {r: s for r, s in picks}
+    sum_by_rank = dict(picks)
     for t in tools:
         if len(chosen) >= config.AGENT_TOOLS_PICK:
             break
@@ -285,7 +295,10 @@ async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None
     out: list[DigestStory] = []
     for r in chosen:
         t = by_rank[r]
-        summary = _clip_sentence(sum_by_rank.get(r, "") or " ".join(t.points), config.AGENT_TOOL_SUMMARY_CHARS)
+        summary = _clip_sentence(
+            sum_by_rank.get(r, "") or " ".join(t.points),
+            config.AGENT_TOOL_SUMMARY_CHARS,
+        )
         label = f"⭐ {t.stars} stars/周" if t.stars else ""
         out.append(DigestStory(headline=t.name[:80], summary=summary, url=t.url, label=label))
     return out

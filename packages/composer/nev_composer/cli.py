@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import psycopg
-
 from nev_shared.config import get_settings
 from nev_shared.logger import configure_logging, get_logger
 
@@ -39,7 +38,7 @@ def main() -> int:
     if args.cmd != "run":
         return 2
 
-    brief_date = args.date or datetime.now(timezone.utc).date()
+    brief_date = args.date or datetime.now(UTC).date()
     conn = psycopg.connect(settings.database_url)
     try:
         result = run_for_date(

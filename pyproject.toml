@@ -48,12 +48,20 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "B", "UP", "ANN", "S", "BLE", "C4", "RET", "SIM"]
-ignore = ["ANN101", "ANN102", "S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["ANN", "S101"]
+"packages/ai-brief/ai_brief/digest/condenser.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 warn_return_any = true
+mypy_path = ["packages/pipeline", "packages/crawler"]
+
+[[tool.mypy.overrides]]
+module = ["feedparser", "yaml"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

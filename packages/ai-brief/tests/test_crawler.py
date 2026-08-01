@@ -52,7 +52,10 @@ def test_extract_content_from_article() -> None:
 
 
 def test_extract_content_meta_fallback() -> None:
-    html = '<html><head><meta name="description" content="仅有描述兜底"></head><body><p>短</p></body></html>'
+    html = (
+        '<html><head><meta name="description" content="仅有描述兜底">'
+        "</head><body><p>短</p></body></html>"
+    )
     assert extract_content(html) == "仅有描述兜底"
 
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
 import psycopg
 
@@ -96,7 +97,7 @@ def upsert_daily_brief(
     conn: psycopg.Connection,
     *,
     brief_date: date,
-    content: dict,
+    content: dict[str, Any],
     model: str | None,
 ) -> None:
     """写入/更新当日简报文档。brief_date UNIQUE → 重跑覆盖。"""
@@ -113,14 +114,14 @@ def upsert_daily_brief(
         cur.execute(sql, (brief_date, json.dumps(content, ensure_ascii=False), model))
 
 
-def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict | None:
+def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict[str, Any] | None:
     with conn.cursor() as cur:
         cur.execute("SELECT content FROM ai_daily_briefs WHERE brief_date = %s;", (brief_date,))
         row = cur.fetchone()
     return row[0] if row else None
 
 
-def fetch_previous_brief(conn: psycopg.Connection, before: date) -> dict | None:
+def fetch_previous_brief(conn: psycopg.Connection, before: date) -> dict[str, Any] | None:
     """最近一期（< before）的简报，用于「昨日最热」。跳过的日期不会导致空白。"""
     sql = """
         SELECT content FROM ai_daily_briefs
@@ -146,13 +147,14 @@ def fetch_active_subscribers(
     conn: psycopg.Connection,
     only_email: str | None = None,
 ) -> list[ActiveSubscriber]:
+    # The only interpolated fragment is a fixed literal selected by code.
     sql = """
         SELECT id::text, email, unsubscribe_token::text
         FROM ai_subscribers
         WHERE status = 'active'
         {email_filter}
         ORDER BY created_at;
-    """.format(email_filter="AND email = %s" if only_email else "")
+    """.format(email_filter="AND email = %s" if only_email else "")  # noqa: S608
     params = (only_email,) if only_email else ()
     with conn.cursor() as cur:
         cur.execute(sql, params)

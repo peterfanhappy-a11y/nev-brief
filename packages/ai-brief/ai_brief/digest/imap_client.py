@@ -11,12 +11,13 @@ import email
 import imaplib
 import os
 import socket
-import ssl
+from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
+from typing import cast
 from urllib.parse import urlparse
 
 from nev_shared.logger import get_logger
@@ -41,11 +42,19 @@ def _resolve_proxy() -> str:
 class _ProxyIMAP4SSL(imaplib.IMAP4_SSL):
     """经 HTTP CONNECT 代理隧道连 IMAPS —— 供 GFW 后的机器读 Gmail。"""
 
-    def __init__(self, host, port, proxy_host, proxy_port, *, timeout=None):  # noqa: ANN001
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        proxy_host: str,
+        proxy_port: int,
+        *,
+        timeout: float | None = None,
+    ) -> None:
         self._proxy = (proxy_host, proxy_port)
         super().__init__(host, port, timeout=timeout)
 
-    def _create_socket(self, timeout=None):  # noqa: ANN001
+    def _create_socket(self, timeout: float | None = None) -> socket.socket:
         sock = socket.create_connection(self._proxy, timeout=timeout)
         target = f"{self.host}:{self.port}"
         req = f"CONNECT {target} HTTP/1.1\r\nHost: {target}\r\nProxy-Connection: keep-alive\r\n\r\n"
@@ -60,7 +69,10 @@ class _ProxyIMAP4SSL(imaplib.IMAP4_SSL):
         if " 200 " not in status:
             sock.close()
             raise OSError(f"IMAP 代理 CONNECT 失败：{status or '空响应'}")
-        return self.ssl_context.wrap_socket(sock, server_hostname=self.host)
+        return cast(
+            socket.socket,
+            self.ssl_context.wrap_socket(sock, server_hostname=self.host),
+        )
 
 
 def _connect(host: str, port: int, timeout: float) -> imaplib.IMAP4_SSL:
@@ -68,7 +80,13 @@ def _connect(host: str, port: int, timeout: float) -> imaplib.IMAP4_SSL:
     if proxy:
         pu = urlparse(proxy if "://" in proxy else f"http://{proxy}")
         log.info("ai_imap.via_proxy", proxy=f"{pu.hostname}:{pu.port}")
-        return _ProxyIMAP4SSL(host, port, pu.hostname, pu.port or 8080, timeout=timeout)
+        return _ProxyIMAP4SSL(
+            host,
+            port,
+            cast(str, pu.hostname),
+            pu.port or 8080,
+            timeout=timeout,
+        )
     return imaplib.IMAP4_SSL(host, port, timeout=timeout)
 
 
@@ -105,11 +123,11 @@ def parse_message(raw: bytes) -> DigestEmail:
     msg: Message = email.message_from_bytes(raw)
     subject = _decode(msg.get("Subject"))
     try:
-        dt = parsedate_to_datetime(msg.get("Date"))
+        dt = parsedate_to_datetime(cast(str, msg.get("Date")))
     except (TypeError, ValueError):
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     if dt is not None and dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
 
     html: str | None = None
     text: str | None = None
@@ -123,7 +141,7 @@ def parse_message(raw: bytes) -> DigestEmail:
         filename = _decode(part.get_filename())
 
         if filename or "attachment" in disp or ctype.startswith("image/"):
-            payload = part.get_payload(decode=True)
+            payload = cast(bytes | None, part.get_payload(decode=True))
             if payload:
                 attachments.append(
                     Attachment(
@@ -134,7 +152,7 @@ def parse_message(raw: bytes) -> DigestEmail:
                 )
             continue
 
-        payload = part.get_payload(decode=True)
+        payload = cast(bytes | None, part.get_payload(decode=True))
         if payload is None:
             continue
         charset = part.get_content_charset() or "utf-8"
@@ -186,7 +204,7 @@ def fetch_latest(
 
     target = _date_key(f"x-{date_str}") if date_str else None
     oldest_ok = (
-        datetime.now(timezone.utc) - timedelta(hours=within_hours)
+        datetime.now(UTC) - timedelta(hours=within_hours)
         if within_hours else None
     )
     imap = _connect(host, 993, timeout)
@@ -204,21 +222,25 @@ def fetch_latest(
         best_uid: bytes | None = None
         best_dt: datetime | None = None
         for uid in uids:
-            typ, hd = imap.fetch(uid, "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])")
+            typ, hd = imap.fetch(
+                cast(str, uid),
+                "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])",
+            )
             if typ != "OK" or not hd or not hd[0]:
                 continue
-            hdr = email.message_from_bytes(hd[0][1])
+            header_data = cast(tuple[bytes, bytes], hd[0])[1]
+            hdr = email.message_from_bytes(header_data)
             subj = _decode(hdr.get("Subject")).strip()
             if not subj.startswith(subject_prefix):
                 continue
             if target is not None and _date_key(subj) != target:
                 continue
             try:
-                dt = parsedate_to_datetime(hdr.get("Date"))
+                dt = parsedate_to_datetime(cast(str, hdr.get("Date")))
             except (TypeError, ValueError):
-                dt = datetime.now(timezone.utc)
+                dt = datetime.now(UTC)
             if dt is not None and dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             if oldest_ok is not None and dt < oldest_ok:
                 continue
             if best_dt is None or dt > best_dt:
@@ -228,18 +250,18 @@ def fetch_latest(
             log.warning("ai_imap.no_date_match", prefix=subject_prefix, date=date_str)
             return None
 
-        typ, msg_data = imap.fetch(best_uid, "(RFC822)")
+        typ, msg_data = imap.fetch(cast(str, best_uid), "(RFC822)")
         if typ != "OK" or not msg_data or not msg_data[0]:
             log.warning("ai_imap.fetch_body_failed", prefix=subject_prefix, date=date_str)
             return None
-        best = parse_message(msg_data[0][1])
+        message_data = cast(tuple[bytes, bytes], msg_data[0])[1]
+        best = parse_message(message_data)
         log.info(
             "ai_imap.fetched",
             subject=best.subject, date=str(best.date), attachments=len(best.attachments),
         )
         return best
     finally:
-        try:
+        # Logout is best-effort during cleanup; the fetch result/error must win.
+        with suppress(Exception):  # noqa: S110
             imap.logout()
-        except Exception:  # noqa: BLE001
-            pass

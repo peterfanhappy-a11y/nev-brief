@@ -6,7 +6,6 @@ from datetime import date
 from typing import Any
 
 import psycopg
-
 from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_pipeline.entity_dict import canonicalize_brand
 from nev_shared.logger import get_logger

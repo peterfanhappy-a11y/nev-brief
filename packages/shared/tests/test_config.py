@@ -1,9 +1,9 @@
 import pytest
-
 from nev_shared.config import Settings, get_settings
+from pydantic import ValidationError
 
 
-def test_settings_loads_from_env(monkeypatch):
+def test_settings_loads_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "fake-key")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "ds-key")
@@ -16,11 +16,12 @@ def test_settings_loads_from_env(monkeypatch):
     assert s.deepseek_api_key == "ds-key"
 
 
-def test_settings_missing_required_raises(monkeypatch):
+def test_settings_missing_required_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.delenv("SUPABASE_SERVICE_ROLE_KEY", raising=False)
     get_settings.cache_clear()
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         # _env_file=None bypasses real .env so the test isn't satisfied by
         # local secrets (config.py uses absolute-path .env by default).
-        Settings(_env_file=None)
+        # pydantic-settings accepts this runtime keyword through its generated init.
+        Settings(_env_file=None)  # type: ignore[call-arg]

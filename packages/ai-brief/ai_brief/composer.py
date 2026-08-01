@@ -6,36 +6,39 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any, cast
 from uuid import uuid4
 
 import jinja2
 import psycopg
 from nev_shared.logger import get_logger
 
-from ai_brief import config
+from ai_brief import config, storage
 from ai_brief.schema import AiBriefContent
-from ai_brief import storage
 
 log = get_logger("ai_brief.composer")
 
 _WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
-def _theme_color(theme) -> str:  # noqa: ANN001
-    key = theme.value if hasattr(theme, "value") else str(theme)
+def _theme_color(theme: object) -> str:
+    key = cast(str, theme.value if hasattr(theme, "value") else str(theme))
     return config.THEME_META.get(key, {}).get("color", "#4F46E5")
 
 
-def _theme_label(theme) -> str:  # noqa: ANN001
+def _theme_label(theme: object) -> str:
     """渲染时从 config 实时取标签，而非用 brief 里存的旧值（改标签立即生效）。"""
-    key = theme.value if hasattr(theme, "value") else str(theme)
+    key = cast(str, theme.value if hasattr(theme, "value") else str(theme))
     return config.THEME_META.get(key, {}).get("label", key)
 
 
 def _make_env(autoescape: bool) -> jinja2.Environment:
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(config.TEMPLATES_DIR)),
-        autoescape=jinja2.select_autoescape(["html", "j2"]) if autoescape else False,
+        # Text-email templates intentionally render without HTML escaping.
+        autoescape=(  # noqa: S701
+            jinja2.select_autoescape(["html", "j2"]) if autoescape else False
+        ),
         trim_blocks=True,
         lstrip_blocks=True,
     )
@@ -62,7 +65,7 @@ def greeting_name(email: str) -> str:
     return token[:1].upper() + token[1:].lower()
 
 
-def _base_ctx(brief: AiBriefContent, brief_date: date) -> dict:
+def _base_ctx(brief: AiBriefContent, brief_date: date) -> dict[str, Any]:
     return {
         "brief": brief,
         "date_human": _date_human(brief_date),
@@ -97,8 +100,10 @@ def render(
 def render_preview(brief: AiBriefContent, brief_date: date) -> str:
     """预览用 HTML（假 delivery_id / token），不落库。"""
     html, _ = render(
-        brief, brief_date,
-        delivery_id="preview-0000", unsubscribe_token="preview-token",
+        brief,
+        brief_date,
+        delivery_id="preview-0000",
+        unsubscribe_token="preview-token",  # noqa: S106 - inert preview placeholder
     )
     return html
 
@@ -108,7 +113,7 @@ def compose_for_date(
     brief_date: date,
     *,
     only_email: str | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """为当日简报的所有 active 订阅者生成投递记录。返回统计。不 commit。"""
     raw = storage.fetch_brief(conn, brief_date)
     if raw is None:

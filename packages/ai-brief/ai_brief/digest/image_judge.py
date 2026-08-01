@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import io
 import re
+from typing import Any
 
 import httpx
 from nev_shared.logger import get_logger
@@ -27,8 +28,7 @@ def _downscale(data: bytes, content_type: str) -> tuple[bytes, str]:
     try:
         from PIL import Image
 
-        im = Image.open(io.BytesIO(data))
-        im = im.convert("RGB")
+        im = Image.open(io.BytesIO(data)).convert("RGB")
         im.thumbnail((_MAX_EDGE, _MAX_EDGE))
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=80)
@@ -77,13 +77,14 @@ def pick_image(
         return 0
 
     criterion = _CRITERIA.get(mode, _CRITERIA["today_ai"])
-    content: list[dict] = [{
+    content: list[dict[str, Any]] = [{
         "type": "text",
         "text": (
             f"下面是 {len(images)} 张候选新闻配图，按顺序编号 0 到 {len(images)-1}。\n"
             "请先逐张判断每张是不是网页/文章/App 界面截图或含大段文字的图，再据此挑选。\n"
             f"{criterion}\n"
-            "分析完后，务必在最后另起一行、严格按此格式输出结论：选择=N（N 为被选图片编号，只填一个数字）。"
+            "分析完后，务必在最后另起一行、严格按此格式输出结论："
+            "选择=N（N 为被选图片编号，只填一个数字）。"
         ),
     }]
     for i, (data, ctype) in enumerate(images):

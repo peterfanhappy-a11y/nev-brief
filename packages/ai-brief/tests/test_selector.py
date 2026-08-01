@@ -69,5 +69,6 @@ async def test_all_referenced_ids() -> None:
         selector, "extract_json_with_retry", new=AsyncMock(return_value=DEEPSEEK_OUT)
     ):
         res = await selector.select(cands)
+    assert res is not None
     refs = res.all_referenced_ids()
     assert "id-0" in refs and "id-2" in refs and "id-4" in refs and "id-5" in refs

@@ -9,6 +9,10 @@ from __future__ import annotations
 import io
 import re
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 from nev_shared.logger import get_logger
 
@@ -45,12 +49,12 @@ def _filename_index(filename: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _richness(im) -> float:  # noqa: ANN001
+def _richness(im: Image.Image) -> float:
     """一横带里「非近白像素」的占比：正文页多为白底黑字→低；hero 图/照片→高。"""
     g = im.convert("L")
     if g.width > 200:
         g = g.resize((200, max(1, int(200 * g.height / g.width))))
-    hist = g.histogram()
+    hist: list[int] = g.histogram()
     total = sum(hist) or 1
     white = sum(hist[235:])  # 近白
     return 1.0 - white / total
@@ -141,7 +145,9 @@ def _pick_and_upload(
     return url, caption
 
 
-async def _build_today_ai(brief_date: str) -> tuple[DigestSection | None, condenser.TodayAIResult | None]:
+async def _build_today_ai(
+    brief_date: str,
+) -> tuple[DigestSection | None, condenser.TodayAIResult | None]:
     email = fetch_latest(
         config.digest_sender(), config.DIGEST_EVENTS_SUBJECT_PREFIX, brief_date
     )

@@ -69,7 +69,7 @@ def send_email(
 ) -> str:
     """发送一封邮件，返回 Resend email id。"""
     _configure_sdk()
-    params: dict = {
+    params: resend.Emails.SendParams = {
         "from": f"{FROM_NAME} <{FROM_EMAIL}>",
         "to": [to],
         "subject": subject,

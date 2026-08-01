@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from ai_brief.composer import render
 from ai_brief.schema import (
@@ -52,26 +53,29 @@ def _ai_masters() -> DigestSection:
     )
 
 
-def _brief(**over) -> AiBriefContent:
-    base = dict(
-        brief_date="2026-07-06",
-        subject="Claude Sonnet 5 发布：Agent 能力比肩旗舰",
-        preheader="另外：阿里巴巴内部禁用 Claude Code",
-        editorial="Anthropic 今日发布 Sonnet 5，以三分之一价格逼近 Opus 4.8。",
-        intro_bullets=["🚀 Sonnet 5 发布", "🎤 大神论道"],
-        today_ai=_today_ai(),
-        ai_masters=_ai_masters(),
-        tools=[Tool(name="Cursor", one_liner="AI 代码编辑器", url="https://cursor.com")],
-        daily_tip=DailyTip(title="写周报", body="用三段式 prompt。"),
-        yesterday_top=YesterdayTop(headline="昨日头条", url="https://y/top"),
-    )
+def _brief(**over: Any) -> AiBriefContent:
+    base: dict[str, Any] = {
+        "brief_date": "2026-07-06",
+        "subject": "Claude Sonnet 5 发布：Agent 能力比肩旗舰",
+        "preheader": "另外：阿里巴巴内部禁用 Claude Code",
+        "editorial": "Anthropic 今日发布 Sonnet 5，以三分之一价格逼近 Opus 4.8。",
+        "intro_bullets": ["🚀 Sonnet 5 发布", "🎤 大神论道"],
+        "today_ai": _today_ai(),
+        "ai_masters": _ai_masters(),
+        "tools": [Tool(name="Cursor", one_liner="AI 代码编辑器", url="https://cursor.com")],
+        "daily_tip": DailyTip(title="写周报", body="用三段式 prompt。"),
+        "yesterday_top": YesterdayTop(headline="昨日头条", url="https://y/top"),
+    }
     base.update(over)
     return AiBriefContent(**base)
 
 
 def test_render_html_digest_sections() -> None:
     html, _ = render(
-        _brief(), date(2026, 7, 6), delivery_id="d-123", unsubscribe_token="tok-9"
+        _brief(),
+        date(2026, 7, 6),
+        delivery_id="d-123",
+        unsubscribe_token="tok-9",  # noqa: S106 - inert test value
     )
     # 品牌 + 作者 + 问候 + 导语
     assert "Fan" in html and "Fans" in html
@@ -97,7 +101,10 @@ def test_render_html_digest_sections() -> None:
 
 def test_render_text_digest_sections() -> None:
     _, text = render(
-        _brief(), date(2026, 7, 6), delivery_id="d-1", unsubscribe_token="t-1"
+        _brief(),
+        date(2026, 7, 6),
+        delivery_id="d-1",
+        unsubscribe_token="t-1",  # noqa: S106 - inert test value
     )
     assert "AIVIZENS 趋势" in text
     assert "《今日AI》" in text
@@ -109,7 +116,12 @@ def test_render_text_digest_sections() -> None:
 
 def test_render_omits_missing_ai_masters() -> None:
     brief = _brief(ai_masters=None)
-    html, _ = render(brief, date(2026, 7, 6), delivery_id="d", unsubscribe_token="t")
+    html, _ = render(
+        brief,
+        date(2026, 7, 6),
+        delivery_id="d",
+        unsubscribe_token="t",  # noqa: S106 - inert test value
+    )
     assert "今日AI" in html
     assert "AI大神" not in html          # 缺失模块省略
     assert "https://img/masters.png" not in html

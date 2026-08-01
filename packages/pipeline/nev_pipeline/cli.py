@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import psycopg
 from nev_shared.config import get_settings
@@ -46,7 +46,7 @@ def _processed_to_candidate(processed: dict) -> ClusterCandidate:
         brands=processed["brands"],
         models=processed["models"],
         simhash=processed["simhash"],
-        published_at=processed.get("published_at") or datetime.now(tz=timezone.utc),
+        published_at=processed.get("published_at") or datetime.now(tz=UTC),
         cluster_id=processed["cluster_id"],
     )
 

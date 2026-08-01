@@ -69,7 +69,7 @@ async def _cmd_crawl(_args: argparse.Namespace) -> int:
     try:
         total_new = 0
 
-        def _sink(articles) -> None:  # noqa: ANN001 — 每源增量落库
+        def _sink(articles: list[storage.AiArticle]) -> None:
             nonlocal total_new
             total_new += storage.insert_articles(conn, articles)
             conn.commit()

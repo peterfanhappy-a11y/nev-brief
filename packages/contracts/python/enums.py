@@ -1,3 +1,5 @@
+# Preserve the established ``str, Enum`` stringification contract.
+# ruff: noqa: UP042
 from enum import Enum
 
 

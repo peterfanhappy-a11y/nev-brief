@@ -1,4 +1,4 @@
-.PHONY: help install dev down test-unit test-integration lint format clean
+.PHONY: help install dev down test-unit test-integration lint typecheck format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
@@ -6,7 +6,8 @@ help:
 	@echo "make down      # 停止 docker-compose"
 	@echo "make test-unit        # 跑默认 Python 单元测试"
 	@echo "make test-integration # 跑 Python 集成测试"
-	@echo "make lint      # ruff + mypy + eslint"
+	@echo "make lint      # ruff + web eslint"
+	@echo "make typecheck # scoped mypy + web TypeScript"
 	@echo "make format    # ruff format"
 	@echo "make clean     # 清理缓存"
 
@@ -30,8 +31,11 @@ test-integration:
 
 lint:
 	uv run ruff check packages/
-	uv run mypy packages/
-	npm run lint --if-present
+	npm --workspace @nev/web run lint
+
+typecheck:
+	uv run mypy packages/ai-brief packages/shared
+	npm --workspace @nev/web run typecheck
 
 format:
 	uv run ruff format packages/

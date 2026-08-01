@@ -1,11 +1,10 @@
-from datetime import datetime
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
-from python.content import Source, ArticleRaw, ArticleProcessed
-from python.enums import SourceType, SourceCategory, Locale, ArticleStatus, Topic
+from python.content import ArticleProcessed, ArticleRaw, Source
+from python.enums import ArticleStatus, Locale, SourceCategory, SourceType
 
 
 def test_source_construction():

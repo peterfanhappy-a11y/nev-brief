@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 SCHEMA_VERSION = 1
 
 
-class Theme(str, Enum):
+class Theme(str, Enum):  # noqa: UP042 - preserve legacy str(Enum) behavior
     MODEL_RESEARCH = "model_research"
     PRODUCT_TOOLS = "product_tools"
     SKILLS_EFFICIENCY = "skills_efficiency"

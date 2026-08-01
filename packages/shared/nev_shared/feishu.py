@@ -11,20 +11,21 @@ import json
 from enum import Enum
 
 import httpx
+
 from nev_shared.config import get_settings
 from nev_shared.logger import get_logger
 
 log = get_logger("feishu")
 
 
-class AlertLevel(str, Enum):
+class AlertLevel(str, Enum):  # noqa: UP042 - preserve legacy str(Enum) behavior
     P0 = "P0"
     P1 = "P1"
     P2 = "P2"
     INFO = "INFO"
 
 
-def _build_payload(level: AlertLevel, title: str, body: str) -> dict:
+def _build_payload(level: AlertLevel, title: str, body: str) -> dict[str, object]:
     return {
         "msg_type": "text",
         "content": {"text": f"[{level.value}] {title}\n\n{body}"},

@@ -77,7 +77,8 @@ def parse_engineering_digest(html: str) -> EngineeringLecture | None:
                 source_url = (a.attributes.get("href") or "").strip()
 
     kp_h3 = _find_h3(tree, "课程要点")
-    key_point = _clean(_next_elem(kp_h3).text()) if kp_h3 and _next_elem(kp_h3) else ""
+    key_node = _next_elem(kp_h3) if kp_h3 else None
+    key_point = _clean(key_node.text()) if key_node else ""
 
     cp_h3 = _find_h3(tree, "核心要点")
     ol = _next_elem(cp_h3) if cp_h3 else None

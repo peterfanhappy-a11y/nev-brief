@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
@@ -61,7 +62,7 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
 - intro_bullets 数量 = featured 数量，一一对应。
 - featured 保持给定顺序与 theme，不要新增/凭空编造文章。
 - daily_tip 可基于给定主题自由发挥，无需对应某篇文章。
-- 只输出 JSON，不要解释。所有 ref 必须是给定编号。"""
+- 只输出 JSON，不要解释。所有 ref 必须是给定编号。"""  # noqa: E501
 
 
 @dataclass
@@ -108,7 +109,7 @@ def _build_prompt(
 
 
 def _assemble(
-    raw: dict,
+    raw: dict[str, Any],
     ref_map: dict[int, _RefArticle],
     brief_date: str,
     yesterday_top: YesterdayTop | None,
@@ -182,7 +183,10 @@ def _assemble(
 
     return AiBriefContent(
         brief_date=brief_date,
-        subject=str(raw.get("subject", ""))[:44] or (featured[0].headline if featured else "AI 简报"),
+        subject=(
+            str(raw.get("subject", ""))[:44]
+            or (featured[0].headline if featured else "AI 简报")
+        ),
         preheader=str(raw.get("preheader", ""))[:60],
         editorial=str(raw.get("editorial", "")).strip()[:220],
         intro_bullets=intro[: len(featured)] or intro[:1],
@@ -211,7 +215,8 @@ async def summarize(
     featured_refs: list[_RefArticle] = []
     n = 0
     for key in config.THEME_ORDER:
-        pick = selection.themes.get(key, {}).get("pick")
+        theme_selection = selection.themes.get(key)
+        pick = theme_selection["pick"] if theme_selection else None
         c = by_id.get(pick) if pick else None
         if c:
             ra = _RefArticle(ref=n, candidate=c, theme=key)
@@ -247,12 +252,19 @@ async def summarize(
         selection.daily_tip_topic,
         yesterday_top.headline if yesterday_top else None,
     )
-    stats = Stage1Stats(candidates=selection.candidate_count, dupe_groups=selection.dupe_group_count)
+    stats = Stage1Stats(
+        candidates=selection.candidate_count,
+        dupe_groups=selection.dupe_group_count,
+    )
     model = config.get_model()
 
     err_feedback = ""
     for attempt in (1, 2):
-        prompt = user_prompt + (f"\n\n上次输出有误：{err_feedback}，请修正后重新输出。" if err_feedback else "")
+        prompt = user_prompt + (
+            f"\n\n上次输出有误：{err_feedback}，请修正后重新输出。"
+            if err_feedback
+            else ""
+        )
         raw = await extract_json_with_retry(
             SYSTEM_PROMPT, prompt, model=model,
             max_tokens=config.STAGE2_MAX_TOKENS, temperature=config.STAGE2_TEMPERATURE,

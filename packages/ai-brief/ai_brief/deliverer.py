@@ -34,7 +34,10 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
     # 生产用 ai-{date}-{sub}（每订阅者每日唯一，防重发）。测试当天想重发看新版时，
     # 设 AI_IDEMPOTENCY_SUFFIX=v2 拿到新 key 绕过 Resend 24h 去重。
     suffix = os.environ.get("AI_IDEMPOTENCY_SUFFIX", "")
-    idempotency_key = f"ai-{d.brief_date.isoformat()}-{d.subscriber_id}{('-' + suffix) if suffix else ''}"
+    idempotency_key = (
+        f"ai-{d.brief_date.isoformat()}-{d.subscriber_id}"
+        f"{('-' + suffix) if suffix else ''}"
+    )
     unsub_url = f"{config.UNSUBSCRIBE_PREFIX}{d.unsubscribe_token}&product=ai"
 
     try:
@@ -47,12 +50,22 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
             unsubscribe_url=unsub_url,
         )
     except (ResendAuthError, ResendPermanentError) as e:
-        log.error("ai_send.permanent_failure", delivery_id=d.delivery_id, email=d.email, error=str(e))
+        log.error(
+            "ai_send.permanent_failure",
+            delivery_id=d.delivery_id,
+            email=d.email,
+            error=str(e),
+        )
         storage.mark_failed(conn, delivery_id=d.delivery_id, error=str(e))
         conn.commit()
         return False
     except ResendTransientError as e:
-        log.warning("ai_send.transient_failure", delivery_id=d.delivery_id, email=d.email, error=str(e))
+        log.warning(
+            "ai_send.transient_failure",
+            delivery_id=d.delivery_id,
+            email=d.email,
+            error=str(e),
+        )
         storage.reset_to_pending(conn, delivery_id=d.delivery_id, error=str(e))
         conn.commit()
         return False

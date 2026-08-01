@@ -54,7 +54,12 @@ LLM_OUT = {
 
 @pytest.mark.asyncio
 async def test_summarize_injects_db_urls() -> None:
-    cands = [_cand("a", "GPT-5 发布"), _cand("b", "新工具"), _cand("c", "Cursor"), _cand("d", "融资新闻")]
+    cands = [
+        _cand("a", "GPT-5 发布"),
+        _cand("b", "新工具"),
+        _cand("c", "Cursor"),
+        _cand("d", "融资新闻"),
+    ]
     with patch.object(summarizer, "extract_json_with_retry", new=AsyncMock(return_value=LLM_OUT)):
         brief = await summarizer.summarize(
             _selection(), cands, brief_date="2026-07-02",
@@ -72,8 +77,10 @@ async def test_summarize_injects_db_urls() -> None:
     # quick_hit ref=99 越界被丢，只留 1 条
     assert len(brief.quick_hits) == 1
     assert brief.quick_hits[0].url == "https://real.example/d"
+    assert brief.yesterday_top is not None
     assert brief.yesterday_top.headline == "昨日头条"
     assert brief.subject.startswith("GPT-5")
+    assert brief.stage1_stats is not None
     assert brief.stage1_stats.candidates == 50
 
 
@@ -85,7 +92,13 @@ async def test_summarize_none_when_no_featured() -> None:
         top2_overall=[], tool_candidates=[], quick_hits=[], daily_tip_topic="x",
     )
     with patch.object(summarizer, "extract_json_with_retry", new=AsyncMock(return_value=LLM_OUT)):
-        assert await summarizer.summarize(sel, [], brief_date="2026-07-02", yesterday_top=None) is None
+        result = await summarizer.summarize(
+            sel,
+            [],
+            brief_date="2026-07-02",
+            yesterday_top=None,
+        )
+        assert result is None
 
 
 @pytest.mark.asyncio

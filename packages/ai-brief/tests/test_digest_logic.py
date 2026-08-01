@@ -15,7 +15,7 @@ def _items() -> dict[int, BuilderItem]:
     return out
 
 
-def test_rebalance_enforces_2A_3B() -> None:
+def test_rebalance_enforces_2a_3b() -> None:
     by = _items()
     order = _rebalance([1, 2, 6, 7, 8], by)          # 正好 2A + 3B
     assert order == [1, 2, 6, 7, 8]
@@ -32,7 +32,7 @@ def test_rebalance_fixes_wrong_counts() -> None:
     assert 6 in b                                       # 保留模型选的 B，其余按序补
 
 
-def test_rebalance_all_B_only_picked() -> None:
+def test_rebalance_all_b_only_picked() -> None:
     by = _items()
     order = _rebalance([6, 7, 8, 9, 10], by)
     a = [i for i in order if i <= 5]
