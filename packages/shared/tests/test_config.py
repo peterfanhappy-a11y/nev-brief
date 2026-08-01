@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from nev_shared.config import Settings, get_settings
 from pydantic import ValidationError
@@ -25,3 +27,33 @@ def test_settings_missing_required_raises(monkeypatch: pytest.MonkeyPatch) -> No
         # local secrets (config.py uses absolute-path .env by default).
         # pydantic-settings accepts this runtime keyword through its generated init.
         Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+def test_root_env_example_constructs_settings_with_code_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Copying the root example must preserve typed defaults instead of parsing blanks."""
+    for key in (
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "DATABASE_URL",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_BASE_URL",
+        "DEEPSEEK_MODEL",
+        "RESEND_API_KEY",
+        "FEISHU_WEBHOOK_URL",
+        "SENTRY_DSN",
+        "HEALTHCHECKS_PING_URL",
+        "ADMIN_TOKEN",
+        "CRAWL_MAX_QPS_PER_DOMAIN",
+        "LOG_LEVEL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    env_example = Path(__file__).resolve().parents[3] / ".env.example"
+    settings = Settings(_env_file=env_example)  # type: ignore[call-arg]
+
+    assert settings.deepseek_base_url == "https://api.deepseek.com"
+    assert settings.deepseek_model == "deepseek-chat"
+    assert settings.crawl_max_qps_per_domain == 1.0
+    assert settings.log_level == "INFO"
