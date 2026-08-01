@@ -14,7 +14,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync
-      - run: uv run pytest packages/ -v --maxfail=3
+      - run: make test-unit
         env:
           SUPABASE_URL: https://test.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: test-key
@@ -47,6 +47,6 @@ jobs:
           for f in infra/supabase/migrations/*.sql; do
             PGPASSWORD=nev_local_dev psql -h localhost -p 54322 -U nev -d nev_brief -f "$f"
           done
-      - run: uv run pytest tests/integration/ -v -m integration
+      - run: make test-integration
         env:
           DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief

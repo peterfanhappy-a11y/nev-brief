@@ -20,6 +20,9 @@ from nev_delivery.storage import PendingDelivery
 from nev_shared.config import get_settings
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.fixture
 def db_conn():
     settings = get_settings()

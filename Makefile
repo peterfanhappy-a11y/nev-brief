@@ -1,4 +1,4 @@
-.PHONY: help install dev down test lint format clean
+.PHONY: help install dev down test-unit test-integration lint format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
@@ -21,11 +21,11 @@ dev:
 down:
 	cd infra && docker compose down
 
-test:
-	uv run pytest packages/ -v
+test-unit:
+	uv run pytest -c pyproject.toml packages tests -q
 
 test-integration:
-	uv run pytest tests/integration/ -v -m integration
+	uv run pytest -c pyproject.toml packages tests -m integration -q
 
 lint:
 	uv run ruff check packages/
