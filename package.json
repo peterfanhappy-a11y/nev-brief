@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "lint": "eslint packages/web",
-    "test": "vitest run"
+    "test": "npm --workspace @nev/web test"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
