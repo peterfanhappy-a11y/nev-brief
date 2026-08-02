@@ -29,6 +29,13 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief
+      SUPABASE_URL: https://example.invalid
+      SUPABASE_SERVICE_ROLE_KEY: integration-test-service-role
+      DEEPSEEK_API_KEY: integration-test-deepseek
+      RESEND_API_KEY: integration-test-resend
+      PGPASSWORD: nev_local_dev
     services:
       postgres:
         image: postgres:16-alpine
@@ -46,12 +53,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --frozen
       - name: Apply migrations
         run: |
-          for f in infra/supabase/migrations/*.sql; do
-            PGPASSWORD=nev_local_dev psql -h localhost -p 54322 -U nev -d nev_brief -f "$f"
-          done
+          migration_list="${RUNNER_TEMP}/postgres-test-migrations.txt"
+          uv run python scripts/ci/list_postgres_test_migrations.py > "$migration_list"
+          while IFS= read -r migration; do
+            psql -h localhost -p 54322 -U nev -d nev_brief \
+              --set=ON_ERROR_STOP=on --file="$migration"
+          done < "$migration_list"
       - run: make test-integration
-        env:
-          DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief

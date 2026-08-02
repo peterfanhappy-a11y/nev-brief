@@ -1,10 +1,11 @@
-.PHONY: help install dev down test-unit test-integration lint typecheck verify format clean
+.PHONY: help install dev down test-unit test-web test-integration lint typecheck verify format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
 	@echo "make dev       # 启动本地 docker-compose (Postgres + RSSHub)"
 	@echo "make down      # 停止 docker-compose"
 	@echo "make test-unit        # 跑默认 Python 单元测试"
+	@echo "make test-web         # 跑 Web Vitest 单元测试"
 	@echo "make test-integration # 跑 Python 集成测试"
 	@echo "make lint      # ruff + web eslint"
 	@echo "make typecheck # scoped mypy + web TypeScript"
@@ -27,6 +28,9 @@ down:
 test-unit:
 	uv run pytest -c pyproject.toml packages tests -q
 
+test-web:
+	npm --workspace @nev/web run test
+
 test-integration:
 	uv run pytest -c pyproject.toml packages tests -m integration -q
 
@@ -38,7 +42,7 @@ typecheck:
 	uv run mypy packages/ai-brief packages/shared
 	npm --workspace @nev/web run typecheck
 
-verify: test-unit lint typecheck
+verify: test-unit test-web lint typecheck
 	npm --workspace @nev/web run build
 
 format:
