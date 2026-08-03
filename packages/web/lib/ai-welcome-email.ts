@@ -2,6 +2,7 @@ import { Resend } from "resend";
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 
+/** Send only after a subscriber has successfully confirmed their email. */
 export async function sendAiWelcomeEmail(
   to: string,
   unsubscribeToken: string,
@@ -48,7 +49,7 @@ export async function sendAiWelcomeEmail(
 
   const resend = new Resend(apiKey);
   await resend.emails.send({
-    from: `AIVIZENS <${FROM_EMAIL}>`,
+    from: `AIVIZENS 趋势 <${FROM_EMAIL}>`,
     to,
     subject: "欢迎加入 AIVIZENS · 每日 5 分钟学会 AI",
     html,
