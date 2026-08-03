@@ -82,8 +82,9 @@ preparation or email send should occur.
    present in the intended Vercel environment without printing their values.
 3. Do not enable `TURNSTILE_TEST_BYPASS` in production and do not deploy
    Cloudflare's documented dummy keys. The bypass is accepted only when
-   `NODE_ENV=test`; browser acceptance uses the official dummy key pair in its
-   isolated process.
+   `NODE_ENV=test`; browser acceptance renders Cloudflare's official dummy
+   widget key in its isolated process and uses that guarded server-side bypass
+   so CI does not depend on the public Siteverify network.
 4. For a prolonged outage, disable the public form as described below. Reopen
    it only after a server-side verification check succeeds.
 

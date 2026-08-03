@@ -140,6 +140,8 @@ if [[ "$mode" == "integration" ]]; then
     "$web_dir/test/integration/ai-subscription.integration.test.ts" \
     "$@"
 else
+  export NODE_ENV=test
+  export TURNSTILE_TEST_BYPASS=true
   "$repo_dir/node_modules/.bin/playwright" test \
     --config "$web_dir/playwright.config.ts" \
     "$@"
