@@ -73,6 +73,23 @@ def test_claim_pending_maps_rows() -> None:
     assert pending[0].delivery_id == "did1"
     assert pending[0].subject == "主题"
     assert pending[0].unsubscribe_token == "tok1"  # noqa: S105 - inert test value
+    sql = cur.execute.call_args.args[0]
+    assert "s.status <> 'active'" in sql
+    assert "s.status = 'active'" in sql
+    assert "FOR UPDATE OF d, s SKIP LOCKED" in sql
+
+
+def test_lock_active_subscriber_holds_row_lock() -> None:
+    conn, cur = _mock_conn(fetch_rows=[("active",)])
+    assert storage.lock_active_subscriber(conn, subscriber_id="sid1") is True
+    sql, params = cur.execute.call_args.args
+    assert "FOR UPDATE" in sql
+    assert params == ("sid1",)
+
+
+def test_lock_active_subscriber_rejects_unsubscribed() -> None:
+    conn, _cur = _mock_conn(fetch_rows=[("unsubscribed",)])
+    assert storage.lock_active_subscriber(conn, subscriber_id="sid1") is False
 
 
 def test_fetch_previous_brief_returns_content() -> None:

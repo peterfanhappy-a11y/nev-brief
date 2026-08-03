@@ -228,12 +228,24 @@ def claim_pending_deliveries(
 ) -> list[PendingAiDelivery]:
     """原子领取至多 limit 封 pending 投递，标记 sending 并返回内容。"""
     sql = """
-        WITH claimed AS (
+        WITH suppressed AS (
+            UPDATE ai_deliveries d
+            SET status = 'failed',
+                error = 'subscriber inactive before claim',
+                updated_at = NOW()
+            FROM ai_subscribers s
+            WHERE d.subscriber_id = s.id
+              AND d.status = 'pending'
+              AND s.status <> 'active'
+        ),
+        claimed AS (
             SELECT d.id
             FROM ai_deliveries d
+            JOIN ai_subscribers s ON s.id = d.subscriber_id
             WHERE d.status = 'pending'
+              AND s.status = 'active'
             ORDER BY d.created_at
-            FOR UPDATE SKIP LOCKED
+            FOR UPDATE OF d, s SKIP LOCKED
             LIMIT %s
         )
         UPDATE ai_deliveries d
@@ -260,6 +272,37 @@ def claim_pending_deliveries(
         )
         for r in rows
     ]
+
+
+def lock_active_subscriber(
+    conn: psycopg.Connection,
+    *,
+    subscriber_id: str,
+) -> bool:
+    """Lock the subscriber through the transport call and confirm they remain active."""
+    sql = """
+        SELECT status
+        FROM ai_subscribers
+        WHERE id = %s
+        FOR UPDATE;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (subscriber_id,))
+        row = cur.fetchone()
+    return row is not None and row[0] == "active"
+
+
+def mark_suppressed(conn: psycopg.Connection, *, delivery_id: str) -> None:
+    """Terminally suppress a claimed delivery whose subscriber is no longer active."""
+    sql = """
+        UPDATE ai_deliveries
+        SET status = 'failed',
+            error = 'subscriber inactive before send',
+            updated_at = NOW()
+        WHERE id = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (delivery_id,))
 
 
 def mark_sent(conn: psycopg.Connection, *, delivery_id: str, resend_email_id: str) -> None:

@@ -31,6 +31,15 @@ class SendResult:
 
 
 def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
+    # Hold the subscriber row lock through the external send. An unsubscribe that
+    # committed first is respected; one that begins after transport starts waits
+    # until this delivery has reached a terminal state.
+    if not storage.lock_active_subscriber(conn, subscriber_id=d.subscriber_id):
+        storage.mark_suppressed(conn, delivery_id=d.delivery_id)
+        conn.commit()
+        log.info("ai_send.suppressed_inactive", delivery_id=d.delivery_id)
+        return False
+
     # 生产用 ai-{date}-{sub}（每订阅者每日唯一，防重发）。测试当天想重发看新版时，
     # 设 AI_IDEMPOTENCY_SUFFIX=v2 拿到新 key 绕过 Resend 24h 去重。
     suffix = os.environ.get("AI_IDEMPOTENCY_SUFFIX", "")
@@ -56,8 +65,7 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
         log.error(
             "ai_send.permanent_failure",
             delivery_id=d.delivery_id,
-            email=d.email,
-            error=str(e),
+            error_type=type(e).__name__,
         )
         storage.mark_failed(conn, delivery_id=d.delivery_id, error=str(e))
         conn.commit()
@@ -66,21 +74,24 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
         log.warning(
             "ai_send.transient_failure",
             delivery_id=d.delivery_id,
-            email=d.email,
-            error=str(e),
+            error_type=type(e).__name__,
         )
         storage.reset_to_pending(conn, delivery_id=d.delivery_id, error=str(e))
         conn.commit()
         return False
     except Exception as e:  # noqa: BLE001 — defensive
-        log.exception("ai_send.unexpected_error", delivery_id=d.delivery_id)
+        log.error(
+            "ai_send.unexpected_error",
+            delivery_id=d.delivery_id,
+            error_type=type(e).__name__,
+        )
         storage.mark_failed(conn, delivery_id=d.delivery_id, error=f"unexpected: {e!r}")
         conn.commit()
         return False
 
     storage.mark_sent(conn, delivery_id=d.delivery_id, resend_email_id=email_id)
     conn.commit()
-    log.info("ai_send.ok", delivery_id=d.delivery_id, email=d.email, resend_id=email_id)
+    log.info("ai_send.ok", delivery_id=d.delivery_id, resend_id=email_id)
     return True
 
 

@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
@@ -187,6 +188,35 @@ function activeSubscribersFromProduction(): Array<{
   return JSON.parse(stdout);
 }
 
+function claimPendingFromProduction(): Array<{ delivery_id: string; email: string }> {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const helper = path.join(here, "claim-pending-deliveries.py");
+  const stdout = execFileSync(
+    process.env.PYTHON_BIN ?? "python3",
+    [helper, databaseUrl],
+    {
+      cwd: path.resolve(here, "../../../.."),
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+  return JSON.parse(stdout);
+}
+
+function verifyDeliveryUnsubscribeLock(subscriberId: string): void {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const helper = path.join(here, "verify-delivery-unsubscribe-lock.py");
+  execFileSync(
+    process.env.PYTHON_BIN ?? "python3",
+    [helper, databaseUrl, subscriberId],
+    {
+      cwd: path.resolve(here, "../../../.."),
+      encoding: "utf8",
+      env: process.env,
+    },
+  );
+}
+
 describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fake Resend", () => {
   const runId = `${Date.now()}-${process.pid}`;
   const lifecycleEmail = `lifecycle-${runId}@example.com`;
@@ -324,6 +354,48 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
       await formActionRedirect(confirmSubscriptionAction, { token: replayToken }),
     ).toContain("/confirm?status=invalid");
     expect((await subscriber(pendingEmail)).status).toBe("active");
+  });
+
+  it("suppresses an already queued delivery when the reader unsubscribes", async () => {
+    const active = await subscriber(lifecycleEmail);
+    expect(active.status).toBe("active");
+    const deliveryId = randomUUID();
+    const queued = await supabase.from("ai_deliveries").insert({
+      id: deliveryId,
+      subscriber_id: active.id,
+      brief_date: "2026-08-03",
+      subject: "queued before unsubscribe",
+      content_html: "<p>queued</p>",
+      content_text: "queued",
+      status: "pending",
+    });
+    assertNoSupabaseError(queued.error, "queue delivery before unsubscribe");
+
+    expect(
+      await formActionRedirect(unsubscribeAction, {
+        token: active.unsubscribe_token,
+      }),
+    ).toContain("/unsubscribe?status=unsubscribed");
+    expect(claimPendingFromProduction()).toEqual([]);
+
+    const suppressed = await supabase
+      .from("ai_deliveries")
+      .select("status,error,retry_count")
+      .eq("id", deliveryId)
+      .single();
+    assertNoSupabaseError(suppressed.error, "read suppressed delivery");
+    expect(suppressed.data).toEqual({
+      status: "failed",
+      error: "subscriber inactive before claim",
+      retry_count: 0,
+    });
+  });
+
+  it("serializes an in-flight delivery preflight with unsubscribe", async () => {
+    const active = await subscriber(pendingEmail);
+    expect(active.status).toBe("active");
+    verifyDeliveryUnsubscribeLock(active.id);
+    expect((await subscriber(pendingEmail)).status).toBe("unsubscribed");
   });
 
   it("atomically increments concurrent IP and email limiter rows", async () => {

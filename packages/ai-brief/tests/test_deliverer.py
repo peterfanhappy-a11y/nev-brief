@@ -27,9 +27,11 @@ def _pending() -> PendingAiDelivery:
 
 def test_send_one_success() -> None:
     conn = MagicMock()
-    with patch.object(deliverer, "send_email", return_value="re_123") as mock_send, \
+    with patch.object(storage, "lock_active_subscriber", return_value=True), \
+         patch.object(deliverer, "send_email", return_value="re_123") as mock_send, \
          patch("ai_brief.config.WEB_BASE_URL", "https://aivizens.test"), \
-         patch.object(storage, "mark_sent") as mark_sent:
+         patch.object(storage, "mark_sent") as mark_sent, \
+         patch.object(deliverer, "log") as mock_log:
         ok = deliverer._send_one(conn, _pending())
     assert ok is True
     mark_sent.assert_called_once()
@@ -45,24 +47,53 @@ def test_send_one_success() -> None:
     assert "/api/unsubscribe" not in kwargs["html"]
     assert "/api/unsubscribe" not in kwargs["text"]
     conn.commit.assert_called()
+    assert "a@x.com" not in repr(mock_log.mock_calls)
 
 
 def test_send_one_auth_error_marks_failed() -> None:
     conn = MagicMock()
-    with patch.object(deliverer, "send_email", side_effect=ResendAuthError("401")), \
-         patch.object(storage, "mark_failed") as mark_failed:
+    with patch.object(storage, "lock_active_subscriber", return_value=True), \
+         patch.object(
+             deliverer,
+             "send_email",
+             side_effect=ResendAuthError("private provider payload a@x.com"),
+         ), \
+         patch.object(storage, "mark_failed") as mark_failed, \
+         patch.object(deliverer, "log") as mock_log:
         ok = deliverer._send_one(conn, _pending())
     assert ok is False
     mark_failed.assert_called_once()
+    assert "a@x.com" not in repr(mock_log.mock_calls)
+    assert "private provider payload" not in repr(mock_log.mock_calls)
 
 
 def test_send_one_transient_resets() -> None:
     conn = MagicMock()
-    with patch.object(deliverer, "send_email", side_effect=ResendTransientError("503")), \
-         patch.object(storage, "reset_to_pending") as reset:
+    with patch.object(storage, "lock_active_subscriber", return_value=True), \
+         patch.object(
+             deliverer,
+             "send_email",
+             side_effect=ResendTransientError("private provider payload a@x.com"),
+         ), \
+         patch.object(storage, "reset_to_pending") as reset, \
+         patch.object(deliverer, "log") as mock_log:
         ok = deliverer._send_one(conn, _pending())
     assert ok is False
     reset.assert_called_once()
+    assert "a@x.com" not in repr(mock_log.mock_calls)
+    assert "private provider payload" not in repr(mock_log.mock_calls)
+
+
+def test_send_one_suppresses_delivery_after_unsubscribe() -> None:
+    conn = MagicMock()
+    with patch.object(storage, "lock_active_subscriber", return_value=False), \
+         patch.object(deliverer, "send_email") as mock_send, \
+         patch.object(storage, "mark_suppressed") as mark_suppressed:
+        ok = deliverer._send_one(conn, _pending())
+    assert ok is False
+    mock_send.assert_not_called()
+    mark_suppressed.assert_called_once_with(conn, delivery_id="d-1")
+    conn.commit.assert_called_once()
 
 
 def test_send_pending_empty() -> None:
