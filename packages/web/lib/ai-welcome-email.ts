@@ -7,13 +7,19 @@ export async function sendAiWelcomeEmail(
   to: string,
   unsubscribeToken: string,
 ): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey =
+    process.env.RESEND_API_KEY ||
+    (process.env.NODE_ENV === "test" ? "test-resend-key" : undefined);
   if (!apiKey) {
-    console.warn("[resend/ai] RESEND_API_KEY missing — skip welcome email");
-    return;
+    throw new Error("RESEND_API_KEY is required to send AI welcome email");
   }
 
-  const baseUrl = process.env.WEB_BASE_URL || "http://localhost:3002";
+  const baseUrl =
+    process.env.WEB_BASE_URL ||
+    (process.env.NODE_ENV === "test" ? "http://localhost:3002" : undefined);
+  if (!baseUrl) {
+    throw new Error("WEB_BASE_URL is required to send AI welcome email");
+  }
   const unsubUrl = `${baseUrl}/unsubscribe?token=${unsubscribeToken}&product=ai`;
 
   const html = `<!DOCTYPE html>
