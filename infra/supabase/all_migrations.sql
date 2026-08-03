@@ -213,3 +213,235 @@ CREATE POLICY anon_read_sources_enabled
 -- 0005_sources_name_unique.sql
 -- 为 source_loader.upsert 提供 ON CONFLICT 目标
 ALTER TABLE sources ADD CONSTRAINT sources_name_unique UNIQUE (name);
+-- 0006_sources_type_add_nextjs_json.sql
+-- 扩展 sources.type 枚举，新增 'nextjs_json'（用于懂车帝等 Next.js __NEXT_DATA__ 源）
+
+ALTER TABLE sources DROP CONSTRAINT IF EXISTS sources_type_check;
+ALTER TABLE sources ADD CONSTRAINT sources_type_check
+    CHECK (type IN ('rss','api','html_scrape','rsshub','nextjs_json'));
+-- 0007: 给 articles_processed 加 simhash 列 + raw_id UNIQUE 约束
+-- pipeline-service 需要 simhash 查询做聚类，raw_id UNIQUE 让 upsert 幂等
+ALTER TABLE articles_processed ADD COLUMN IF NOT EXISTS simhash bigint;
+CREATE INDEX IF NOT EXISTS idx_processed_simhash ON articles_processed(simhash);
+ALTER TABLE articles_processed
+    ADD CONSTRAINT articles_processed_raw_id_unique UNIQUE (raw_id);
+-- 0008_ai_subscribers.sql
+-- AIVIZENS / AI 趋势 tab 独立订阅表。与 subscribers (NEV 早报) 物理隔离，
+-- 未来若 AI 趋势产品字段发散（推送频率、语言偏好、内容分类）不影响 NEV。
+-- MVP 无 brands/topics/push_time，全员一份日报。
+
+CREATE TABLE ai_subscribers (
+    id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    email             text UNIQUE NOT NULL,
+    status            text NOT NULL DEFAULT 'active'
+                        CHECK (status IN ('active','paused','unsubscribed')),
+    unsubscribe_token uuid NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    source            text DEFAULT 'ai_landing',  -- future utm/referrer tracking
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ai_subscribers_status ON ai_subscribers(status) WHERE status = 'active';
+CREATE INDEX idx_ai_subscribers_email_lower ON ai_subscribers(lower(email));
+
+-- 复用 0001 中定义的 touch_updated_at() 触发器函数
+CREATE TRIGGER trg_ai_subscribers_updated
+    BEFORE UPDATE ON ai_subscribers
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+-- 0009_ai_pipeline.sql
+-- AIVIZENS AI 趋势：完全独立的内容管线，与 NEV 表零交叉。
+--   ai_articles      抓取的 AI 新闻（标题+URL+正文+og:image）
+--   ai_daily_briefs  每日结构化简报文档（DeepSeek 两阶段输出）
+--   ai_deliveries    每订阅者一封的投递记录
+--   ai_ratings       邮件末尾评分模块回收
+-- ai_subscribers 已在 0008 建好。
+
+-- 抓取的 AI 文章。与 NEV 的 articles_raw 隔离：AI crawler 抓正文（NEV 只抓列表页）。
+CREATE TABLE ai_articles (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    source_name  text NOT NULL,
+    locale       text NOT NULL DEFAULT 'en' CHECK (locale IN ('zh','en')),
+    authority    smallint NOT NULL DEFAULT 5,
+    url          text NOT NULL UNIQUE,
+    title        text NOT NULL,
+    content      text,                    -- 文章正文（截断存储），可能为空（抓取失败降级）
+    og_image     text,                    -- og:image / twitter:image 绝对 https URL
+    published_at timestamptz,
+    crawled_at   timestamptz NOT NULL DEFAULT now(),
+    created_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ai_articles_crawled ON ai_articles(crawled_at DESC);
+
+-- 每日简报文档。content jsonb = schema.py 的 AiBriefContent（version 字段内嵌）。
+CREATE TABLE ai_daily_briefs (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    brief_date   date NOT NULL UNIQUE,
+    content      jsonb NOT NULL,
+    model        text,
+    generated_at timestamptz NOT NULL DEFAULT now(),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- 每订阅者一封投递。subject 每日动态（compose 时定稿），故独立成列。
+CREATE TABLE ai_deliveries (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    subscriber_id   uuid NOT NULL REFERENCES ai_subscribers(id) ON DELETE CASCADE,
+    brief_date      date NOT NULL,
+    subject         text NOT NULL,
+    content_html    text NOT NULL,
+    content_text    text NOT NULL,
+    status          text NOT NULL DEFAULT 'pending'
+                      CHECK (status IN ('pending','sending','sent','failed','bounced')),
+    resend_id       text,
+    sent_at         timestamptz,
+    error           text,
+    retry_count     smallint NOT NULL DEFAULT 0,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    updated_at      timestamptz NOT NULL DEFAULT now(),
+    UNIQUE (subscriber_id, brief_date)
+);
+
+CREATE INDEX idx_ai_deliveries_status_date ON ai_deliveries(status, brief_date);
+
+-- 评分回收。delivery_id 是每封邮件唯一的随机 uuid（与 unsubscribe_token 同信任模型），
+-- 无需额外鉴权。后点覆盖先点（UNIQUE + upsert）。
+CREATE TABLE ai_ratings (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    delivery_id  uuid NOT NULL UNIQUE REFERENCES ai_deliveries(id) ON DELETE CASCADE,
+    score        smallint NOT NULL CHECK (score BETWEEN 1 AND 3),  -- 3=很棒 2=还行 1=一般
+    rated_at     timestamptz NOT NULL DEFAULT now(),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+-- RLS：全部 service_role only（应用层走 service-role key，anon 一律拒绝）。
+-- 补 0008 遗漏的 ai_subscribers RLS。
+ALTER TABLE ai_subscribers   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_articles      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_daily_briefs  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_deliveries    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_ratings       ENABLE ROW LEVEL SECURITY;
+
+-- updated_at 自动触发器（touch_updated_at() 在 0001 定义）
+CREATE TRIGGER trg_ai_briefs_updated BEFORE UPDATE ON ai_daily_briefs
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER trg_ai_deliveries_updated BEFORE UPDATE ON ai_deliveries
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER trg_ai_ratings_updated BEFORE UPDATE ON ai_ratings
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+-- 0010_ai_brief_images_bucket.sql
+-- AIVIZENS 简报头图公开桶：每天把 digest 选中的头图上传到此桶，邮件热链。
+-- 独立于 NEV。幂等：可重复执行。
+
+-- 公开可读桶（存 digest 头图，路径 ai/<date>/<module>-<hash>.png）
+insert into storage.buckets (id, name, public)
+values ('ai-brief-images', 'ai-brief-images', true)
+on conflict (id) do update set public = true;
+
+-- 公开读策略（匿名可 GET 该桶对象；写入走 service-role 绕过 RLS）
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies
+    where schemaname = 'storage' and tablename = 'objects'
+      and policyname = 'ai_brief_images_public_read'
+  ) then
+    create policy ai_brief_images_public_read
+      on storage.objects for select
+      to public
+      using (bucket_id = 'ai-brief-images');
+  end if;
+end $$;
+-- AIVIZENS production subscription state, confirmation tokens, and durable abuse limits.
+
+ALTER TABLE ai_subscribers
+    ADD COLUMN confirmation_token_hash text,
+    ADD COLUMN confirmation_expires_at timestamptz,
+    ADD COLUMN confirmed_at timestamptz,
+    ADD COLUMN unsubscribed_at timestamptz,
+    ADD COLUMN signup_ip_hash text,
+    ADD COLUMN utm_source text,
+    ADD COLUMN utm_medium text,
+    ADD COLUMN utm_campaign text;
+
+ALTER TABLE ai_subscribers
+    DROP CONSTRAINT IF EXISTS ai_subscribers_status_check;
+
+-- The legacy schema allowed paused. Keep those rows non-deliverable while moving
+-- to the explicit production subscription state model.
+UPDATE ai_subscribers
+SET status = 'unsubscribed',
+    unsubscribed_at = COALESCE(unsubscribed_at, updated_at)
+WHERE status = 'paused';
+
+ALTER TABLE ai_subscribers
+    ALTER COLUMN status SET DEFAULT 'pending_confirmation',
+    ADD CONSTRAINT ai_subscribers_status_check
+        CHECK (status IN ('pending_confirmation', 'active', 'unsubscribed'));
+
+CREATE UNIQUE INDEX idx_ai_subscribers_confirmation_token_hash
+    ON ai_subscribers(confirmation_token_hash)
+    WHERE confirmation_token_hash IS NOT NULL;
+
+CREATE TABLE ai_subscription_attempts (
+    scope             text NOT NULL
+                          CHECK (scope IN ('ip', 'email')),
+    key_hash          text NOT NULL
+                          CHECK (key_hash ~ '^[0-9a-f]{64}$'),
+    window_started_at timestamptz NOT NULL,
+    attempt_count     integer NOT NULL DEFAULT 0
+                          CHECK (attempt_count >= 0),
+    blocked_until     timestamptz,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (scope, key_hash)
+);
+
+ALTER TABLE ai_subscription_attempts ENABLE ROW LEVEL SECURITY;
+
+CREATE TRIGGER trg_ai_subscription_attempts_updated
+    BEFORE UPDATE ON ai_subscription_attempts
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+CREATE OR REPLACE FUNCTION confirm_ai_subscription(
+    token_hash text,
+    now_at timestamptz
+)
+RETURNS TABLE (
+    id uuid,
+    email text,
+    unsubscribe_token uuid
+)
+LANGUAGE sql
+SECURITY DEFINER
+STRICT
+SET search_path = ''
+AS $$
+    WITH candidate AS MATERIALIZED (
+        SELECT subscriber.id
+        FROM public.ai_subscribers AS subscriber
+        WHERE subscriber.confirmation_token_hash = token_hash
+          AND subscriber.status = 'pending_confirmation'
+          AND subscriber.confirmation_expires_at > now_at
+        ORDER BY subscriber.id
+        FOR UPDATE
+        LIMIT 1
+    ), confirmed AS (
+        UPDATE public.ai_subscribers AS subscriber
+        SET status = 'active',
+            confirmation_token_hash = NULL,
+            confirmation_expires_at = NULL,
+            confirmed_at = now_at,
+            unsubscribed_at = NULL
+        FROM candidate
+        WHERE subscriber.id = candidate.id
+        RETURNING subscriber.id, subscriber.email, subscriber.unsubscribe_token
+    )
+    SELECT confirmed.id, confirmed.email, confirmed.unsubscribe_token
+    FROM confirmed;
+$$;
+
+REVOKE ALL ON FUNCTION confirm_ai_subscription(text, timestamptz) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION confirm_ai_subscription(text, timestamptz) TO service_role;
