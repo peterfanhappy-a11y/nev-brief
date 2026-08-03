@@ -33,6 +33,7 @@ test("maps only Supabase /rest/v1 requests to the PostgREST root", async () => {
         method: request.method,
         url: request.url,
         contentType: request.headers["content-type"],
+        authorization: request.headers.authorization,
         body: Buffer.concat(chunks).toString("utf8"),
       });
       response.writeHead(200, { "content-type": "application/json" });
@@ -48,7 +49,10 @@ test("maps only Supabase /rest/v1 requests to the PostgREST root", async () => {
       `${proxyUrl}/rest/v1/ai_subscribers?select=id%2Cstatus`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer signed-test-token",
+        },
         body: JSON.stringify({ email: "proxy-test@example.com" }),
       },
     );
@@ -59,6 +63,7 @@ test("maps only Supabase /rest/v1 requests to the PostgREST root", async () => {
         method: "POST",
         url: "/ai_subscribers?select=id%2Cstatus",
         contentType: "application/json",
+        authorization: "Bearer signed-test-token",
         body: JSON.stringify({ email: "proxy-test@example.com" }),
       },
     ]);
@@ -70,6 +75,7 @@ test("maps only Supabase /rest/v1 requests to the PostgREST root", async () => {
         method: "POST",
         url: "/ai_subscribers?select=id%2Cstatus",
         contentType: "application/json",
+        authorization: "Bearer signed-test-token",
         body: JSON.stringify({ email: "proxy-test@example.com" }),
       },
     ]);

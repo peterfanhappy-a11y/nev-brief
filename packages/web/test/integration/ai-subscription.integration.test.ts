@@ -136,6 +136,12 @@ async function messages(): Promise<CapturedEmail[]> {
   return response.json();
 }
 
+async function deliveryAttempts(): Promise<CapturedEmail[]> {
+  const response = await fakeResendRequest("/_test/attempts");
+  expect(response.status).toBe(200);
+  return response.json();
+}
+
 async function clearMessages() {
   const response = await fakeResendRequest("/_test/messages", { method: "DELETE" });
   expect(response.status).toBe(204);
@@ -153,9 +159,7 @@ async function failNextMessages(count: number) {
 async function subscriber(email: string): Promise<SubscriberRow> {
   const { data, error } = await supabase
     .from("ai_subscribers")
-    .select(
-      "id,email,status,confirmation_token_hash,confirmation_expires_at,confirmed_at,unsubscribed_at,unsubscribe_token",
-    )
+    .select("*")
     .eq("email", email)
     .single();
   assertNoSupabaseError(error, "select subscriber");
@@ -205,6 +209,16 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
 
   afterAll(async () => {
     await clearMessages();
+  });
+
+  it("rejects anonymous REST access while the signed service role succeeds", async () => {
+    const anonymous = await fetch(
+      `${supabaseUrl}/rest/v1/ai_subscribers?select=id&limit=1`,
+    );
+    expect([401, 403]).toContain(anonymous.status);
+
+    const signed = await supabase.from("ai_subscribers").select("id").limit(1);
+    assertNoSupabaseError(signed.error, "select subscribers with signed service role");
   });
 
   it("moves new -> pending -> active -> unsubscribed -> pending -> active without storing raw tokens", async () => {
@@ -267,6 +281,12 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
     expect(existingActive).toEqual(transportFailure);
     expect((await subscriber(pendingEmail)).status).toBe("pending_confirmation");
     expect((await messages()).some((mail) => mail.body.to === pendingEmail)).toBe(false);
+    const attempts = (await deliveryAttempts()).filter(
+      (attempt) => attempt.body.to === pendingEmail,
+    );
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0].idempotencyKey).not.toBeNull();
+    expect(attempts[1].idempotencyKey).toBe(attempts[0].idempotencyKey);
   });
 
   it("rejects expired and replayed confirmation tokens without changing state", async () => {

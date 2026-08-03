@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 
 const port = Number(process.env.AIVIZENS_TEST_RESEND_PORT ?? "55438");
 const messages = [];
+const attempts = [];
 let failuresRemaining = 0;
 
 function json(response, status, value) {
@@ -26,8 +27,12 @@ const server = createServer(async (request, response) => {
     if (request.method === "GET" && url.pathname === "/_test/messages") {
       return json(response, 200, messages);
     }
+    if (request.method === "GET" && url.pathname === "/_test/attempts") {
+      return json(response, 200, attempts);
+    }
     if (request.method === "DELETE" && url.pathname === "/_test/messages") {
       messages.length = 0;
+      attempts.length = 0;
       failuresRemaining = 0;
       response.writeHead(204);
       return response.end();
@@ -43,6 +48,12 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/emails") {
       const payload = await body(request);
+      const idempotencyKey = request.headers["idempotency-key"] ?? null;
+      attempts.push({
+        id: `attempt-${attempts.length + 1}`,
+        body: payload,
+        idempotencyKey,
+      });
       if (failuresRemaining > 0) {
         failuresRemaining -= 1;
         return json(response, 503, {
@@ -54,7 +65,7 @@ const server = createServer(async (request, response) => {
       messages.push({
         id,
         body: payload,
-        idempotencyKey: request.headers["idempotency-key"] ?? null,
+        idempotencyKey,
       });
       return json(response, 200, { id });
     }
