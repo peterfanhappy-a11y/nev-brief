@@ -68,10 +68,12 @@ describe("verifyTurnstile", () => {
     await expect(result).resolves.toBe(false);
   });
 
-  it("fails closed when the production secret is missing", async () => {
+  it("throws a configuration error when the production secret is missing", async () => {
     vi.stubEnv("TURNSTILE_SECRET_KEY", "");
 
-    await expect(verifyTurnstile("token", "203.0.113.10")).resolves.toBe(false);
+    await expect(verifyTurnstile("token", "203.0.113.10")).rejects.toThrow(
+      "TURNSTILE_SECRET_KEY is required in production",
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -90,6 +92,10 @@ describe("verifyTurnstile", () => {
 
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("TURNSTILE_SECRET_KEY", "");
+    vi.stubEnv("TURNSTILE_TEST_BYPASS", "");
+    await expect(verifyTurnstile("token", null)).resolves.toBe(false);
+
+    vi.stubEnv("TURNSTILE_TEST_BYPASS", "true");
     await expect(verifyTurnstile("token", null)).resolves.toBe(true);
     expect(fetchMock).not.toHaveBeenCalled();
   });

@@ -20,6 +20,9 @@ export async function verifyTurnstile(
 
   const secret = process.env.TURNSTILE_SECRET_KEY;
   if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("TURNSTILE_SECRET_KEY is required in production");
+    }
     return false;
   }
   const params = new URLSearchParams({ secret, response: token });
