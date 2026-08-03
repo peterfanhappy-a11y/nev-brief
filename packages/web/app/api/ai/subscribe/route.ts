@@ -140,13 +140,10 @@ export async function POST(req: Request) {
     try {
       await sendAiConfirmationEmail(body.email, rawToken);
     } catch {
-      // Keep the 24-hour pending token so a bounded, rate-limited retry can
-      // replace it. Never log the provider error because it may contain input.
+      // Preserve account-state privacy: retain the pending token for a later
+      // rate-limited request, record no provider/input detail, and return the
+      // same public response as every other subscriber state.
       console.error("[ai/subscribe] confirmation email delivery failed");
-      return NextResponse.json(
-        { error: "email_unavailable" },
-        { status: 503 },
-      );
     }
   }
 

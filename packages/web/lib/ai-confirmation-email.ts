@@ -1,7 +1,11 @@
 import { Resend } from "resend";
+import { hashConfirmationToken } from "./subscription-token";
+
+const MAX_SEND_ATTEMPTS = 2;
+const DELIVERY_ERROR = "AI confirmation email delivery failed";
 
 function requiredEmailEnvironment(
-  name: "RESEND_API_KEY" | "WEB_BASE_URL",
+  name: "RESEND_API_KEY" | "RESEND_FROM_EMAIL" | "WEB_BASE_URL",
   testFallback: string,
 ): string {
   const value = process.env[name];
@@ -22,8 +26,12 @@ export async function sendAiConfirmationEmail(
 ): Promise<void> {
   const apiKey = requiredEmailEnvironment("RESEND_API_KEY", "test-resend-key");
   const baseUrl = requiredEmailEnvironment("WEB_BASE_URL", "http://localhost:3002");
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+  const fromEmail = requiredEmailEnvironment(
+    "RESEND_FROM_EMAIL",
+    "test-sender@aivizens.invalid",
+  );
   const confirmationUrl = `${baseUrl}/confirm?token=${encodeURIComponent(rawToken)}`;
+  const idempotencyKey = `ai-confirmation:${hashConfirmationToken(rawToken)}`;
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8" /></head>
@@ -54,11 +62,25 @@ ${confirmationUrl}
 © 2026 AIVIZENS 趋势`;
 
   const resend = new Resend(apiKey);
-  await resend.emails.send({
+  const message = {
     from: `AIVIZENS 趋势 <${fromEmail}>`,
     to: email,
     subject: "确认订阅 AIVIZENS 趋势",
     html,
     text,
-  });
+  };
+
+  for (let attempt = 0; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await resend.emails.send(message, { idempotencyKey });
+      if (result.error === null && result.data) {
+        return;
+      }
+    } catch {
+      // Retry once with the same idempotency key. Never surface SDK details,
+      // because provider errors may contain recipient or message content.
+    }
+  }
+
+  throw new Error(DELIVERY_ERROR);
 }

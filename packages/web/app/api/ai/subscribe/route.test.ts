@@ -241,19 +241,34 @@ describe("POST /api/ai/subscribe", () => {
     expect(mocks.sendConfirmation).not.toHaveBeenCalled();
   });
 
-  it("retains pending state for retry and never logs or returns a raw token when email fails", async () => {
-    mocks.sendConfirmation.mockRejectedValue(
-      new Error(`provider rejected ${RAW_TOKEN}`),
-    );
+  it.each([
+    ["new", true],
+    ["pending", true],
+    ["unsubscribed", true],
+    ["active", false],
+  ])(
+    "returns the same private success for %s when confirmation delivery is unavailable",
+    async (_state, confirmationRequired) => {
+      mocks.rpc.mockResolvedValue({
+        data: [{ confirmation_required: confirmationRequired }],
+        error: null,
+      });
+      mocks.sendConfirmation.mockRejectedValue(
+        new Error(`provider rejected reader@example.com ${RAW_TOKEN}`),
+      );
 
-    const response = await POST(request());
-    const text = await response.text();
+      const response = await POST(request());
+      const text = await response.text();
 
-    expect(response.status).toBe(503);
-    expect(JSON.parse(text)).toEqual({ error: "email_unavailable" });
-    expect(mocks.rpc).toHaveBeenCalledOnce();
-    expect(text).not.toContain(RAW_TOKEN);
-    expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain(RAW_TOKEN);
-    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TOKEN);
-  });
+      expect(response.status).toBe(202);
+      expect(JSON.parse(text)).toEqual(SUCCESS);
+      expect(mocks.rpc).toHaveBeenCalledOnce();
+      expect(mocks.sendConfirmation).toHaveBeenCalledTimes(
+        confirmationRequired ? 1 : 0,
+      );
+      expect(text).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain(RAW_TOKEN);
+      expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TOKEN);
+    },
+  );
 });

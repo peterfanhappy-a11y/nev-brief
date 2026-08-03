@@ -8,19 +8,32 @@ vi.mock("@marsidev/react-turnstile", async () => {
   const React = await import("react");
   return {
     Turnstile: React.forwardRef(function MockTurnstile(
-      props: { siteKey: string; onSuccess?: (token: string) => void },
+      props: {
+        siteKey: string;
+        onSuccess?: (token: string) => void;
+        onExpire?: () => void;
+        onError?: () => void;
+      },
       ref: React.ForwardedRef<{ reset: () => void }>,
     ) {
       React.useImperativeHandle(ref, () => ({ reset: resetTurnstile }));
       return (
-        <button
-          type="button"
-          data-testid="turnstile"
-          data-site-key={props.siteKey}
-          onClick={() => props.onSuccess?.("verified-turnstile-token")}
-        >
-          complete verification
-        </button>
+        <div>
+          <button
+            type="button"
+            data-testid="turnstile"
+            data-site-key={props.siteKey}
+            onClick={() => props.onSuccess?.("verified-turnstile-token")}
+          >
+            complete verification
+          </button>
+          <button type="button" onClick={() => props.onExpire?.()}>
+            expire verification
+          </button>
+          <button type="button" onClick={() => props.onError?.()}>
+            error verification
+          </button>
+        </div>
       );
     }),
   };
@@ -127,6 +140,24 @@ describe("AI subscription form", () => {
     expect(await screen.findByText("rate_limited")).toBeInTheDocument();
     expect(resetTurnstile).toHaveBeenCalledOnce();
   });
+
+  it.each(["expire", "error"])(
+    "clears an issued token after Turnstile %s and requires verification again",
+    async (event) => {
+      render(<AiSubscribeForm subscriptionsEnabled />);
+      fireEvent.change(screen.getByRole("textbox"), {
+        target: { value: "reader@example.com" },
+      });
+      fireEvent.click(screen.getByTestId("turnstile"));
+      fireEvent.click(
+        screen.getByRole("button", { name: `${event} verification` }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
+
+      expect(await screen.findByText("请完成机器人验证")).toBeInTheDocument();
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("contains no hold-to-verify control or security claim", () => {
     render(<AiSubscribeForm subscriptionsEnabled />);
