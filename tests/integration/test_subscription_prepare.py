@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import psycopg
 import pytest
+from psycopg.types.json import Jsonb
 
 DATABASE_URL = os.environ.get(
     "DATABASE_URL",
@@ -37,7 +38,7 @@ def _prepare(
         cur.execute(
             "SELECT confirmation_required "
             "FROM prepare_ai_subscription(%s, %s, %s, %s, %s::jsonb)",
-            (email, token_hash, expires_at, ip_hash, utm or {}),
+            (email, token_hash, expires_at, ip_hash, Jsonb(utm or {})),
         )
         row = cur.fetchone()
     conn.commit()
