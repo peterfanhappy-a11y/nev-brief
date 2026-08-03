@@ -17,6 +17,9 @@ node_modules/
 out/
 .turbo/
 *.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
 
 # Env
 .env

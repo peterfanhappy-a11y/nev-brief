@@ -63,3 +63,24 @@ jobs:
               --set=ON_ERROR_STOP=on --file="$migration"
           done < "$migration_list"
       - run: make test-integration
+
+  subscription-acceptance:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: uv sync --frozen
+      - run: npm ci
+      - name: Install the pinned Chromium acceptance browser
+        run: npm exec --workspace @nev/web -- playwright install --with-deps chromium
+      - name: Run subscription database acceptance
+        run: npm --workspace @nev/web run test:integration
+      - name: Run subscription browser acceptance
+        run: npm --workspace @nev/web run test:e2e -- ai-subscription.spec.ts
