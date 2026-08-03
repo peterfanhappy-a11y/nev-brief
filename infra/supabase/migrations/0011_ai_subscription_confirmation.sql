@@ -89,3 +89,127 @@ $$;
 
 REVOKE ALL ON FUNCTION confirm_ai_subscription(text, timestamptz) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION confirm_ai_subscription(text, timestamptz) TO service_role;
+
+CREATE OR REPLACE FUNCTION check_ai_subscription_rate_limit(
+    ip_hash text,
+    email_hash text,
+    now_at timestamptz
+)
+RETURNS TABLE (
+    allowed boolean,
+    retry_after_seconds integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+STRICT
+SET search_path = ''
+AS $$
+DECLARE
+    ip_attempt public.ai_subscription_attempts%ROWTYPE;
+    email_attempt public.ai_subscription_attempts%ROWTYPE;
+    blocked_until_at timestamptz;
+BEGIN
+    -- Every call takes the IP row before the email row. The consistent lock
+    -- order and ON CONFLICT row locks make increments atomic under concurrency.
+    INSERT INTO public.ai_subscription_attempts AS attempt (
+        scope,
+        key_hash,
+        window_started_at,
+        attempt_count,
+        blocked_until
+    ) VALUES (
+        'ip',
+        ip_hash,
+        now_at,
+        1,
+        NULL
+    )
+    ON CONFLICT (scope, key_hash) DO UPDATE
+    SET window_started_at = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '15 minutes'
+                THEN EXCLUDED.window_started_at
+            ELSE attempt.window_started_at
+        END,
+        attempt_count = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '15 minutes'
+                THEN 1
+            ELSE attempt.attempt_count + 1
+        END,
+        blocked_until = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '15 minutes'
+                THEN NULL
+            WHEN attempt.blocked_until > EXCLUDED.window_started_at
+                THEN attempt.blocked_until
+            WHEN attempt.attempt_count + 1 > 5
+                THEN attempt.window_started_at + interval '15 minutes'
+            ELSE NULL
+        END
+    RETURNING attempt.* INTO ip_attempt;
+
+    INSERT INTO public.ai_subscription_attempts AS attempt (
+        scope,
+        key_hash,
+        window_started_at,
+        attempt_count,
+        blocked_until
+    ) VALUES (
+        'email',
+        email_hash,
+        now_at,
+        1,
+        NULL
+    )
+    ON CONFLICT (scope, key_hash) DO UPDATE
+    SET window_started_at = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '1 hour'
+                THEN EXCLUDED.window_started_at
+            ELSE attempt.window_started_at
+        END,
+        attempt_count = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '1 hour'
+                THEN 1
+            ELSE attempt.attempt_count + 1
+        END,
+        blocked_until = CASE
+            WHEN EXCLUDED.window_started_at >=
+                 attempt.window_started_at + interval '1 hour'
+                THEN NULL
+            WHEN attempt.blocked_until > EXCLUDED.window_started_at
+                THEN attempt.blocked_until
+            WHEN attempt.attempt_count + 1 > 3
+                THEN attempt.window_started_at + interval '1 hour'
+            ELSE NULL
+        END
+    RETURNING attempt.* INTO email_attempt;
+
+    allowed := NOT (
+        COALESCE(ip_attempt.blocked_until > now_at, false) OR
+        COALESCE(email_attempt.blocked_until > now_at, false)
+    );
+
+    IF allowed THEN
+        retry_after_seconds := 0;
+    ELSE
+        blocked_until_at := GREATEST(
+            COALESCE(ip_attempt.blocked_until, now_at),
+            COALESCE(email_attempt.blocked_until, now_at)
+        );
+        retry_after_seconds := GREATEST(
+            0,
+            CEIL(EXTRACT(EPOCH FROM (blocked_until_at - now_at)))::integer
+        );
+    END IF;
+
+    RETURN NEXT;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION check_ai_subscription_rate_limit(text, text, timestamptz)
+    FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION check_ai_subscription_rate_limit(text, text, timestamptz)
+    TO service_role;
