@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, Literal
 
 import psycopg
 
@@ -93,14 +93,24 @@ def fetch_article_content(conn: psycopg.Connection, article_id: str) -> str | No
 
 
 # ── ai_daily_briefs ───────────────────────────────────────────────────
+BriefStatus = Literal[
+    "generating",
+    "blocked",
+    "awaiting_approval",
+    "approved",
+    "published",
+]
+BriefWriteResult = Literal["written", "conflict"]
+
+
 def upsert_daily_brief(
     conn: psycopg.Connection,
     *,
     brief_date: date,
     content: dict[str, Any],
     model: str | None,
-) -> None:
-    """写入/更新当日简报文档。brief_date UNIQUE → 重跑覆盖。"""
+) -> BriefWriteResult:
+    """Write a draft unless the date is already approved or published."""
     sql = """
         INSERT INTO ai_daily_briefs (brief_date, content, model, generated_at)
         VALUES (%s, %s, %s, NOW())
@@ -108,10 +118,24 @@ def upsert_daily_brief(
         SET content = EXCLUDED.content,
             model = EXCLUDED.model,
             generated_at = NOW(),
-            updated_at = NOW();
+            updated_at = NOW()
+        WHERE ai_daily_briefs.status IN (%s, %s, %s)
+        RETURNING status;
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (brief_date, json.dumps(content, ensure_ascii=False), model))
+        cur.execute(
+            sql,
+            (
+                brief_date,
+                json.dumps(content, ensure_ascii=False),
+                model,
+                "generating",
+                "blocked",
+                "awaiting_approval",
+            ),
+        )
+        row = cur.fetchone()
+    return "written" if row is not None else "conflict"
 
 
 def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict[str, Any] | None:
@@ -119,6 +143,41 @@ def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict[str, Any] | 
         cur.execute("SELECT content FROM ai_daily_briefs WHERE brief_date = %s;", (brief_date,))
         row = cur.fetchone()
     return row[0] if row else None
+
+
+def fetch_public_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> dict[str, Any] | None:
+    """Return content only when the requested brief has been published."""
+    sql = """
+        SELECT content
+        FROM ai_daily_briefs
+        WHERE brief_date = %s
+          AND status = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, "published"))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def list_public_briefs(
+    conn: psycopg.Connection,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return published brief content from newest publication to oldest."""
+    sql = """
+        SELECT content
+        FROM ai_daily_briefs
+        WHERE status = %s
+        ORDER BY published_at DESC, brief_date DESC
+        LIMIT %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, ("published", limit))
+        rows = cur.fetchall()
+    return [row[0] for row in rows]
 
 
 def fetch_previous_brief(conn: psycopg.Connection, before: date) -> dict[str, Any] | None:
