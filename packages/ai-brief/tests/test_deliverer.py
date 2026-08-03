@@ -13,8 +13,14 @@ def _pending() -> PendingAiDelivery:
     return PendingAiDelivery(
         delivery_id="d-1", subscriber_id="sub-1", email="a@x.com",
         brief_date=date(2026, 7, 2), subject="今日主题",
-        content_html="<html>",
-        content_text="text",
+        content_html=(
+            '<a href="https://aivizens.test/unsubscribe?token=tok-1&product=ai">'
+            "unsubscribe</a>"
+        ),
+        content_text=(
+            "unsubscribe: "
+            "https://aivizens.test/unsubscribe?token=tok-1&product=ai"
+        ),
         unsubscribe_token="tok-1",  # noqa: S106 - inert test value
     )
 
@@ -22,6 +28,7 @@ def _pending() -> PendingAiDelivery:
 def test_send_one_success() -> None:
     conn = MagicMock()
     with patch.object(deliverer, "send_email", return_value="re_123") as mock_send, \
+         patch("ai_brief.config.WEB_BASE_URL", "https://aivizens.test"), \
          patch.object(storage, "mark_sent") as mark_sent:
         ok = deliverer._send_one(conn, _pending())
     assert ok is True
@@ -30,7 +37,13 @@ def test_send_one_success() -> None:
     kwargs = mock_send.call_args.kwargs
     assert kwargs["idempotency_key"] == "ai-2026-07-02-sub-1"
     assert kwargs["subject"] == "今日主题"
-    assert "product=ai" in kwargs["unsubscribe_url"]
+    assert kwargs["one_click_unsubscribe_url"] == (
+        "https://aivizens.test/api/unsubscribe?token=tok-1&product=ai"
+    )
+    assert "https://aivizens.test/unsubscribe?token=tok-1&product=ai" in kwargs["html"]
+    assert "https://aivizens.test/unsubscribe?token=tok-1&product=ai" in kwargs["text"]
+    assert "/api/unsubscribe" not in kwargs["html"]
+    assert "/api/unsubscribe" not in kwargs["text"]
     conn.commit.assert_called()
 
 

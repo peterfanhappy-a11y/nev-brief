@@ -65,7 +65,7 @@ def send_email(
     html: str,
     text: str,
     idempotency_key: str,
-    unsubscribe_url: str,
+    one_click_unsubscribe_url: str,
 ) -> str:
     """发送一封邮件，返回 Resend email id。"""
     _configure_sdk()
@@ -76,7 +76,7 @@ def send_email(
         "html": html,
         "text": text,
         "headers": {
-            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe": f"<{one_click_unsubscribe_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             "Idempotency-Key": idempotency_key,
         },
