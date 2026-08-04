@@ -15,6 +15,8 @@ export default function robots(): MetadataRoute.Robots {
           "/rate",
           "/api",
           "/preview",
+          "/manage",
+          "/subscribed",
         ],
       },
     ],

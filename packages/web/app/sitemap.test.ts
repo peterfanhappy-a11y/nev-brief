@@ -83,6 +83,8 @@ describe("AIVIZENS public discovery metadata", () => {
             "/rate",
             "/api",
             "/preview",
+            "/manage",
+            "/subscribed",
           ],
         },
       ],
