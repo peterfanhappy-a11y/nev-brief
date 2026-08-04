@@ -9,11 +9,154 @@ claim_pending_deliveries 用 FOR UPDATE SKIP LOCKED（同 nev_delivery.storage�
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
+from uuid import UUID
 
 import psycopg
+
+DigestRunStatus = Literal["running", "blocked", "awaiting_approval", "failed", "completed"]
+_DIGEST_METADATA_FIELDS = (
+    "kind",
+    "message_id",
+    "subject",
+    "received_at",
+    "requested_date",
+    "matched_date",
+    "used_fallback",
+)
+_ATTACHMENT_METADATA_FIELDS = ("filename", "content_type", "size_bytes")
+_SECRET_IN_ERROR = re.compile(
+    r"(?i)\b(password|passwd|token|secret|credential|api[_-]?key)\s*[:=]\s*[^\s,;]+"
+)
+_URI_USERINFO_IN_ERROR = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@")
+
+
+class DigestRunAlreadyFinishedError(RuntimeError):
+    """Raised when a terminal digest run is completed a second time."""
+
+
+def _safe_digest_run_payloads(
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+) -> tuple[dict[str, dict[str, Any] | None], dict[str, int]]:
+    safe_sources: dict[str, dict[str, Any] | None] = {}
+    parse_counts: dict[str, int] = {}
+    for source, metadata in digest_sources.items():
+        if metadata is None:
+            safe_sources[source] = None
+            continue
+
+        safe_metadata = {
+            field: metadata[field]
+            for field in _DIGEST_METADATA_FIELDS
+            if field in metadata
+        }
+        attachments = metadata.get("attachments")
+        if isinstance(attachments, (list, tuple)):
+            safe_metadata["attachments"] = [
+                {
+                    field: attachment[field]
+                    for field in _ATTACHMENT_METADATA_FIELDS
+                    if field in attachment
+                }
+                for attachment in attachments
+                if isinstance(attachment, Mapping)
+            ]
+        safe_sources[source] = safe_metadata
+
+        parse_count = metadata.get("parse_count")
+        if isinstance(parse_count, int) and not isinstance(parse_count, bool) and parse_count >= 0:
+            parse_counts[source] = parse_count
+    return safe_sources, parse_counts
+
+
+def _safe_error_summary(error_summary: str | None) -> str | None:
+    if error_summary is None:
+        return None
+    first_line = error_summary.splitlines()[0].strip()
+    if not first_line:
+        return None
+    without_uri_credentials = _URI_USERINFO_IN_ERROR.sub(r"\1[REDACTED]@", first_line)
+    return _SECRET_IN_ERROR.sub(
+        lambda match: f"{match.group(1)}=[REDACTED]",
+        without_uri_credentials,
+    )[:500]
+
+
+def start_digest_run(
+    conn: psycopg.Connection,
+    brief_date: date,
+    source_adapter: str,
+) -> UUID:
+    """Create exactly one durable identity for a digest pipeline invocation."""
+    sql = """
+        INSERT INTO ai_digest_runs (brief_date, source_adapter, status, started_at)
+        VALUES (%s, %s, %s, NOW())
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, source_adapter, "running"))
+        row = cur.fetchone()
+    if row is None:  # pragma: no cover - PostgreSQL RETURNING guarantees a row
+        raise RuntimeError("digest run insert returned no id")
+    run_id = row[0]
+    return run_id if isinstance(run_id, UUID) else UUID(str(run_id))
+
+
+def finish_digest_run(
+    conn: psycopg.Connection,
+    run_id: UUID,
+    *,
+    status: DigestRunStatus,
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+    quality_report: Mapping[str, Any] | None,
+    stage: str | None,
+    error_summary: str | None,
+) -> None:
+    """Finish a running invocation once, persisting only operational metadata."""
+    if status == "running":
+        raise ValueError("finished digest run requires a terminal status")
+    safe_sources, parse_counts = _safe_digest_run_payloads(digest_sources)
+    failed_stage = stage if status in ("blocked", "failed") else None
+    sql = """
+        UPDATE ai_digest_runs
+        SET status = %s,
+            digest_sources = %s::jsonb,
+            parse_counts = %s::jsonb,
+            quality_report = %s::jsonb,
+            failed_stage = %s,
+            error_summary = %s,
+            finished_at = NOW(),
+            duration_ms = GREATEST(
+                0,
+                ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint
+            ),
+            updated_at = NOW()
+        WHERE id = %s
+          AND status = 'running'
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                status,
+                json.dumps(safe_sources, ensure_ascii=False),
+                json.dumps(parse_counts, ensure_ascii=False),
+                json.dumps(quality_report, ensure_ascii=False)
+                if quality_report is not None
+                else None,
+                failed_stage,
+                _safe_error_summary(error_summary),
+                run_id,
+            ),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise DigestRunAlreadyFinishedError(f"digest run is missing or already finished: {run_id}")
 
 
 # ── ai_articles ───────────────────────────────────────────────────────
