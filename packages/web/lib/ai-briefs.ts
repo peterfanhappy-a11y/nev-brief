@@ -210,7 +210,9 @@ export async function listPublishedBriefs(
     .order("brief_date", { ascending: false })
     .limit(listLimit(limit));
 
-  if (error || !Array.isArray(data)) return [];
+  if (error || !Array.isArray(data)) {
+    throw new Error("Published brief list unavailable");
+  }
 
   return data.flatMap((row) => {
     const brief = parsePublishedBrief(row);

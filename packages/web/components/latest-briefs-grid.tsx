@@ -26,12 +26,12 @@ function BriefCard({ brief }: { brief: AiBriefSummary }) {
   const modules = brief.modules.filter((module) => module.trim().length > 0);
 
   return (
-    <article className="group overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+    <article className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
       <div
         className={`h-1.5 bg-gradient-to-r ${moduleAccent(modules)}`}
         aria-hidden="true"
       />
-      <div className="flex h-full flex-col p-5">
+      <div className="flex flex-1 flex-col p-5">
         <time
           dateTime={brief.briefDate}
           className="mb-3 text-xs font-medium tracking-wide text-gray-400"
@@ -66,8 +66,10 @@ function BriefCard({ brief }: { brief: AiBriefSummary }) {
 
 export default function LatestBriefsGrid({
   briefs,
+  unavailable = false,
 }: {
   briefs: AiBriefSummary[];
+  unavailable?: boolean;
 }) {
   const visibleBriefs = briefs.slice(0, 6);
 
@@ -80,7 +82,22 @@ export default function LatestBriefsGrid({
         </p>
       </div>
 
-      {visibleBriefs.length > 0 ? (
+      {unavailable ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 px-6 py-12 text-center">
+          <h3 className="text-xl font-semibold text-gray-900">
+            日报暂时无法加载
+          </h3>
+          <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-gray-600">
+            请稍后再试。你仍然可以订阅，日报恢复后会直接发送到邮箱。
+          </p>
+          <Link
+            href="#subscribe"
+            className="mt-6 inline-flex rounded-md bg-gray-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            免费订阅
+          </Link>
+        </div>
+      ) : visibleBriefs.length > 0 ? (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {visibleBriefs.map((brief) => (
             <BriefCard key={brief.briefDate} brief={brief} />

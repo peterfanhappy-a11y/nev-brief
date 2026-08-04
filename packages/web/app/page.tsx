@@ -3,7 +3,7 @@ import Footer from "@/components/footer";
 import AiSubscribeForm from "@/components/ai-subscribe-form";
 import LatestBriefsGrid from "@/components/latest-briefs-grid";
 import { BrandIcon } from "@/components/brand-icon";
-import { listPublishedBriefs } from "@/lib/ai-briefs";
+import { listPublishedBriefs, type AiBriefSummary } from "@/lib/ai-briefs";
 import { subscriptionsEnabled } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,15 @@ const LOGO_HEIGHT = 36;
 
 export default async function AiTrendsHome() {
   const signupEnabled = subscriptionsEnabled();
-  const briefs = await listPublishedBriefs(6);
+  let briefs: AiBriefSummary[] = [];
+  let briefsUnavailable = false;
+
+  try {
+    briefs = await listPublishedBriefs(6);
+  } catch {
+    briefsUnavailable = true;
+    console.error("[homepage] published briefs unavailable");
+  }
 
   return (
     <main className="min-h-screen bg-white">
@@ -66,7 +74,7 @@ export default async function AiTrendsHome() {
         </div>
       </section>
 
-      <LatestBriefsGrid briefs={briefs} />
+      <LatestBriefsGrid briefs={briefs} unavailable={briefsUnavailable} />
 
       <Footer />
     </main>

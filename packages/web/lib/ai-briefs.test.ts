@@ -210,6 +210,19 @@ describe("published brief queries", () => {
     expect(query.limit).toHaveBeenCalledWith(6);
   });
 
+  it("rejects list query failures without exposing the raw database error", async () => {
+    const query = new QueryBuilder({
+      data: null,
+      error: { message: "connection failed with secret-token-123" },
+    });
+    useQueries(query);
+
+    const request = listPublishedBriefs();
+
+    await expect(request).rejects.toThrow("Published brief list unavailable");
+    await expect(request).rejects.not.toThrow("secret-token-123");
+  });
+
   it("returns a complete brief and sanitizes optional non-HTTPS URLs", async () => {
     const stored = content({
       ai_masters: section("product_tools"),

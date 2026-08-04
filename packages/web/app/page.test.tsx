@@ -39,6 +39,7 @@ describe("AIVIZENS homepage", () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
   it("loads the latest six published summaries into the daily grid", async () => {
@@ -86,5 +87,27 @@ describe("AIVIZENS homepage", () => {
     expect(
       screen.getByText(/加入 10 万\+ 专业人士/),
     ).toBeInTheDocument();
+  });
+
+  it("fails closed with a distinct unavailable state and a safe diagnostic", async () => {
+    mocks.listPublishedBriefs.mockRejectedValueOnce(
+      new Error("database failed with secret-token-123"),
+    );
+    const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await renderHomepage();
+
+    expect(
+      screen.getByRole("heading", { name: "日报暂时无法加载" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/第一期日报正在准备中/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/secret-token-123/)).not.toBeInTheDocument();
+    expect(diagnostic).toHaveBeenCalledTimes(1);
+    expect(diagnostic).toHaveBeenCalledWith(
+      "[homepage] published briefs unavailable",
+    );
+    expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(
+      "secret-token-123",
+    );
   });
 });
