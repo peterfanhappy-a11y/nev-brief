@@ -321,6 +321,55 @@ def test_finish_digest_run_preserves_only_controlled_error_code() -> None:
     assert cursor.execute.call_args.args[1][5] == "source_timeout"
 
 
+@pytest.mark.parametrize("unknown_summary", ["hunter2", "alice"])
+def test_finish_digest_run_rejects_unknown_identifier_shaped_error_summary(
+    unknown_summary: str,
+) -> None:
+    """Identifier syntax alone must not turn unknown caller text into a safe error code."""
+    run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")
+    connection, cursor = _connection(fetchone=(run_id,))
+
+    storage.finish_digest_run(
+        connection,
+        run_id,
+        status="failed",
+        digest_sources={},
+        quality_report=None,
+        stage="fetch",
+        error_summary=unknown_summary,
+    )
+
+    assert cursor.execute.call_args.args[1][5] == "digest run failed"
+
+
+def test_finish_digest_run_drops_unknown_issue_code_path_and_metric_key() -> None:
+    """Catalog membership, not harmless-looking syntax, controls quality persistence."""
+    run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")
+    connection, cursor = _connection(fetchone=(run_id,))
+
+    storage.finish_digest_run(
+        connection,
+        run_id,
+        status="failed",
+        digest_sources={},
+        quality_report={
+            "passed": False,
+            "blockers": [{"code": "hunter2", "message": "ignored", "path": "alice"}],
+            "warnings": [],
+            "metrics": {"hunter2": 1},
+        },
+        stage="quality",
+        error_summary="quality_gate_failed",
+    )
+
+    assert json.loads(cursor.execute.call_args.args[1][3]) == {
+        "passed": False,
+        "blockers": [],
+        "warnings": [],
+        "metrics": {},
+    }
+
+
 @pytest.mark.parametrize("stage", [None, "", "   "])
 def test_finish_failed_digest_run_requires_non_empty_stage(stage: str | None) -> None:
     """A failed run without its failed stage destroys the operational evidence."""
