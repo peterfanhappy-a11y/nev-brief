@@ -33,6 +33,7 @@ class QueryBuilder implements PromiseLike<QueryResponse> {
     (_column: string, _options: { ascending: boolean }) => this,
   );
   readonly limit = vi.fn((_limit: number) => this);
+  readonly range = vi.fn((_from: number, _to: number) => this);
   readonly maybeSingle = vi.fn(async () => this.response);
 
   constructor(private readonly response: QueryResponse) {}
@@ -263,6 +264,74 @@ describe("published brief queries", () => {
       ascending: false,
     });
     expect(query.limit).not.toHaveBeenCalled();
+    expect(query.range).toHaveBeenCalledWith(0, 999);
+  });
+
+  it("paginates published dates without changing their global order", async () => {
+    const firstPageRows = Array.from({ length: 1000 }, (_, index) => ({
+      brief_date: index === 0 ? "2026-08-03" : "2026-08-02",
+      published_at:
+        index === 0
+          ? "2026-08-03T01:30:00.000Z"
+          : "2026-08-02T01:30:00.000Z",
+    }));
+    const firstPage = new QueryBuilder({ data: firstPageRows, error: null });
+    const secondPage = new QueryBuilder({
+      data: [
+        {
+          brief_date: "2026-08-01",
+          published_at: "2026-08-01T01:30:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    useQueries(firstPage, secondPage);
+
+    const result = await listPublishedBriefDates();
+
+    expect(result).toHaveLength(1001);
+    expect(result[0]).toEqual({
+      briefDate: "2026-08-03",
+      publishedAt: "2026-08-03T01:30:00.000Z",
+    });
+    expect(result[999]).toEqual({
+      briefDate: "2026-08-02",
+      publishedAt: "2026-08-02T01:30:00.000Z",
+    });
+    expect(result[1000]).toEqual({
+      briefDate: "2026-08-01",
+      publishedAt: "2026-08-01T01:30:00.000Z",
+    });
+    expect(firstPage.range).toHaveBeenCalledWith(0, 999);
+    expect(secondPage.range).toHaveBeenCalledWith(1000, 1999);
+    for (const query of [firstPage, secondPage]) {
+      expect(query.order).toHaveBeenNthCalledWith(1, "published_at", {
+        ascending: false,
+      });
+      expect(query.order).toHaveBeenNthCalledWith(2, "brief_date", {
+        ascending: false,
+      });
+    }
+  });
+
+  it("sanitizes a later discovery-page failure", async () => {
+    const firstPage = new QueryBuilder({
+      data: Array.from({ length: 1000 }, () => ({
+        brief_date: "2026-08-03",
+        published_at: "2026-08-03T01:30:00.000Z",
+      })),
+      error: null,
+    });
+    const secondPage = new QueryBuilder({
+      data: null,
+      error: { message: "page two failed with service-role-secret" },
+    });
+    useQueries(firstPage, secondPage);
+
+    const request = listPublishedBriefDates();
+
+    await expect(request).rejects.toThrow("Published brief dates unavailable");
+    await expect(request).rejects.not.toThrow("service-role-secret");
   });
 
   it("rejects discovery outages with a fixed non-sensitive error", async () => {

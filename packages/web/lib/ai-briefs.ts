@@ -5,6 +5,7 @@ import { z } from "zod";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 const MAX_PUBLISHED_BRIEFS = 6;
+const PUBLISHED_DATE_PAGE_SIZE = 1000;
 const BRIEF_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function isHttpsUrl(value: string): boolean {
@@ -245,18 +246,27 @@ export async function listPublishedBriefDates(): Promise<
   AiPublishedBriefDate[]
 > {
   try {
-    const { data, error } = await getSupabaseAdmin()
-      .from("ai_daily_briefs")
-      .select("brief_date, published_at")
-      .eq("status", "published")
-      .order("published_at", { ascending: false })
-      .order("brief_date", { ascending: false });
+    const admin = getSupabaseAdmin();
+    const rows: unknown[] = [];
 
-    if (error || !Array.isArray(data)) {
-      throw new Error("Published brief date query failed");
+    for (let offset = 0; ; offset += PUBLISHED_DATE_PAGE_SIZE) {
+      const { data, error } = await admin
+        .from("ai_daily_briefs")
+        .select("brief_date, published_at")
+        .eq("status", "published")
+        .order("published_at", { ascending: false })
+        .order("brief_date", { ascending: false })
+        .range(offset, offset + PUBLISHED_DATE_PAGE_SIZE - 1);
+
+      if (error || !Array.isArray(data)) {
+        throw new Error("Published brief date query failed");
+      }
+
+      rows.push(...data);
+      if (data.length < PUBLISHED_DATE_PAGE_SIZE) break;
     }
 
-    return data.flatMap((row) => {
+    return rows.flatMap((row) => {
       const parsed = PublishedBriefDateRowSchema.safeParse(row);
       if (!parsed.success) return [];
 

@@ -10,7 +10,18 @@ export const contentType = "image/png";
 export const size = { width: 1200, height: 630 };
 export const alt = "AIVIZENS AI 日报";
 
+// These bounds keep worst-case full-width prose within the fixed 1200×630
+// layout at the font sizes below. The ellipsis is included in each bound.
+const SUBJECT_MAX_CODE_POINTS = 32;
+const EDITORIAL_MAX_CODE_POINTS = 96;
+
 type Params = Promise<{ date: string }>;
+
+function fitCodePoints(value: string, maxCodePoints: number): string {
+  const codePoints = Array.from(value);
+  if (codePoints.length <= maxCodePoints) return value;
+  return `${codePoints.slice(0, maxCodePoints - 1).join("")}…`;
+}
 
 export default async function OpenGraphImage({
   params,
@@ -23,16 +34,71 @@ export default async function OpenGraphImage({
   const brief = await getPublishedBrief(date);
   if (!brief) notFound();
 
+  const subject = fitCodePoints(
+    brief.content.subject,
+    SUBJECT_MAX_CODE_POINTS,
+  );
+  const editorial = fitCodePoints(
+    brief.content.editorial,
+    EDITORIAL_MAX_CODE_POINTS,
+  );
   const textPayload = [
     "AIVIZENS",
     brief.briefDate,
-    brief.content.subject,
-    brief.content.editorial,
+    subject,
+    editorial,
   ].join("");
-  const [regularFont, boldFont] = await Promise.all([
-    loadCjkFont(400, textPayload),
-    loadCjkFont(700, textPayload),
-  ]);
+  let regularFont: ArrayBuffer;
+  let boldFont: ArrayBuffer;
+
+  try {
+    [regularFont, boldFont] = await Promise.all([
+      loadCjkFont(400, textPayload),
+      loadCjkFont(700, textPayload),
+    ]);
+  } catch {
+    console.error("[daily-og] CJK font unavailable");
+    return new ImageResponse(
+      (
+        <div
+          style={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 32,
+            color: "#111827",
+            background:
+              "linear-gradient(135deg, #eef2ff 0%, #ffffff 52%, #f5f3ff 100%)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              fontSize: 72,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "#4f46e5",
+            }}
+          >
+            AIVIZENS
+          </div>
+          <div
+            style={{
+              display: "flex",
+              fontSize: 36,
+              color: "#6b7280",
+            }}
+          >
+            {brief.briefDate}
+          </div>
+        </div>
+      ),
+      size,
+    );
+  }
 
   return new ImageResponse(
     (
@@ -96,7 +162,7 @@ export default async function OpenGraphImage({
               letterSpacing: "-0.02em",
             }}
           >
-            {brief.content.subject}
+            {subject}
           </div>
           <div
             style={{
@@ -107,7 +173,7 @@ export default async function OpenGraphImage({
               color: "#4b5563",
             }}
           >
-            {brief.content.editorial}
+            {editorial}
           </div>
         </div>
       </div>

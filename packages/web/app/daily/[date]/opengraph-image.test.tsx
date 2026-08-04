@@ -149,6 +149,40 @@ describe("daily archive OpenGraph image", () => {
     });
   });
 
+  it("fits the maximum valid Unicode prose by code point and subsets exactly what it displays", async () => {
+    const maxSubject = "题".repeat(30) + "🚀" + "尾".repeat(12);
+    const maxEditorial = "编".repeat(94) + "🧠" + "尾".repeat(124);
+    const displayedSubject = "题".repeat(30) + "🚀…";
+    const displayedEditorial = "编".repeat(94) + "🧠…";
+    expect(maxSubject).toHaveLength(44);
+    expect(maxEditorial).toHaveLength(220);
+    mocks.getPublishedBrief.mockResolvedValueOnce({
+      ...PUBLISHED_BRIEF,
+      content: {
+        ...PUBLISHED_BRIEF.content,
+        subject: maxSubject,
+        editorial: maxEditorial,
+      },
+    });
+
+    await OGImage({ params: params("2026-08-03") });
+
+    const [element] = mocks.imageResponse.mock.calls[0] as [React.ReactElement];
+    render(element);
+    expect(screen.getByText(displayedSubject)).toBeInTheDocument();
+    expect(screen.getByText(displayedEditorial)).toBeInTheDocument();
+    expect(screen.queryByText(maxSubject)).not.toBeInTheDocument();
+    expect(screen.queryByText(maxEditorial)).not.toBeInTheDocument();
+    expect(Array.from(displayedSubject)).toHaveLength(32);
+    expect(Array.from(displayedEditorial)).toHaveLength(96);
+    expect(`${displayedSubject}${displayedEditorial}`).not.toContain("�");
+
+    const displayedText =
+      `AIVIZENS2026-08-03${displayedSubject}${displayedEditorial}`;
+    expect(mocks.loadCjkFont).toHaveBeenNthCalledWith(1, 400, displayedText);
+    expect(mocks.loadCjkFont).toHaveBeenNthCalledWith(2, 700, displayedText);
+  });
+
   it.each(["2026-8-03", "2026-02-29"])(
     "rejects invalid archive date %s before reading content",
     async (date) => {
@@ -179,5 +213,58 @@ describe("daily archive OpenGraph image", () => {
     ).rejects.toThrow("Published brief unavailable");
     expect(mocks.notFound).not.toHaveBeenCalled();
     expect(mocks.imageResponse).not.toHaveBeenCalled();
+  });
+
+  it("returns a safe ASCII fallback on font failure and retries full rendering later", async () => {
+    const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.loadCjkFont.mockReset();
+    mocks.loadCjkFont
+      .mockRejectedValueOnce(
+        new Error("font request exposed secret-font-token"),
+      )
+      .mockRejectedValueOnce(
+        new Error("font request exposed secret-font-token"),
+      )
+      .mockResolvedValueOnce(new ArrayBuffer(4))
+      .mockResolvedValueOnce(new ArrayBuffer(8));
+
+    await OGImage({ params: params("2026-08-03") });
+
+    const [fallbackElement, fallbackOptions] = mocks.imageResponse.mock
+      .calls[0] as [React.ReactElement, Record<string, unknown>];
+    render(fallbackElement);
+    expect(screen.getByText("AIVIZENS")).toBeInTheDocument();
+    expect(screen.getByText("2026-08-03")).toBeInTheDocument();
+    expect(screen.queryByText("真实日报标题")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("只呈现经过发布边界验证的编辑寄语。"),
+    ).not.toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/^[\x00-\x7F]*$/);
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(JSON.stringify(fallbackElement)).not.toContain(
+      "https://cdn.example.com/should-not-load.png",
+    );
+    expect(fallbackOptions).toEqual({ width: 1200, height: 630 });
+    expect(diagnostic.mock.calls).toEqual([
+      ["[daily-og] CJK font unavailable"],
+    ]);
+    expect(diagnostic.mock.calls.flat().join("\n")).not.toContain(
+      "secret-font-token",
+    );
+
+    cleanup();
+    await OGImage({ params: params("2026-08-03") });
+
+    const [fullElement, fullOptions] = mocks.imageResponse.mock.calls[1] as [
+      React.ReactElement,
+      { fonts?: unknown[] },
+    ];
+    render(fullElement);
+    expect(screen.getByText("真实日报标题")).toBeInTheDocument();
+    expect(
+      screen.getByText("只呈现经过发布边界验证的编辑寄语。"),
+    ).toBeInTheDocument();
+    expect(fullOptions.fonts).toHaveLength(2);
+    expect(mocks.loadCjkFont).toHaveBeenCalledTimes(4);
   });
 });
