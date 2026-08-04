@@ -1,0 +1,7 @@
+{
+  "secret": "preview-fixture-secret-0123456789abcdef",
+  "date": "2026-08-04",
+  "now": 1785811800,
+  "expires": 1785812100,
+  "signature": "04fbdacc850ffea3560dc52c7a26c7ffb863102d413fd13bc2c7acabb4054b1e"
+}
