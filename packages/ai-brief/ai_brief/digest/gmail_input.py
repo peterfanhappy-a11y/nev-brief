@@ -34,7 +34,7 @@ def _subject_date(subject: str) -> date | None:
 
 
 def _is_recent(email: DigestEmail, *, hours: float) -> bool:
-    received_at = email.date
+    received_at = email.received_at
     if received_at.tzinfo is None:
         received_at = received_at.replace(tzinfo=UTC)
     return received_at >= datetime.now(UTC) - timedelta(hours=hours)
@@ -86,7 +86,7 @@ def _envelope(
         kind=kind,
         message_id=email.message_id,
         subject=email.subject,
-        received_at=email.date,
+        received_at=email.received_at,
         requested_date=requested_date,
         matched_date=_subject_date(email.subject),
         used_fallback=used_fallback,

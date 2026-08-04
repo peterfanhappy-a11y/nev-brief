@@ -32,7 +32,7 @@ def _email(
     return DigestEmail(
         message_id=f"<{kind}@gmail.test>",
         subject=f"{PREFIXES[kind]}{subject_date.isoformat()}",
-        date=received_at or datetime(2026, 8, 4, 8, tzinfo=UTC),
+        received_at=received_at or datetime(2026, 8, 4, 8, tzinfo=UTC),
         text=f"{kind} plain body",
         html=f"<p>{kind} html body</p>",
         attachments=attachments or [],
@@ -192,7 +192,12 @@ def test_parse_message_preserves_gmail_message_id() -> None:
     message["Date"] = "Tue, 04 Aug 2026 08:00:00 +0000"
     message.set_content("body")
 
-    assert parse_message(message.as_bytes()).message_id == "<source-message@gmail.test>"
+    received_at = datetime(2026, 8, 4, 9, tzinfo=UTC)
+
+    parsed = parse_message(message.as_bytes(), received_at=received_at)
+
+    assert parsed.message_id == "<source-message@gmail.test>"
+    assert parsed.received_at == received_at
 
 
 async def test_generation_consumes_envelopes_without_fetching_gmail() -> None:

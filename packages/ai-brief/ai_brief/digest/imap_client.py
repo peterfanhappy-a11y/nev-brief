@@ -3,13 +3,14 @@
 用应用专用密码（AI_GMAIL_IMAP_USER/PASSWORD）只读拉取。MIME 解析（parse_message）
 是纯函数便于单测；fetch_latest 封装 imaplib 网络部分。
 
-选「最新一封」：同一 subject 可能有重复/测试封，按邮件 Date 取最新。
+选「最新一封」：同一 subject 可能有重复/测试封，按 Gmail INTERNALDATE 取最新。
 """
 from __future__ import annotations
 
 import email
 import imaplib
 import os
+import re
 import socket
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -100,7 +101,8 @@ class Attachment:
 @dataclass
 class DigestEmail:
     subject: str
-    date: datetime
+    received_at: datetime
+    sent_at: datetime | None = None
     message_id: str = ""
     html: str | None = None
     text: str | None = None
@@ -119,17 +121,22 @@ def _decode(value: str | None) -> str:
         return value
 
 
-def parse_message(raw: bytes) -> DigestEmail:
+def parse_message(raw: bytes, *, received_at: datetime) -> DigestEmail:
     """把 RFC822 原始字节解析成 DigestEmail（纯函数）。"""
     msg: Message = email.message_from_bytes(raw)
     message_id = _decode(msg.get("Message-ID")).strip()
     subject = _decode(msg.get("Subject"))
-    try:
-        dt = parsedate_to_datetime(cast(str, msg.get("Date")))
-    except (TypeError, ValueError):
-        dt = datetime.now(UTC)
-    if dt is not None and dt.tzinfo is None:
-        dt = dt.replace(tzinfo=UTC)
+    sent_at: datetime | None = None
+    sent_header = msg.get("Date")
+    if sent_header:
+        with suppress(TypeError, ValueError):
+            sent_at = parsedate_to_datetime(sent_header)
+    if sent_at is not None and sent_at.tzinfo is None:
+        sent_at = sent_at.replace(tzinfo=UTC)
+    if received_at.tzinfo is None:
+        received_at = received_at.replace(tzinfo=UTC)
+    else:
+        received_at = received_at.astimezone(UTC)
 
     html: str | None = None
     text: str | None = None
@@ -169,7 +176,8 @@ def parse_message(raw: bytes) -> DigestEmail:
 
     return DigestEmail(
         subject=subject,
-        date=dt,
+        received_at=received_at,
+        sent_at=sent_at,
         message_id=message_id,
         html=html,
         text=text,
@@ -179,12 +187,30 @@ def parse_message(raw: bytes) -> DigestEmail:
 
 def _date_key(text: str) -> tuple[int, int, int] | None:
     """从 subject 尾部抽 YYYY-M-D → (y,m,d)，容忍零填充漂移（2026-07-08 与 2026-7-8 等价）。"""
-    import re
-
     m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})\s*$", text.strip())
     if not m:
         return None
     return int(m.group(1)), int(m.group(2)), int(m.group(3))
+
+
+_INTERNALDATE_RE = re.compile(br'INTERNALDATE "(?P<value>[^"]+)"')
+
+
+def _internaldate(response: bytes) -> datetime | None:
+    """Parse the trusted IMAP receipt timestamp from a FETCH response."""
+    match = _INTERNALDATE_RE.search(response)
+    if match is None:
+        return None
+    try:
+        value = match.group("value").decode("ascii")
+        parsed = parsedate_to_datetime(value)
+    except (UnicodeDecodeError, TypeError, ValueError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def fetch_latest(
@@ -202,7 +228,7 @@ def fetch_latest(
     """取 from=sender、subject 以 subject_prefix 开头、且日期匹配 date_str 的最新一封。
 
     date_str=None → 不按日期过滤，取该前缀最新一封（用于日期标签漂移的源做回退）。
-    within_hours 设置时，忽略 Date 早于该窗口的邮件。
+    within_hours 设置时，忽略 Gmail INTERNALDATE 早于该窗口的邮件。
     日期匹配容忍零填充漂移（上游 events 用 2026-07-08、builder 用 2026-7-8）。无匹配返回 None。
     """
     host = host or config.imap_host()
@@ -227,13 +253,13 @@ def fetch_latest(
             return None
         uids = data[0].split()
 
-        # 先只取 header（小），挑出日期匹配且最新的那封，再单独整封下载（省带宽/时延）
+        # 先只取 header + INTERNALDATE（小），按服务器收件时间挑最新，再下载整封。
         best_uid: bytes | None = None
-        best_dt: datetime | None = None
+        best_received_at: datetime | None = None
         for uid in uids:
             typ, hd = imap.fetch(
                 cast(str, uid),
-                "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE MESSAGE-ID)])",
+                "(INTERNALDATE BODY.PEEK[HEADER.FIELDS (SUBJECT DATE MESSAGE-ID)])",
             )
             if typ != "OK" or not hd or not hd[0]:
                 continue
@@ -244,16 +270,14 @@ def fetch_latest(
                 continue
             if target is not None and _date_key(subj) != target:
                 continue
-            try:
-                dt = parsedate_to_datetime(cast(str, hdr.get("Date")))
-            except (TypeError, ValueError):
-                dt = datetime.now(UTC)
-            if dt is not None and dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            if oldest_ok is not None and dt < oldest_ok:
+            received_at = _internaldate(cast(tuple[bytes, bytes], hd[0])[0])
+            if received_at is None:
+                log.warning("ai_imap.internaldate_missing", uid=uid)
                 continue
-            if best_dt is None or dt > best_dt:
-                best_dt, best_uid = dt, uid
+            if oldest_ok is not None and received_at < oldest_ok:
+                continue
+            if best_received_at is None or received_at > best_received_at:
+                best_received_at, best_uid = received_at, uid
 
         if best_uid is None:
             log.warning("ai_imap.no_date_match", prefix=subject_prefix, date=date_str)
@@ -264,10 +288,16 @@ def fetch_latest(
             log.warning("ai_imap.fetch_body_failed", prefix=subject_prefix, date=date_str)
             return None
         message_data = cast(tuple[bytes, bytes], msg_data[0])[1]
-        best = parse_message(message_data)
+        if best_received_at is None:
+            log.warning("ai_imap.internaldate_missing", uid=best_uid)
+            return None
+        best = parse_message(message_data, received_at=best_received_at)
         log.info(
             "ai_imap.fetched",
-            subject=best.subject, date=str(best.date), attachments=len(best.attachments),
+            subject=best.subject,
+            received_at=str(best.received_at),
+            sent_at=str(best.sent_at),
+            attachments=len(best.attachments),
         )
         return best
     finally:
