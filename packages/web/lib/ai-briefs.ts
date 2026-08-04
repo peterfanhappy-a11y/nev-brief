@@ -155,6 +155,11 @@ export interface AiPublishedBrief {
   publishedAt: string;
 }
 
+export interface AiPublishedBriefDate {
+  briefDate: string;
+  publishedAt: string;
+}
+
 const PublishedBriefRowSchema = z.object({
   brief_date: BriefDateSchema,
   content: AiBriefContentSchema,
@@ -163,6 +168,11 @@ const PublishedBriefRowSchema = z.object({
 
 const NeighborRowSchema = z.object({
   brief_date: BriefDateSchema,
+});
+
+const PublishedBriefDateRowSchema = z.object({
+  brief_date: BriefDateSchema,
+  published_at: z.string().datetime({ offset: true }),
 });
 
 function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
@@ -229,6 +239,37 @@ export async function listPublishedBriefs(
       },
     ];
   });
+}
+
+export async function listPublishedBriefDates(): Promise<
+  AiPublishedBriefDate[]
+> {
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from("ai_daily_briefs")
+      .select("brief_date, published_at")
+      .eq("status", "published")
+      .order("published_at", { ascending: false })
+      .order("brief_date", { ascending: false });
+
+    if (error || !Array.isArray(data)) {
+      throw new Error("Published brief date query failed");
+    }
+
+    return data.flatMap((row) => {
+      const parsed = PublishedBriefDateRowSchema.safeParse(row);
+      if (!parsed.success) return [];
+
+      return [
+        {
+          briefDate: parsed.data.brief_date,
+          publishedAt: parsed.data.published_at,
+        },
+      ];
+    });
+  } catch {
+    throw new Error("Published brief dates unavailable");
+  }
 }
 
 export async function getPublishedBrief(

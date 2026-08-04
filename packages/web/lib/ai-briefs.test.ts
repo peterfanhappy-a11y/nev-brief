@@ -14,6 +14,7 @@ import {
   getPublishedBrief,
   getPublishedNeighbors,
   isBriefDate,
+  listPublishedBriefDates,
   listPublishedBriefs,
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
@@ -221,6 +222,71 @@ describe("published brief queries", () => {
 
     await expect(request).rejects.toThrow("Published brief list unavailable");
     await expect(request).rejects.not.toThrow("secret-token-123");
+  });
+
+  it("lists every valid published date newest-first for public discovery", async () => {
+    const query = new QueryBuilder({
+      data: [
+        {
+          brief_date: "2026-08-03",
+          published_at: "2026-08-03T01:30:00.000Z",
+        },
+        {
+          brief_date: "2026-08-02",
+          published_at: "2026-08-02T01:30:00.000Z",
+        },
+        {
+          brief_date: "2026-02-29",
+          published_at: "2026-02-28T01:30:00.000Z",
+        },
+      ],
+      error: null,
+    });
+    useQueries(query);
+
+    await expect(listPublishedBriefDates()).resolves.toEqual([
+      {
+        briefDate: "2026-08-03",
+        publishedAt: "2026-08-03T01:30:00.000Z",
+      },
+      {
+        briefDate: "2026-08-02",
+        publishedAt: "2026-08-02T01:30:00.000Z",
+      },
+    ]);
+    expect(query.select).toHaveBeenCalledWith("brief_date, published_at");
+    expect(query.eq).toHaveBeenCalledWith("status", "published");
+    expect(query.order).toHaveBeenNthCalledWith(1, "published_at", {
+      ascending: false,
+    });
+    expect(query.order).toHaveBeenNthCalledWith(2, "brief_date", {
+      ascending: false,
+    });
+    expect(query.limit).not.toHaveBeenCalled();
+  });
+
+  it("rejects discovery outages with a fixed non-sensitive error", async () => {
+    const query = new QueryBuilder({
+      data: null,
+      error: { message: "sitemap failed with service-role-secret" },
+    });
+    useQueries(query);
+
+    const request = listPublishedBriefDates();
+
+    await expect(request).rejects.toThrow("Published brief dates unavailable");
+    await expect(request).rejects.not.toThrow("service-role-secret");
+  });
+
+  it("sanitizes discovery client-construction failures", async () => {
+    mocks.getSupabaseAdmin.mockImplementationOnce(() => {
+      throw new Error("auth failed with sitemap-service-secret");
+    });
+
+    const request = listPublishedBriefDates();
+
+    await expect(request).rejects.toThrow("Published brief dates unavailable");
+    await expect(request).rejects.not.toThrow("sitemap-service-secret");
   });
 
   it("returns a complete brief and sanitizes optional non-HTTPS URLs", async () => {
