@@ -98,9 +98,14 @@ async def run_daily(
         yesterday_top=_yesterday_top(conn, brief_date),
         model=config.get_model(),
     )
-    storage.upsert_daily_brief(
+    write_result = storage.upsert_daily_brief(
         conn, brief_date=brief_date, content=brief.model_dump(mode="json"), model=brief.model
     )
+    if write_result == "conflict":
+        conn.rollback()
+        r.aborted_at = "brief_conflict"
+        log.warning("ai_runner.brief_conflict", brief_date=date_str)
+        return r
     conn.commit()
     r.modules = 1 + sum(
         1 for s in (
