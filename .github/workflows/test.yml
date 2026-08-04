@@ -84,3 +84,5 @@ jobs:
         run: npm --workspace @nev/web run test:integration
       - name: Run subscription browser acceptance
         run: npm --workspace @nev/web run test:e2e -- ai-subscription.spec.ts
+      - name: Run daily archive browser acceptance
+        run: npm --workspace @nev/web run test:e2e -- daily-archive.spec.ts
