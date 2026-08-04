@@ -113,7 +113,7 @@ def test_finish_digest_run_records_safe_metadata_and_failure_stage() -> None:
     }
     assert json.loads(params[2]) == {"events": 3}
     assert json.loads(params[3]) == {"passed": False, "blockers": [], "metrics": {}}
-    assert params[4:] == ("parse_agent", "parser rejected malformed digest", run_id)
+    assert params[4:] == ("parse_agent", "digest run failed", run_id)
     persisted = " ".join(str(value) for value in params)
     for secret in (
         "private plain body",
@@ -161,7 +161,7 @@ def test_finish_digest_run_redacts_credential_shaped_error_details() -> None:
 
     params = cursor.execute.call_args.args[1]
     assert params[3] is None
-    assert params[5] == "authentication failed password=[REDACTED]"
+    assert params[5] == "digest run failed"
 
 
 def test_finish_digest_run_redacts_dsn_userinfo_from_error_summary() -> None:
@@ -182,12 +182,12 @@ def test_finish_digest_run_redacts_dsn_userinfo_from_error_summary() -> None:
     )
 
     persisted_summary = cursor.execute.call_args.args[1][5]
-    assert persisted_summary == "connection to postgresql://[REDACTED]@db.test failed"
+    assert persisted_summary == "digest run failed"
     assert "private-user" not in persisted_summary
     assert "private-password" not in persisted_summary
 
 
-def test_finish_digest_run_recursively_sanitizes_quality_report() -> None:
+def test_finish_digest_run_fail_closes_untrusted_quality_report_fields() -> None:
     """A nested quality report must not become a back door for raw content or credentials."""
     run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")
     connection, cursor = _connection(fetchone=(run_id,))
@@ -196,7 +196,7 @@ def test_finish_digest_run_recursively_sanitizes_quality_report() -> None:
         "blockers": [
             {
                 "code": "parse_failed",
-                "message": "parser username=private-user password=private-password",
+                "message": "login failed for username private-user",
                 "path": "today_ai",
                 "text": "private plain body",
                 "html": "<p>private html body</p>",
@@ -206,12 +206,19 @@ def test_finish_digest_run_recursively_sanitizes_quality_report() -> None:
         "warnings": [],
         "metrics": {
             "parsed_items": 3,
+            "quality_passed": False,
             "username": "private-user",
+            "passwordHash": "private-password-hash",
+            "rawTrace": "private raw trace",
+            "authorizationHeader": "Bearer private-bearer-token",
+            "attachmentBytes": b"attachment-bytes",
+            "free_label": "private free text",
             "nested": {
                 "safe_label": "Authorization: Bearer private-bearer-token",
                 "raw_trace": "File /private/runner.py line 7",
                 "content": "private message body",
             },
+            "listed": [1, "private listed text", {"passwordHash": "nested-secret"}],
         },
         "raw_trace": "Traceback private stack",
         "credentials": {"token": "private-token"},
@@ -233,21 +240,25 @@ def test_finish_digest_run_recursively_sanitizes_quality_report() -> None:
         "blockers": [
             {
                 "code": "parse_failed",
-                "message": "parser username=[REDACTED] password=[REDACTED]",
                 "path": "today_ai",
             }
         ],
         "warnings": [],
         "metrics": {
             "parsed_items": 3,
-            "nested": {"safe_label": "Authorization=[REDACTED]"},
+            "quality_passed": False,
         },
     }
     serialized = json.dumps(persisted_report)
     for forbidden in (
         "private-user",
         "private-password",
+        "private-password-hash",
         "private-bearer-token",
+        "private raw trace",
+        "private free text",
+        "private listed text",
+        "nested-secret",
         "private plain body",
         "private html body",
         "attachment-bytes",
@@ -261,13 +272,14 @@ def test_finish_digest_run_recursively_sanitizes_quality_report() -> None:
 @pytest.mark.parametrize(
     ("unsafe_summary", "safe_summary"),
     [
-        ("login failed username=private-user", "login failed username=[REDACTED]"),
+        ("login failed username=private-user", "digest run failed"),
+        ("login failed for username private-user", "digest run failed"),
         (
             "request denied Authorization: Bearer private-token",
-            "request denied Authorization=[REDACTED]",
+            "digest run failed",
         ),
-        ("Traceback: File /private/runner.py line 7 ValueError", "[REDACTED]"),
-        ("worker failed at run (/private/runner.js:7:3)", "[REDACTED]"),
+        ("Traceback: File /private/runner.py line 7 ValueError", "digest run failed"),
+        ("worker failed at run (/private/runner.js:7:3)", "digest run failed"),
     ],
 )
 def test_finish_digest_run_sanitizes_single_line_error_details(
@@ -289,6 +301,24 @@ def test_finish_digest_run_sanitizes_single_line_error_details(
     )
 
     assert cursor.execute.call_args.args[1][5] == safe_summary
+
+
+def test_finish_digest_run_preserves_only_controlled_error_code() -> None:
+    """A stable machine code is safe to retain without accepting arbitrary caller prose."""
+    run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")
+    connection, cursor = _connection(fetchone=(run_id,))
+
+    storage.finish_digest_run(
+        connection,
+        run_id,
+        status="failed",
+        digest_sources={},
+        quality_report=None,
+        stage="fetch",
+        error_summary="source_timeout",
+    )
+
+    assert cursor.execute.call_args.args[1][5] == "source_timeout"
 
 
 @pytest.mark.parametrize("stage", [None, "", "   "])

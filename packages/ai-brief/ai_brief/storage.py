@@ -30,42 +30,25 @@ _DIGEST_METADATA_FIELDS = (
     "used_fallback",
 )
 _ATTACHMENT_METADATA_FIELDS = ("filename", "content_type", "size_bytes")
-_SECRET_IN_ERROR = re.compile(
-    r"(?i)\b(username|user|password|passwd|token|secret|credentials?|api[_-]?key|cookie)"
-    r"\s*[:=]\s*(?:bearer\s+)?[^\s,;]+"
-)
-_URI_USERINFO_IN_ERROR = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@")
-_AUTHORIZATION_BEARER_IN_ERROR = re.compile(
-    r"(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
-)
-_RAW_TRACE_IN_ERROR = re.compile(
-    r"(?i)(?:\btraceback\b|\bstack\s*trace\b|\bfile\s+[/\\\"'].*\bline\s+\d+\b"
-    r"|(?:^|\s)at\s+\S+\s*\([^)]*:\d+(?::\d+)?\))"
-)
-_FORBIDDEN_QUALITY_KEY_PARTS = frozenset(
-    {
-        "attachment",
-        "attachments",
-        "authorization",
-        "body",
-        "bytes",
-        "content",
-        "cookie",
-        "credential",
-        "credentials",
-        "data",
-        "html",
-        "password",
-        "passwd",
-        "raw",
-        "secret",
-        "text",
-        "token",
-        "trace",
-        "traceback",
-        "user",
-        "username",
-    }
+_CONTROLLED_CODE = re.compile(r"^[a-z][a-z0-9_]{2,79}$")
+_CONTROLLED_PATH = re.compile(r"^[a-zA-Z][a-zA-Z0-9_.\[\]-]{0,199}$")
+_SENSITIVE_COMPOUND_MARKERS = (
+    "attachment",
+    "authorization",
+    "body",
+    "bytes",
+    "content",
+    "cookie",
+    "credential",
+    "html",
+    "password",
+    "passwd",
+    "raw",
+    "secret",
+    "text",
+    "token",
+    "trace",
+    "user",
 )
 
 
@@ -110,54 +93,51 @@ def _safe_digest_run_payloads(
 def _safe_error_summary(error_summary: str | None) -> str | None:
     if error_summary is None:
         return None
-    first_line = error_summary.splitlines()[0].strip()
-    if not first_line:
+    candidate = error_summary.strip()
+    if not candidate:
         return None
-    if _RAW_TRACE_IN_ERROR.search(first_line):
-        return "[REDACTED]"
-    without_uri_credentials = _URI_USERINFO_IN_ERROR.sub(r"\1[REDACTED]@", first_line)
-    without_authorization = _AUTHORIZATION_BEARER_IN_ERROR.sub(
-        "Authorization=[REDACTED]",
-        without_uri_credentials,
+    if _controlled_identifier_is_safe(candidate):
+        return candidate
+    return "digest run failed"
+
+
+def _controlled_identifier_is_safe(value: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", value.lower())
+    return bool(_CONTROLLED_CODE.fullmatch(value)) and not any(
+        marker in normalized for marker in _SENSITIVE_COMPOUND_MARKERS
     )
-    return _SECRET_IN_ERROR.sub(
-        lambda match: f"{match.group(1)}=[REDACTED]",
-        without_authorization,
-    )[:500]
 
 
-def _quality_key_is_safe(key: str) -> bool:
-    parts = set(re.findall(r"[a-z0-9]+", key.lower()))
-    return not parts.intersection(_FORBIDDEN_QUALITY_KEY_PARTS)
-
-
-def _safe_quality_value(value: object) -> object:
-    if value is None or isinstance(value, (bool, int)):
+def _safe_metric_value(value: object) -> int | float | bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
         return value
     if isinstance(value, float):
         return value if math.isfinite(value) else None
-    if isinstance(value, str):
-        return _safe_error_summary(value)
-    if isinstance(value, Mapping):
-        return {
-            key: _safe_quality_value(item)
-            for key, item in value.items()
-            if isinstance(key, str) and _quality_key_is_safe(key)
-        }
-    if isinstance(value, (list, tuple)):
-        return [_safe_quality_value(item) for item in value if not isinstance(item, bytes)]
     return None
 
 
-def _safe_quality_issue(issue: Mapping[str, Any]) -> dict[str, object]:
-    safe_issue: dict[str, object] = {}
-    for field in ("code", "message", "path"):
-        value = issue.get(field)
-        if value is None and field == "path":
-            safe_issue[field] = None
-        elif isinstance(value, str):
-            safe_issue[field] = _safe_error_summary(value)
+def _safe_quality_issue(issue: Mapping[str, Any]) -> dict[str, object] | None:
+    code = issue.get("code")
+    if not isinstance(code, str) or not _controlled_identifier_is_safe(code):
+        return None
+    safe_issue: dict[str, object] = {"code": code}
+    path = issue.get("path")
+    if path is None:
+        safe_issue["path"] = None
+    elif (
+        isinstance(path, str)
+        and _CONTROLLED_PATH.fullmatch(path)
+        and _controlled_path_is_safe(path)
+    ):
+        safe_issue["path"] = path
     return safe_issue
+
+
+def _controlled_path_is_safe(path: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", path.lower())
+    return not any(marker in normalized for marker in _SENSITIVE_COMPOUND_MARKERS)
 
 
 def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, object] | None:
@@ -172,15 +152,25 @@ def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, 
     for field in ("blockers", "warnings"):
         issues = quality_report.get(field)
         if isinstance(issues, (list, tuple)):
-            safe_report[field] = [
+            safe_issues = (
                 _safe_quality_issue(issue)
                 for issue in issues
                 if isinstance(issue, Mapping)
-            ]
+            )
+            safe_report[field] = [issue for issue in safe_issues if issue is not None]
 
     metrics = quality_report.get("metrics")
     if isinstance(metrics, Mapping):
-        safe_report["metrics"] = _safe_quality_value(metrics)
+        safe_metrics: dict[str, int | float | bool] = {}
+        for key, value in metrics.items():
+            safe_value = _safe_metric_value(value)
+            if (
+                isinstance(key, str)
+                and _controlled_identifier_is_safe(key)
+                and safe_value is not None
+            ):
+                safe_metrics[key] = safe_value
+        safe_report["metrics"] = safe_metrics
     return safe_report
 
 
