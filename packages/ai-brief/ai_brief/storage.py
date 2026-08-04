@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import math
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
@@ -18,6 +17,15 @@ from typing import Any, Literal
 from uuid import UUID
 
 import psycopg
+
+from ai_brief.schema import (
+    QUALITY_ISSUE_CODES,
+    QUALITY_METRIC_KEYS,
+    quality_path_is_allowed,
+)
+from ai_brief.schema import (
+    BriefStatus as BriefStatus,
+)
 
 DigestRunStatus = Literal["running", "blocked", "awaiting_approval", "failed", "completed"]
 _DIGEST_METADATA_FIELDS = (
@@ -41,92 +49,6 @@ _ALLOWED_ERROR_CODES = frozenset(
         "storage_write_failed",
     }
 )
-_ALLOWED_QUALITY_ISSUE_CODES = frozenset(
-    {
-        "ai_masters_story_count_below_minimum",
-        "brief_status_protected",
-        "critical_url_missing",
-        "deepseek_incomplete",
-        "digest_date_fallback",
-        "editorial_blank",
-        "intro_blank",
-        "non_core_items_filtered",
-        "parse_failed",
-        "placeholder_url",
-        "qwen_image_fallback",
-        "required_digest_stale",
-        "schema_invalid",
-        "source_domain_unknown",
-        "subject_blank",
-        "summary_near_limit",
-        "today_ai_story_count_below_minimum",
-        "tool_module_count_below_minimum",
-        "tool_module_missing",
-        "url_not_https",
-    }
-)
-_ALLOWED_QUALITY_METRICS = frozenset(
-    {
-        "agent_freshness_hours",
-        "agent_story_count",
-        "ai_masters_story_count",
-        "blocker_count",
-        "builder_freshness_hours",
-        "deepseek_complete",
-        "digest_date_fallback",
-        "editorial_length",
-        "engineering_freshness_hours",
-        "engineering_story_count",
-        "events_freshness_hours",
-        "existing_brief_protected",
-        "filtered_non_core_item_count",
-        "intro_bullet_count",
-        "max_digest_freshness_hours",
-        "missing_tool_module_count",
-        "parsed_items",
-        "quality_passed",
-        "qwen_complete",
-        "qwen_image_fallback",
-        "required_digests_fresh",
-        "research_freshness_hours",
-        "research_story_count",
-        "schema_valid",
-        "subject_length",
-        "summary_near_limit_count",
-        "today_ai_story_count",
-        "tool_module_count",
-        "unknown_source_domain_count",
-        "warning_count",
-    }
-)
-_BRIEF_QUALITY_PATHS = frozenset(
-    {
-        "editorial",
-        "intro_bullets",
-        "preheader",
-        "subject",
-    }
-)
-_DIGEST_SECTION_ROOTS = frozenset(
-    {
-        "agent_tools",
-        "ai_engineering",
-        "ai_masters",
-        "ai_research",
-        "today_ai",
-    }
-)
-_DIGEST_SECTION_FIELDS = frozenset(
-    {"cta_label", "header_image", "header_image_alt", "stories", "subtitle", "theme"}
-)
-_DIGEST_STORY_FIELDS = frozenset({"headline", "label", "summary", "url"})
-_DIGEST_SOURCE_KINDS = frozenset(
-    {"agent", "builder", "engineering", "events", "research"}
-)
-_DIGEST_SOURCE_FIELDS = frozenset(
-    {"matched_date", "received_at", "requested_date", "used_fallback"}
-)
-_INDEXED_STORY_PATH = re.compile(r"^stories\[(?:0|[1-9][0-9]*)\](?:\.([a-z_]+))?$")
 
 
 class DigestRunAlreadyFinishedError(RuntimeError):
@@ -190,37 +112,15 @@ def _safe_metric_value(value: object) -> int | float | bool | None:
 
 def _safe_quality_issue(issue: Mapping[str, Any]) -> dict[str, object] | None:
     code = issue.get("code")
-    if not isinstance(code, str) or code not in _ALLOWED_QUALITY_ISSUE_CODES:
+    if not isinstance(code, str) or code not in QUALITY_ISSUE_CODES:
         return None
     safe_issue: dict[str, object] = {"code": code}
     path = issue.get("path")
     if path is None:
         safe_issue["path"] = None
-    elif isinstance(path, str) and _quality_path_is_allowed(path):
+    elif isinstance(path, str) and quality_path_is_allowed(path):
         safe_issue["path"] = path
     return safe_issue
-
-
-def _quality_path_is_allowed(path: str) -> bool:
-    if path in _BRIEF_QUALITY_PATHS or path in _DIGEST_SECTION_ROOTS:
-        return True
-
-    root, separator, remainder = path.partition(".")
-    if not separator:
-        return False
-    if root == "digests":
-        kind, field_separator, field = remainder.partition(".")
-        return kind in _DIGEST_SOURCE_KINDS and (
-            not field_separator or field in _DIGEST_SOURCE_FIELDS
-        )
-    if root not in _DIGEST_SECTION_ROOTS:
-        return False
-    if remainder in _DIGEST_SECTION_FIELDS:
-        return True
-    story_match = _INDEXED_STORY_PATH.fullmatch(remainder)
-    return story_match is not None and (
-        story_match.group(1) is None or story_match.group(1) in _DIGEST_STORY_FIELDS
-    )
 
 
 def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, object] | None:
@@ -249,7 +149,7 @@ def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, 
             safe_value = _safe_metric_value(value)
             if (
                 isinstance(key, str)
-                and key in _ALLOWED_QUALITY_METRICS
+                and key in QUALITY_METRIC_KEYS
                 and safe_value is not None
             ):
                 safe_metrics[key] = safe_value
@@ -416,13 +316,6 @@ def fetch_article_content(conn: psycopg.Connection, article_id: str) -> str | No
 
 
 # ── ai_daily_briefs ───────────────────────────────────────────────────
-BriefStatus = Literal[
-    "generating",
-    "blocked",
-    "awaiting_approval",
-    "approved",
-    "published",
-]
 BriefWriteResult = Literal["written", "conflict"]
 
 

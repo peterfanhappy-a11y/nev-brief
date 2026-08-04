@@ -6,11 +6,126 @@ schema 只保证结构）。所有 max_length 是软约束——超限时 summar
 """
 from __future__ import annotations
 
+import re
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 SCHEMA_VERSION = 1
+
+BriefStatus = Literal[
+    "generating",
+    "blocked",
+    "awaiting_approval",
+    "approved",
+    "published",
+]
+
+# Shared by the pure quality gate and the fail-closed persistence boundary. Keep
+# this catalog structural: arbitrary model/source text must never become a key,
+# code, or path accepted by storage.
+QUALITY_ISSUE_CODES = frozenset(
+    {
+        "ai_masters_story_count_below_minimum",
+        "brief_status_protected",
+        "critical_url_missing",
+        "deepseek_incomplete",
+        "digest_date_fallback",
+        "editorial_blank",
+        "intro_blank",
+        "non_core_items_filtered",
+        "parse_failed",
+        "placeholder_url",
+        "qwen_image_fallback",
+        "required_digest_stale",
+        "schema_invalid",
+        "source_domain_unknown",
+        "subject_blank",
+        "summary_near_limit",
+        "today_ai_story_count_below_minimum",
+        "tool_module_count_below_minimum",
+        "tool_module_missing",
+        "url_not_https",
+    }
+)
+QUALITY_METRIC_KEYS = frozenset(
+    {
+        "agent_freshness_hours",
+        "agent_story_count",
+        "ai_masters_story_count",
+        "blocker_count",
+        "builder_freshness_hours",
+        "deepseek_complete",
+        "digest_date_fallback",
+        "editorial_length",
+        "engineering_freshness_hours",
+        "engineering_story_count",
+        "events_freshness_hours",
+        "existing_brief_protected",
+        "filtered_non_core_item_count",
+        "intro_bullet_count",
+        "max_digest_freshness_hours",
+        "missing_tool_module_count",
+        "parsed_items",
+        "quality_passed",
+        "qwen_complete",
+        "qwen_image_fallback",
+        "required_digests_fresh",
+        "research_freshness_hours",
+        "research_story_count",
+        "schema_valid",
+        "subject_length",
+        "summary_near_limit_count",
+        "today_ai_story_count",
+        "tool_module_count",
+        "unknown_source_domain_count",
+        "warning_count",
+    }
+)
+QUALITY_BRIEF_PATHS = frozenset(
+    {"editorial", "intro_bullets", "preheader", "subject"}
+)
+QUALITY_DIGEST_SECTION_ROOTS = frozenset(
+    {"agent_tools", "ai_engineering", "ai_masters", "ai_research", "today_ai"}
+)
+QUALITY_DIGEST_SECTION_FIELDS = frozenset(
+    {"cta_label", "header_image", "header_image_alt", "stories", "subtitle", "theme"}
+)
+QUALITY_DIGEST_STORY_FIELDS = frozenset({"headline", "label", "summary", "url"})
+QUALITY_DIGEST_SOURCE_KINDS = frozenset(
+    {"agent", "builder", "engineering", "events", "research"}
+)
+QUALITY_DIGEST_SOURCE_FIELDS = frozenset(
+    {"matched_date", "received_at", "requested_date", "used_fallback"}
+)
+_QUALITY_INDEXED_STORY_PATH = re.compile(
+    r"^stories\[(?:0|[1-9][0-9]*)\](?:\.([a-z_]+))?$"
+)
+
+
+def quality_path_is_allowed(path: str) -> bool:
+    """Return whether a structural issue path is safe for run persistence."""
+    if path in QUALITY_BRIEF_PATHS or path in QUALITY_DIGEST_SECTION_ROOTS:
+        return True
+
+    root, separator, remainder = path.partition(".")
+    if not separator:
+        return False
+    if root == "digests":
+        kind, field_separator, field = remainder.partition(".")
+        return kind in QUALITY_DIGEST_SOURCE_KINDS and (
+            not field_separator or field in QUALITY_DIGEST_SOURCE_FIELDS
+        )
+    if root not in QUALITY_DIGEST_SECTION_ROOTS:
+        return False
+    if remainder in QUALITY_DIGEST_SECTION_FIELDS:
+        return True
+    story_match = _QUALITY_INDEXED_STORY_PATH.fullmatch(remainder)
+    return story_match is not None and (
+        story_match.group(1) is None
+        or story_match.group(1) in QUALITY_DIGEST_STORY_FIELDS
+    )
 
 
 class Theme(str, Enum):  # noqa: UP042 - preserve legacy str(Enum) behavior
@@ -80,6 +195,7 @@ class YesterdayTop(BaseModel):
 class Stage1Stats(BaseModel):
     candidates: int = 0
     dupe_groups: int = 0
+    filtered_non_core_items: int = Field(default=0, ge=0)
 
 
 class AiBriefContent(BaseModel):
