@@ -1,7 +1,7 @@
-"""Composer — 把 ai_daily_briefs 文档渲染成每订阅者一封的 HTML/text，写 ai_deliveries。
+"""Composer — render frozen approved content into insert-only deliveries.
 
-评分链接需在渲染前知道 delivery_id：重跑时复用已有 id（已发邮件里的链接仍有效），
-首次用 uuid4。渲染顺序 = 定 id → 渲染 → upsert。psycopg 由调用方 commit。
+Delivery creation is reachable only from ``runner.release_approved``. Existing
+rows are never rewritten, so sent/failed payloads and rating links stay frozen.
 """
 from __future__ import annotations
 
@@ -114,24 +114,30 @@ def compose_for_date(
     *,
     only_email: str | None = None,
 ) -> dict[str, Any]:
-    """为当日简报的所有 active 订阅者生成投递记录。返回统计。不 commit。"""
-    raw = storage.fetch_brief(conn, brief_date)
-    if raw is None:
-        log.error("ai_composer.no_brief", brief_date=str(brief_date))
-        return {"composed": 0, "reason": "no_brief"}
-    brief = AiBriefContent.model_validate(raw)
+    """Reject the retired pre-approval delivery-creation entry point."""
+    del conn, brief_date, only_email
+    raise RuntimeError("delivery creation requires runner.release_approved")
+
+
+def compose_frozen_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+    content: dict[str, Any],
+    *,
+    only_email: str | None = None,
+) -> dict[str, Any]:
+    """Render locked, frozen content and insert only missing delivery rows."""
+    brief = AiBriefContent.model_validate(content)
 
     subs = storage.fetch_active_subscribers(conn, only_email=only_email)
     composed = 0
     for sub in subs:
-        did = storage.get_existing_delivery_id(
-            conn, subscriber_id=sub.id, brief_date=brief_date
-        ) or str(uuid4())
+        did = str(uuid4())
         html, text = render(
             brief, brief_date,
             delivery_id=did, unsubscribe_token=sub.unsubscribe_token, email=sub.email,
         )
-        storage.upsert_delivery(
+        inserted = storage.insert_delivery_if_missing(
             conn,
             delivery_id=did,
             subscriber_id=sub.id,
@@ -140,7 +146,7 @@ def compose_for_date(
             content_html=html,
             content_text=text,
         )
-        composed += 1
+        composed += int(inserted)
     log.info("ai_composer.done", brief_date=str(brief_date), composed=composed)
     return {"composed": composed, "subject": brief.subject}
 

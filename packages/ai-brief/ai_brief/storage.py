@@ -28,6 +28,7 @@ from ai_brief.schema import (
 )
 
 DigestRunStatus = Literal["running", "blocked", "awaiting_approval", "failed", "completed"]
+BriefGenerationClaim = Literal["started", "conflict"]
 _DIGEST_METADATA_FIELDS = (
     "kind",
     "message_id",
@@ -53,6 +54,10 @@ _ALLOWED_ERROR_CODES = frozenset(
 
 class DigestRunAlreadyFinishedError(RuntimeError):
     """Raised when a terminal digest run is completed a second time."""
+
+
+class WorkflowTransitionError(RuntimeError):
+    """Raised when a locked workflow transition cannot preserve its invariant."""
 
 
 def _safe_digest_run_payloads(
@@ -319,6 +324,203 @@ def fetch_article_content(conn: psycopg.Connection, article_id: str) -> str | No
 BriefWriteResult = Literal["written", "conflict"]
 
 
+@dataclass(frozen=True)
+class WorkflowBrief:
+    status: BriefStatus
+    content: dict[str, Any]
+    quality_report: dict[str, Any] | None
+    source_run_id: UUID | None
+
+
+def claim_brief_generation(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> BriefGenerationClaim:
+    """Atomically create/lock a mutable daily row and set it to generating."""
+    sql = """
+        INSERT INTO ai_daily_briefs (brief_date, content, status, generated_at)
+        VALUES (%s, '{}'::jsonb, 'generating', statement_timestamp())
+        ON CONFLICT (brief_date) DO UPDATE
+        SET status = 'generating',
+            failure_reason = NULL,
+            updated_at = statement_timestamp()
+        WHERE ai_daily_briefs.status IN ('generating', 'blocked', 'awaiting_approval')
+        RETURNING status;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date,))
+        row = cur.fetchone()
+    return "started" if row is not None else "conflict"
+
+
+def save_generated_brief(
+    conn: psycopg.Connection,
+    *,
+    brief_date: date,
+    content: dict[str, Any],
+    model: str | None,
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+    quality_report: Mapping[str, Any],
+    source_run_id: UUID,
+    status: Literal["blocked", "awaiting_approval"],
+) -> None:
+    """Finalize generated content only while the claimed row remains mutable."""
+    safe_sources, _parse_counts = _safe_digest_run_payloads(digest_sources)
+    safe_report = _safe_quality_report(quality_report)
+    if safe_report is None or safe_report.get("passed") is not (status == "awaiting_approval"):
+        raise ValueError("workflow status must match the stored quality report")
+    sql = """
+        UPDATE ai_daily_briefs
+        SET content = %s::jsonb,
+            model = %s,
+            status = %s,
+            quality_report = %s::jsonb,
+            digest_sources = %s::jsonb,
+            source_run_id = %s,
+            generated_at = statement_timestamp(),
+            failure_reason = %s,
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'generating'
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                json.dumps(content, ensure_ascii=False),
+                model,
+                status,
+                json.dumps(safe_report, ensure_ascii=False),
+                json.dumps(safe_sources, ensure_ascii=False),
+                source_run_id,
+                "quality_gate_failed" if status == "blocked" else None,
+                brief_date,
+            ),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("generating brief disappeared before finalization")
+
+
+def mark_brief_generation_failed(conn: psycopg.Connection, brief_date: date) -> None:
+    """Move a claimed row to blocked without changing its last complete content."""
+    sql = """
+        UPDATE ai_daily_briefs
+        SET status = 'blocked',
+            failure_reason = 'brief_generation_failed',
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'generating';
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date,))
+
+
+def _lock_workflow_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    sql = """
+        SELECT status, content, quality_report, source_run_id
+        FROM ai_daily_briefs
+        WHERE brief_date = %s
+        FOR UPDATE;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date,))
+        row = cur.fetchone()
+    if row is None:
+        return None
+    source_run_id = row[3]
+    return WorkflowBrief(
+        status=row[0],
+        content=row[1],
+        quality_report=row[2],
+        source_run_id=(
+            source_run_id
+            if source_run_id is None or isinstance(source_run_id, UUID)
+            else UUID(str(source_run_id))
+        ),
+    )
+
+
+def lock_brief_for_approval(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    """Lock the daily row through the approval decision."""
+    return _lock_workflow_brief(conn, brief_date)
+
+
+def approve_locked_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+    *,
+    approved_by: str,
+) -> None:
+    """Approve only an awaiting row whose stored report contains boolean true."""
+    sql = """
+        UPDATE ai_daily_briefs
+        SET status = 'approved',
+            approved_at = statement_timestamp(),
+            approved_by = %s,
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'awaiting_approval'
+          AND jsonb_typeof(quality_report -> 'passed') = 'boolean'
+          AND quality_report -> 'passed' = 'true'::jsonb
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (approved_by, brief_date))
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("brief is no longer eligible for approval")
+
+
+def lock_brief_for_release(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    """Lock the frozen daily row through delivery creation and publication."""
+    return _lock_workflow_brief(conn, brief_date)
+
+
+def publish_locked_brief_and_complete_run(
+    conn: psycopg.Connection,
+    brief_date: date,
+    *,
+    source_run_id: UUID | None,
+) -> None:
+    """Publish an approved row only when its awaiting run can complete with it."""
+    if source_run_id is None:
+        raise WorkflowTransitionError("approved brief has no linked digest run")
+    sql = """
+        WITH completed_run AS (
+            UPDATE ai_digest_runs
+            SET status = 'completed',
+                updated_at = statement_timestamp()
+            WHERE id = %s
+              AND status = 'awaiting_approval'
+            RETURNING id
+        )
+        UPDATE ai_daily_briefs
+        SET status = 'published',
+            published_at = statement_timestamp(),
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'approved'
+          AND source_run_id = (SELECT id FROM completed_run)
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (source_run_id, brief_date))
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("brief publication or linked run completion failed")
+
+
 def upsert_daily_brief(
     conn: psycopg.Connection,
     *,
@@ -438,7 +640,7 @@ def fetch_active_subscribers(
 
 
 # ── ai_deliveries ─────────────────────────────────────────────────────
-def upsert_delivery(
+def insert_delivery_if_missing(
     conn: psycopg.Connection,
     *,
     delivery_id: str,
@@ -447,26 +649,22 @@ def upsert_delivery(
     subject: str,
     content_html: str,
     content_text: str,
-) -> None:
-    """插入/更新一封投递。delivery_id 由调用方生成（评分链接需在渲染前知道 id）。
-    UNIQUE(subscriber_id, brief_date) → 重跑用现有 id 覆盖内容、重置为 pending。"""
+) -> bool:
+    """Insert one pending delivery without ever rewriting an existing row."""
     sql = """
         INSERT INTO ai_deliveries
             (id, subscriber_id, brief_date, subject, content_html, content_text, status)
         VALUES (%s, %s, %s, %s, %s, %s, 'pending')
-        ON CONFLICT (subscriber_id, brief_date) DO UPDATE
-        SET subject = EXCLUDED.subject,
-            content_html = EXCLUDED.content_html,
-            content_text = EXCLUDED.content_text,
-            status = 'pending',
-            error = NULL,
-            updated_at = NOW();
+        ON CONFLICT (subscriber_id, brief_date) DO NOTHING
+        RETURNING id;
     """
     with conn.cursor() as cur:
         cur.execute(
             sql,
             (delivery_id, subscriber_id, brief_date, subject, content_html, content_text),
         )
+        row = cur.fetchone()
+    return row is not None
 
 
 def get_existing_delivery_id(
