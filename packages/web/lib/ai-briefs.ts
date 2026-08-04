@@ -236,15 +236,20 @@ export async function getPublishedBrief(
 ): Promise<AiPublishedBrief | null> {
   if (!isBriefDate(date)) return null;
 
-  const { data, error } = await getSupabaseAdmin()
-    .from("ai_daily_briefs")
-    .select("brief_date, content, published_at")
-    .eq("status", "published")
-    .eq("brief_date", date)
-    .maybeSingle();
+  try {
+    const { data, error } = await getSupabaseAdmin()
+      .from("ai_daily_briefs")
+      .select("brief_date, content, published_at")
+      .eq("status", "published")
+      .eq("brief_date", date)
+      .maybeSingle();
 
-  if (error || !data) return null;
-  return parsePublishedBrief(data);
+    if (error) throw new Error("Published brief query failed");
+    if (!data) return null;
+    return parsePublishedBrief(data);
+  } catch {
+    throw new Error("Published brief unavailable");
+  }
 }
 
 function parseNeighbor(data: unknown): string | null {
@@ -258,28 +263,36 @@ export async function getPublishedNeighbors(date: string): Promise<{
 }> {
   if (!isBriefDate(date)) return { previous: null, next: null };
 
-  const admin = getSupabaseAdmin();
-  const [previousResult, nextResult] = await Promise.all([
-    admin
-      .from("ai_daily_briefs")
-      .select("brief_date")
-      .eq("status", "published")
-      .lt("brief_date", date)
-      .order("brief_date", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    admin
-      .from("ai_daily_briefs")
-      .select("brief_date")
-      .eq("status", "published")
-      .gt("brief_date", date)
-      .order("brief_date", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  try {
+    const admin = getSupabaseAdmin();
+    const [previousResult, nextResult] = await Promise.all([
+      admin
+        .from("ai_daily_briefs")
+        .select("brief_date")
+        .eq("status", "published")
+        .lt("brief_date", date)
+        .order("brief_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      admin
+        .from("ai_daily_briefs")
+        .select("brief_date")
+        .eq("status", "published")
+        .gt("brief_date", date)
+        .order("brief_date", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
-  return {
-    previous: previousResult.error ? null : parseNeighbor(previousResult.data),
-    next: nextResult.error ? null : parseNeighbor(nextResult.data),
-  };
+    if (previousResult.error || nextResult.error) {
+      throw new Error("Published brief neighbor query failed");
+    }
+
+    return {
+      previous: parseNeighbor(previousResult.data),
+      next: parseNeighbor(nextResult.data),
+    };
+  } catch {
+    throw new Error("Published brief neighbors unavailable");
+  }
 }

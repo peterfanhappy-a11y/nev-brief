@@ -285,6 +285,30 @@ describe("published brief queries", () => {
     await expect(getPublishedBrief("2026-08-03")).resolves.toBeNull();
   });
 
+  it("rejects a detail query failure without exposing the raw database error", async () => {
+    const query = new QueryBuilder({
+      data: null,
+      error: { message: "detail failed with secret-token-123" },
+    });
+    useQueries(query);
+
+    const request = getPublishedBrief("2026-08-03");
+
+    await expect(request).rejects.toThrow("Published brief unavailable");
+    await expect(request).rejects.not.toThrow("secret-token-123");
+  });
+
+  it("sanitizes service-client construction failures", async () => {
+    mocks.getSupabaseAdmin.mockImplementationOnce(() => {
+      throw new Error("auth failed with service-role-secret");
+    });
+
+    const request = getPublishedBrief("2026-08-03");
+
+    await expect(request).rejects.toThrow("Published brief unavailable");
+    await expect(request).rejects.not.toThrow("service-role-secret");
+  });
+
   it("does not query for an invalid date", async () => {
     await expect(getPublishedBrief("2026-02-29")).resolves.toBeNull();
     expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
@@ -314,6 +338,22 @@ describe("published brief queries", () => {
     });
     expect(next.gt).toHaveBeenCalledWith("brief_date", "2026-08-03");
     expect(next.order).toHaveBeenCalledWith("brief_date", { ascending: true });
+  });
+
+  it("rejects neighbor query failures instead of projecting missing dates", async () => {
+    const previous = new QueryBuilder({
+      data: null,
+      error: { message: "neighbor failed with secret-token-456" },
+    });
+    const next = new QueryBuilder({ data: null, error: null });
+    useQueries(previous, next);
+
+    const request = getPublishedNeighbors("2026-08-03");
+
+    await expect(request).rejects.toThrow(
+      "Published brief neighbors unavailable",
+    );
+    await expect(request).rejects.not.toThrow("secret-token-456");
   });
 });
 
