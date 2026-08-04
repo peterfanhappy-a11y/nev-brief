@@ -101,6 +101,7 @@ class Attachment:
 class DigestEmail:
     subject: str
     date: datetime
+    message_id: str = ""
     html: str | None = None
     text: str | None = None
     attachments: list[Attachment] = field(default_factory=list)
@@ -121,6 +122,7 @@ def _decode(value: str | None) -> str:
 def parse_message(raw: bytes) -> DigestEmail:
     """把 RFC822 原始字节解析成 DigestEmail（纯函数）。"""
     msg: Message = email.message_from_bytes(raw)
+    message_id = _decode(msg.get("Message-ID")).strip()
     subject = _decode(msg.get("Subject"))
     try:
         dt = parsedate_to_datetime(cast(str, msg.get("Date")))
@@ -165,7 +167,14 @@ def parse_message(raw: bytes) -> DigestEmail:
         elif ctype == "text/plain" and text is None:
             text = body
 
-    return DigestEmail(subject=subject, date=dt, html=html, text=text, attachments=attachments)
+    return DigestEmail(
+        subject=subject,
+        date=dt,
+        message_id=message_id,
+        html=html,
+        text=text,
+        attachments=attachments,
+    )
 
 
 def _date_key(text: str) -> tuple[int, int, int] | None:
@@ -224,7 +233,7 @@ def fetch_latest(
         for uid in uids:
             typ, hd = imap.fetch(
                 cast(str, uid),
-                "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE)])",
+                "(BODY.PEEK[HEADER.FIELDS (SUBJECT DATE MESSAGE-ID)])",
             )
             if typ != "OK" or not hd or not hd[0]:
                 continue

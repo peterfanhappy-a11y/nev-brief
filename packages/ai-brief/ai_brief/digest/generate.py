@@ -1,6 +1,6 @@
-"""编排今日AI / AI大神 两模块：IMAP 取 digest → 解析 → DeepSeek 压缩 → Qwen 选图 → 上传。
+"""编排今日AI / AI大神：消费 digest envelope → 解析 → DeepSeek 压缩 → Qwen 选图 → 上传。
 
-对 runner 暴露 build_digest_modules(brief_date_gmt8)：返回 DigestBundle（含 subject/
+对 runner 暴露 build_digest_modules(brief_date_gmt8, digests)：返回 DigestBundle（含 subject/
 preheader/editorial/intro + 两个 DigestSection）。任一 digest 缺失时对应 section = None，
 由 runner 决定是否告警/中止。
 """
@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -22,7 +24,8 @@ from ai_brief.digest.agent_parser import parse_agent_digest
 from ai_brief.digest.builder_parser import parse_builder_digest
 from ai_brief.digest.engineering_parser import parse_engineering_digest
 from ai_brief.digest.events_parser import parse_events_digest
-from ai_brief.digest.imap_client import Attachment, DigestEmail, fetch_latest
+from ai_brief.digest.imap_client import Attachment
+from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.digest.research_parser import parse_research_digest
 from ai_brief.schema import DigestSection, DigestStory, Theme
 
@@ -115,9 +118,17 @@ def _prep_header(data: bytes, content_type: str, max_width: int | None = None) -
         return data, content_type
 
 
-def _attachments_by_index(email: DigestEmail) -> dict[int, Attachment]:
+def _image_attachments(digest: DigestEnvelope) -> list[Attachment]:
+    return [
+        attachment
+        for attachment in digest.attachments
+        if attachment.content_type.startswith("image/")
+    ]
+
+
+def _attachments_by_index(digest: DigestEnvelope) -> dict[int, Attachment]:
     out: dict[int, Attachment] = {}
-    for a in email.image_attachments():
+    for a in _image_attachments(digest):
         idx = _filename_index(a.filename)
         if idx is not None:
             out[idx] = a
@@ -147,15 +158,13 @@ def _pick_and_upload(
 
 async def _build_today_ai(
     brief_date: str,
+    digest: DigestEnvelope | None,
 ) -> tuple[DigestSection | None, condenser.TodayAIResult | None]:
-    email = fetch_latest(
-        config.digest_sender(), config.DIGEST_EVENTS_SUBJECT_PREFIX, brief_date
-    )
-    if email is None or not email.html:
+    if digest is None or not digest.html:
         log.warning("ai_digest.events_missing", date=brief_date)
         return None, None
 
-    items = parse_events_digest(email.html)
+    items = parse_events_digest(digest.html)
     if not items:
         log.warning("ai_digest.events_empty")
         return None, None
@@ -166,7 +175,7 @@ async def _build_today_ai(
         return None, None
 
     # 源图多是整页长截图 → 先从每张里裁出最像配图的 hero 横幅带，再让 Qwen 在这些干净带里选
-    by_idx = _attachments_by_index(email)
+    by_idx = _attachments_by_index(digest)
     candidates: list[tuple[int, bytes, str, str]] = []
     for it in items:
         att = by_idx.get(it.index)
@@ -185,15 +194,15 @@ async def _build_today_ai(
     return section, result
 
 
-async def _build_ai_masters(brief_date: str) -> DigestSection | None:
-    email = fetch_latest(
-        config.digest_sender(), config.DIGEST_BUILDER_SUBJECT_PREFIX, brief_date
-    )
-    if email is None or not email.text:
+async def _build_ai_masters(
+    brief_date: str,
+    digest: DigestEnvelope | None,
+) -> DigestSection | None:
+    if digest is None or not digest.text:
         log.warning("ai_digest.builder_missing", date=brief_date)
         return None
 
-    items = parse_builder_digest(email.text)
+    items = parse_builder_digest(digest.text)
     if not items:
         log.warning("ai_digest.builder_empty")
         return None
@@ -204,7 +213,7 @@ async def _build_ai_masters(brief_date: str) -> DigestSection | None:
     stories: list[DigestStory] = [story for _, story in picks]
 
     # 头图只能来自被选中且有图的条目（即被选中的后5条 index 6-10）；推文截图保持完整，不裁 hero 带
-    by_idx = _attachments_by_index(email)
+    by_idx = _attachments_by_index(digest)
     candidates: list[tuple[int, bytes, str, str]] = [
         (it.index, by_idx[it.index].data, by_idx[it.index].content_type, it.headline)
         for it, _ in picks if it.has_image and it.index in by_idx
@@ -221,35 +230,20 @@ async def _build_ai_masters(brief_date: str) -> DigestSection | None:
 
 # ── 工具学习板块 ───────────────────────────────────────────────────────
 
-# 工具学习三源的 subject 日期标签与 events/builder 不同步（research 落后一天、
-# engineering/agent 可能标次日）。故先按当天精确匹配，抓不到再回退到最近 40h 内该
-# 前缀的最新一封，避免每天抓空。
-_TL_FALLBACK_HOURS = 40.0
-
-
-def _fetch_toollearning(prefix: str, brief_date: str) -> DigestEmail | None:
-    email = fetch_latest(config.digest_sender(), prefix, brief_date)
-    if email is None:
-        email = fetch_latest(
-            config.digest_sender(), prefix, None, within_hours=_TL_FALLBACK_HOURS
-        )
-        if email is not None:
-            log.info("ai_digest.toollearning_date_fallback", prefix=prefix, got=email.subject)
-    return email
-
-
-async def _build_research(brief_date: str) -> DigestSection | None:
+async def _build_research(
+    brief_date: str,
+    digest: DigestEnvelope | None,
+) -> DigestSection | None:
     """AI研究：Qwen 从附件里选最清晰的图 → 用它对应的那篇论文做主题+内容+链接。"""
-    email = _fetch_toollearning(config.DIGEST_RESEARCH_SUBJECT_PREFIX, brief_date)
-    if email is None or not email.html:
+    if digest is None or not digest.html:
         log.warning("ai_digest.research_missing", date=brief_date)
         return None
-    papers = parse_research_digest(email.html)
+    papers = parse_research_digest(digest.html)
     if not papers:
         log.warning("ai_digest.research_empty")
         return None
 
-    imgs = email.image_attachments()
+    imgs = _image_attachments(digest)
     # 每张图 → 缩放后的候选；caption 用图名，选中后按图名匹配回论文
     candidates: list[tuple[int, bytes, str, str]] = []
     for i, att in enumerate(imgs):
@@ -284,13 +278,15 @@ async def _build_research(brief_date: str) -> DigestSection | None:
     )
 
 
-async def _build_engineering(brief_date: str) -> DigestSection | None:
+async def _build_engineering(
+    brief_date: str,
+    digest: DigestEnvelope | None,
+) -> DigestSection | None:
     """AI工程：附件图做头图；课程要点=主题；核心要点=内容（无链接，无需 LLM）。"""
-    email = _fetch_toollearning(config.DIGEST_ENGINEERING_SUBJECT_PREFIX, brief_date)
-    if email is None or not email.html:
+    if digest is None or not digest.html:
         log.warning("ai_digest.engineering_missing", date=brief_date)
         return None
-    lecture = parse_engineering_digest(email.html)
+    lecture = parse_engineering_digest(digest.html)
     if lecture is None or not lecture.core_points:
         log.warning("ai_digest.engineering_empty")
         return None
@@ -300,7 +296,7 @@ async def _build_engineering(brief_date: str) -> DigestSection | None:
         return None
 
     header_url, alt = None, ""
-    imgs = email.image_attachments()
+    imgs = _image_attachments(digest)
     if imgs:
         data, ctype = _prep_header(imgs[0].data, imgs[0].content_type)
         path = uploader.image_path(brief_date, "ai-engineering", data, ctype)
@@ -313,13 +309,15 @@ async def _build_engineering(brief_date: str) -> DigestSection | None:
     )
 
 
-async def _build_agent(brief_date: str) -> DigestSection | None:
+async def _build_agent(
+    brief_date: str,
+    digest: DigestEnvelope | None,
+) -> DigestSection | None:
     """Agent工具：3 个工具选 2 个（DeepSeek 判影响度）；无头图（源无附件）。"""
-    email = _fetch_toollearning(config.DIGEST_AGENT_SUBJECT_PREFIX, brief_date)
-    if email is None or not email.html:
+    if digest is None or not digest.html:
         log.warning("ai_digest.agent_missing", date=brief_date)
         return None
-    tools = parse_agent_digest(email.html)
+    tools = parse_agent_digest(digest.html)
     if not tools:
         log.warning("ai_digest.agent_empty")
         return None
@@ -333,13 +331,17 @@ async def _build_agent(brief_date: str) -> DigestSection | None:
     )
 
 
-async def build_digest_modules(brief_date: str) -> DigestBundle:
-    """brief_date = GMT+8 当日 YYYY-MM-DD。"""
-    today_ai, meta = await _build_today_ai(brief_date)
-    ai_masters = await _build_ai_masters(brief_date)
-    ai_research = await _build_research(brief_date)
-    ai_engineering = await _build_engineering(brief_date)
-    agent_tools = await _build_agent(brief_date)
+async def build_digest_modules(
+    brief_date: date,
+    digests: Mapping[DigestKind, DigestEnvelope | None],
+) -> DigestBundle:
+    """Build modules for a GMT+8 brief date from transport-neutral inputs."""
+    date_str = brief_date.isoformat()
+    today_ai, meta = await _build_today_ai(date_str, digests.get("events"))
+    ai_masters = await _build_ai_masters(date_str, digests.get("builder"))
+    ai_research = await _build_research(date_str, digests.get("research"))
+    ai_engineering = await _build_engineering(date_str, digests.get("engineering"))
+    agent_tools = await _build_agent(date_str, digests.get("agent"))
 
     return DigestBundle(
         subject=meta.subject if meta else "",

@@ -19,6 +19,7 @@ from nev_shared.logger import get_logger
 
 from ai_brief import composer, config, deliverer, storage
 from ai_brief.digest.generate import build_digest_modules
+from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.schema import AiBriefContent, YesterdayTop
 
 log = get_logger("ai_brief.runner")
@@ -71,7 +72,8 @@ async def run_daily(
     date_str = str(brief_date)
 
     # ── 1. digest 模块（今日AI / AI大神）─────────────────────────
-    bundle = await build_digest_modules(date_str)
+    digests = GmailDigestAdapter().fetch(brief_date)
+    bundle = await build_digest_modules(brief_date, digests)
     if bundle.today_ai is None:
         r.aborted_at = "digest"
         _alert(AlertLevel.P1, "AI 简报中止", f"{date_str} 今日AI digest 缺失/解析失败，未发送")
