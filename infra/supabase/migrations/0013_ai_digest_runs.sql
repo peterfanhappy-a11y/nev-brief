@@ -8,7 +8,7 @@ CREATE TABLE ai_digest_runs (
                         CHECK (status IN (
                             'running', 'blocked', 'awaiting_approval', 'failed', 'completed'
                         )),
-    started_at      timestamptz NOT NULL DEFAULT now(),
+    started_at      timestamptz NOT NULL DEFAULT statement_timestamp(),
     finished_at     timestamptz,
     duration_ms     bigint CHECK (duration_ms >= 0),
     digest_sources  jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -22,6 +22,10 @@ CREATE TABLE ai_digest_runs (
         (status = 'running' AND finished_at IS NULL AND duration_ms IS NULL)
         OR
         (status <> 'running' AND finished_at IS NOT NULL AND duration_ms IS NOT NULL)
+    ),
+    CONSTRAINT ai_digest_runs_failed_stage_check CHECK (
+        status <> 'failed'
+        OR (failed_stage IS NOT NULL AND failed_stage !~ '^[[:space:]]*$')
     )
 );
 
@@ -40,9 +44,19 @@ CREATE POLICY service_role_manage_ai_digest_runs
     USING (true)
     WITH CHECK (true);
 
+CREATE FUNCTION touch_ai_digest_run_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = statement_timestamp();
+    RETURN NEW;
+END;
+$$;
+
 CREATE TRIGGER trg_ai_digest_runs_updated
     BEFORE UPDATE ON ai_digest_runs
-    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    FOR EACH ROW EXECUTE FUNCTION touch_ai_digest_run_updated_at();
 
 ALTER TABLE ai_daily_briefs
     ADD COLUMN approved_by text,

@@ -9,6 +9,7 @@ claim_pending_deliveries 用 FOR UPDATE SKIP LOCKED（同 nev_delivery.storage�
 from __future__ import annotations
 
 import json
+import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -30,9 +31,42 @@ _DIGEST_METADATA_FIELDS = (
 )
 _ATTACHMENT_METADATA_FIELDS = ("filename", "content_type", "size_bytes")
 _SECRET_IN_ERROR = re.compile(
-    r"(?i)\b(password|passwd|token|secret|credential|api[_-]?key)\s*[:=]\s*[^\s,;]+"
+    r"(?i)\b(username|user|password|passwd|token|secret|credentials?|api[_-]?key|cookie)"
+    r"\s*[:=]\s*(?:bearer\s+)?[^\s,;]+"
 )
 _URI_USERINFO_IN_ERROR = re.compile(r"(?i)\b([a-z][a-z0-9+.-]*://)[^/@\s]+@")
+_AUTHORIZATION_BEARER_IN_ERROR = re.compile(
+    r"(?i)\bauthorization\s*[:=]\s*bearer\s+[^\s,;]+"
+)
+_RAW_TRACE_IN_ERROR = re.compile(
+    r"(?i)(?:\btraceback\b|\bstack\s*trace\b|\bfile\s+[/\\\"'].*\bline\s+\d+\b"
+    r"|(?:^|\s)at\s+\S+\s*\([^)]*:\d+(?::\d+)?\))"
+)
+_FORBIDDEN_QUALITY_KEY_PARTS = frozenset(
+    {
+        "attachment",
+        "attachments",
+        "authorization",
+        "body",
+        "bytes",
+        "content",
+        "cookie",
+        "credential",
+        "credentials",
+        "data",
+        "html",
+        "password",
+        "passwd",
+        "raw",
+        "secret",
+        "text",
+        "token",
+        "trace",
+        "traceback",
+        "user",
+        "username",
+    }
+)
 
 
 class DigestRunAlreadyFinishedError(RuntimeError):
@@ -79,11 +113,75 @@ def _safe_error_summary(error_summary: str | None) -> str | None:
     first_line = error_summary.splitlines()[0].strip()
     if not first_line:
         return None
+    if _RAW_TRACE_IN_ERROR.search(first_line):
+        return "[REDACTED]"
     without_uri_credentials = _URI_USERINFO_IN_ERROR.sub(r"\1[REDACTED]@", first_line)
+    without_authorization = _AUTHORIZATION_BEARER_IN_ERROR.sub(
+        "Authorization=[REDACTED]",
+        without_uri_credentials,
+    )
     return _SECRET_IN_ERROR.sub(
         lambda match: f"{match.group(1)}=[REDACTED]",
-        without_uri_credentials,
+        without_authorization,
     )[:500]
+
+
+def _quality_key_is_safe(key: str) -> bool:
+    parts = set(re.findall(r"[a-z0-9]+", key.lower()))
+    return not parts.intersection(_FORBIDDEN_QUALITY_KEY_PARTS)
+
+
+def _safe_quality_value(value: object) -> object:
+    if value is None or isinstance(value, (bool, int)):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, str):
+        return _safe_error_summary(value)
+    if isinstance(value, Mapping):
+        return {
+            key: _safe_quality_value(item)
+            for key, item in value.items()
+            if isinstance(key, str) and _quality_key_is_safe(key)
+        }
+    if isinstance(value, (list, tuple)):
+        return [_safe_quality_value(item) for item in value if not isinstance(item, bytes)]
+    return None
+
+
+def _safe_quality_issue(issue: Mapping[str, Any]) -> dict[str, object]:
+    safe_issue: dict[str, object] = {}
+    for field in ("code", "message", "path"):
+        value = issue.get(field)
+        if value is None and field == "path":
+            safe_issue[field] = None
+        elif isinstance(value, str):
+            safe_issue[field] = _safe_error_summary(value)
+    return safe_issue
+
+
+def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, object] | None:
+    if quality_report is None:
+        return None
+
+    safe_report: dict[str, object] = {}
+    passed = quality_report.get("passed")
+    if isinstance(passed, bool):
+        safe_report["passed"] = passed
+
+    for field in ("blockers", "warnings"):
+        issues = quality_report.get(field)
+        if isinstance(issues, (list, tuple)):
+            safe_report[field] = [
+                _safe_quality_issue(issue)
+                for issue in issues
+                if isinstance(issue, Mapping)
+            ]
+
+    metrics = quality_report.get("metrics")
+    if isinstance(metrics, Mapping):
+        safe_report["metrics"] = _safe_quality_value(metrics)
+    return safe_report
 
 
 def start_digest_run(
@@ -94,7 +192,7 @@ def start_digest_run(
     """Create exactly one durable identity for a digest pipeline invocation."""
     sql = """
         INSERT INTO ai_digest_runs (brief_date, source_adapter, status, started_at)
-        VALUES (%s, %s, %s, NOW())
+        VALUES (%s, %s, %s, statement_timestamp())
         RETURNING id;
     """
     with conn.cursor() as cur:
@@ -119,25 +217,34 @@ def finish_digest_run(
     """Finish a running invocation once, persisting only operational metadata."""
     if status == "running":
         raise ValueError("finished digest run requires a terminal status")
+    if status == "failed" and (stage is None or not stage.strip()):
+        raise ValueError("failed digest run requires a non-empty stage")
     safe_sources, parse_counts = _safe_digest_run_payloads(digest_sources)
-    failed_stage = stage if status in ("blocked", "failed") else None
+    safe_quality_report = _safe_quality_report(quality_report)
+    failed_stage = stage.strip() if stage and status in ("blocked", "failed") else None
     sql = """
-        UPDATE ai_digest_runs
+        WITH finish_clock AS MATERIALIZED (
+            SELECT statement_timestamp() AS finished_at
+        )
+        UPDATE ai_digest_runs AS run
         SET status = %s,
             digest_sources = %s::jsonb,
             parse_counts = %s::jsonb,
             quality_report = %s::jsonb,
             failed_stage = %s,
             error_summary = %s,
-            finished_at = NOW(),
+            finished_at = finish_clock.finished_at,
             duration_ms = GREATEST(
                 0,
-                ROUND(EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint
+                ROUND(
+                    EXTRACT(EPOCH FROM (finish_clock.finished_at - run.started_at)) * 1000
+                )::bigint
             ),
-            updated_at = NOW()
-        WHERE id = %s
-          AND status = 'running'
-        RETURNING id;
+            updated_at = finish_clock.finished_at
+        FROM finish_clock
+        WHERE run.id = %s
+          AND run.status = 'running'
+        RETURNING run.id;
     """
     with conn.cursor() as cur:
         cur.execute(
@@ -146,8 +253,8 @@ def finish_digest_run(
                 status,
                 json.dumps(safe_sources, ensure_ascii=False),
                 json.dumps(parse_counts, ensure_ascii=False),
-                json.dumps(quality_report, ensure_ascii=False)
-                if quality_report is not None
+                json.dumps(safe_quality_report, ensure_ascii=False)
+                if safe_quality_report is not None
                 else None,
                 failed_stage,
                 _safe_error_summary(error_summary),
