@@ -1,9 +1,12 @@
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import AiSubscribeForm from "@/components/ai-subscribe-form";
-import LatestPostsGrid from "@/components/latest-posts-grid";
+import LatestBriefsGrid from "@/components/latest-briefs-grid";
 import { BrandIcon } from "@/components/brand-icon";
+import { listPublishedBriefs } from "@/lib/ai-briefs";
 import { subscriptionsEnabled } from "@/lib/feature-flags";
+
+export const dynamic = "force-dynamic";
 
 const COMPANIES: { slug: string; name: string }[] = [
   { slug: "bytedance", name: "字节跳动" },
@@ -16,8 +19,9 @@ const COMPANIES: { slug: string; name: string }[] = [
 
 const LOGO_HEIGHT = 36;
 
-export default function AiTrendsHome() {
+export default async function AiTrendsHome() {
   const signupEnabled = subscriptionsEnabled();
+  const briefs = await listPublishedBriefs(6);
 
   return (
     <main className="min-h-screen bg-white">
@@ -62,7 +66,7 @@ export default function AiTrendsHome() {
         </div>
       </section>
 
-      <LatestPostsGrid />
+      <LatestBriefsGrid briefs={briefs} />
 
       <Footer />
     </main>
