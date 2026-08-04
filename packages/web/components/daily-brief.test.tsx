@@ -3,6 +3,7 @@ import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DailyBrief, {
+  estimateBriefReadMinutes,
   estimateChineseReadMinutes,
 } from "@/components/daily-brief";
 import type { AiPublishedBrief } from "@/lib/ai-briefs";
@@ -132,6 +133,7 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("estimateChineseReadMinutes", () => {
@@ -141,6 +143,55 @@ describe("estimateChineseReadMinutes", () => {
     ["字".repeat(401), 2],
   ])("estimates %s characters deterministically", (text, expected) => {
     expect(estimateChineseReadMinutes(text)).toBe(expected);
+  });
+
+  it("counts representative digest and legacy prose across a minute boundary", () => {
+    // Hand count: base 280 + digest 80 + legacy featured 41 = 401.
+    const boundaryContent: AiPublishedBrief["content"] = {
+      ...COMPLETE_BRIEF.content,
+      subject: "主".repeat(40),
+      editorial: "编".repeat(200),
+      intro_bullets: ["引".repeat(40)],
+      today_ai: {
+        ...COMPLETE_BRIEF.content.today_ai!,
+        subtitle: "",
+        stories: [
+          {
+            headline: "研".repeat(40),
+            summary: "摘".repeat(40),
+            url: "",
+            label: "",
+          },
+        ],
+      },
+      ai_masters: null,
+      ai_research: null,
+      ai_engineering: null,
+      agent_tools: null,
+      featured: [
+        {
+          ...COMPLETE_BRIEF.content.featured[0],
+          theme_label: "",
+          headline: "精".repeat(20),
+          details: ["细".repeat(10)],
+          significance: "义".repeat(10),
+          source_name: "源",
+          og_image: null,
+        },
+      ],
+      tools: [],
+      daily_tip: null,
+      quick_hits: [],
+      yesterday_top: null,
+    };
+
+    expect(estimateBriefReadMinutes(boundaryContent)).toBe(2);
+    expect(
+      estimateBriefReadMinutes({ ...boundaryContent, today_ai: null }),
+    ).toBe(1);
+    expect(
+      estimateBriefReadMinutes({ ...boundaryContent, featured: [] }),
+    ).toBe(1);
   });
 });
 
@@ -216,5 +267,77 @@ describe("DailyBrief", () => {
     expect(
       screen.getByRole("heading", { name: "AI研究" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps slot IDs and display-array keys unique without text invariants", () => {
+    vi.stubGlobal("React", React);
+    const repeatedStory = {
+      headline: "重复新闻",
+      summary: "重复摘要",
+      url: "https://example.com/repeated-story",
+      label: "重复标签",
+    };
+    const repeatedFeatured = {
+      ...COMPLETE_BRIEF.content.featured[0],
+      headline: "重复精选",
+      details: ["重复细节", "重复细节"],
+      url: "https://example.com/repeated-featured",
+    };
+    const repeatedTool = {
+      name: "重复工具",
+      one_liner: "重复说明",
+      url: "https://example.com/repeated-tool",
+    };
+    const repeatedHit = {
+      text: "重复快讯",
+      url: "https://example.com/repeated-hit",
+    };
+    const brief: AiPublishedBrief = {
+      ...COMPLETE_BRIEF,
+      content: {
+        ...COMPLETE_BRIEF.content,
+        intro_bullets: ["重复重点", "重复重点"],
+        today_ai: {
+          ...COMPLETE_BRIEF.content.today_ai!,
+          theme: "model_research",
+          stories: [repeatedStory, { ...repeatedStory }],
+        },
+        ai_masters: {
+          ...COMPLETE_BRIEF.content.ai_masters!,
+          theme: "model_research",
+          stories: [repeatedStory],
+        },
+        featured: [
+          { ...repeatedFeatured, article_id: "article-duplicate-1" },
+          { ...repeatedFeatured, article_id: "article-duplicate-2" },
+        ],
+        tools: [repeatedTool, { ...repeatedTool }],
+        quick_hits: [repeatedHit, { ...repeatedHit }],
+      },
+    };
+    const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    render(<DailyBrief brief={brief} />);
+
+    const todayHeading = screen.getByRole("heading", { name: "今日AI" });
+    const mastersHeading = screen.getByRole("heading", { name: "AI大神" });
+    expect([todayHeading.id, mastersHeading.id]).toEqual([
+      "daily-section-today-ai",
+      "daily-section-ai-masters",
+    ]);
+    expect(todayHeading.closest("section")).toHaveAttribute(
+      "aria-labelledby",
+      "daily-section-today-ai",
+    );
+    expect(mastersHeading.closest("section")).toHaveAttribute(
+      "aria-labelledby",
+      "daily-section-ai-masters",
+    );
+
+    const diagnostics = diagnostic.mock.calls
+      .flat()
+      .map(String)
+      .join("\n");
+    expect(diagnostics).not.toContain("same key");
   });
 });

@@ -52,6 +52,10 @@ function issuePlainText(content: AiBriefContent): string {
   return parts.join("");
 }
 
+export function estimateBriefReadMinutes(content: AiBriefContent): number {
+  return estimateChineseReadMinutes(issuePlainText(content));
+}
+
 function ExternalLink({
   href,
   children,
@@ -74,18 +78,21 @@ function ExternalLink({
 }
 
 function DigestBlock({
+  slotId,
   title,
   section,
 }: {
+  slotId: string;
   title: string;
   section: DigestSection;
 }) {
   const imageAlt = section.header_image_alt.trim() || `${title} 配图`;
+  const headingId = `daily-section-${slotId}`;
 
   return (
-    <section className="border-t border-gray-100 py-10" aria-labelledby={`section-${section.theme}`}>
+    <section className="border-t border-gray-100 py-10" aria-labelledby={headingId}>
       <h2
-        id={`section-${section.theme}`}
+        id={headingId}
         className="text-2xl font-bold text-gray-900"
       >
         {title}
@@ -105,8 +112,8 @@ function DigestBlock({
         />
       )}
       <div className="mt-6 space-y-6">
-        {section.stories.map((story) => (
-          <div key={`${story.headline}-${story.url}`}>
+        {section.stories.map((story, storyIndex) => (
+          <div key={`${slotId}-story-${storyIndex}`}>
             {story.label && (
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">
                 {story.label}
@@ -130,16 +137,21 @@ function DigestBlock({
 
 export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const { content } = brief;
-  const readMinutes = estimateChineseReadMinutes(issuePlainText(content));
+  const readMinutes = estimateBriefReadMinutes(content);
   const digestSections: Array<{
+    slotId: string;
     title: string;
     section: DigestSection | null;
   }> = [
-    { title: "今日AI", section: content.today_ai },
-    { title: "AI大神", section: content.ai_masters },
-    { title: "AI研究", section: content.ai_research },
-    { title: "AI工程", section: content.ai_engineering },
-    { title: "Agent工具", section: content.agent_tools },
+    { slotId: "today-ai", title: "今日AI", section: content.today_ai },
+    { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
+    { slotId: "ai-research", title: "AI研究", section: content.ai_research },
+    {
+      slotId: "ai-engineering",
+      title: "AI工程",
+      section: content.ai_engineering,
+    },
+    { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
   ];
 
   return (
@@ -159,8 +171,8 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
           </p>
         )}
         <ul className="mt-6 space-y-2 rounded-xl bg-indigo-50/70 p-5 text-gray-800">
-          {content.intro_bullets.map((bullet) => (
-            <li key={bullet} className="flex gap-3">
+          {content.intro_bullets.map((bullet, bulletIndex) => (
+            <li key={`intro-${bulletIndex}`} className="flex gap-3">
               <span className="text-indigo-500" aria-hidden="true">
                 •
               </span>
@@ -171,16 +183,23 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
       </header>
 
       {digestSections.map(
-        ({ title, section }) =>
-          section && <DigestBlock key={title} title={title} section={section} />,
+        ({ slotId, title, section }) =>
+          section && (
+            <DigestBlock
+              key={slotId}
+              slotId={slotId}
+              title={title}
+              section={section}
+            />
+          ),
       )}
 
       {content.featured.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">更多精选</h2>
           <div className="mt-6 space-y-8">
-            {content.featured.map((item) => (
-              <div key={`${item.headline}-${item.url}`}>
+            {content.featured.map((item, itemIndex) => (
+              <div key={`featured-${itemIndex}`}>
                 {item.og_image && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -197,8 +216,10 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
                   {item.headline}
                 </h3>
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-gray-700">
-                  {item.details.map((detail) => (
-                    <li key={detail}>{detail}</li>
+                  {item.details.map((detail, detailIndex) => (
+                    <li key={`featured-${itemIndex}-detail-${detailIndex}`}>
+                      {detail}
+                    </li>
                   ))}
                 </ul>
                 <p className="mt-3 leading-relaxed text-gray-700">
@@ -217,8 +238,8 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">AI工具</h2>
           <ul className="mt-5 space-y-4">
-            {content.tools.map((tool) => (
-              <li key={`${tool.name}-${tool.url}`}>
+            {content.tools.map((tool, toolIndex) => (
+              <li key={`tool-${toolIndex}`}>
                 <ExternalLink href={tool.url} className="font-semibold text-indigo-600 hover:underline">
                   {tool.name}
                 </ExternalLink>
@@ -243,8 +264,8 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">快讯</h2>
           <ul className="mt-5 space-y-3">
-            {content.quick_hits.map((hit) => (
-              <li key={`${hit.text}-${hit.url ?? ""}`} className="text-gray-700">
+            {content.quick_hits.map((hit, hitIndex) => (
+              <li key={`quick-hit-${hitIndex}`} className="text-gray-700">
                 {hit.url ? (
                   <ExternalLink href={hit.url}>{hit.text}</ExternalLink>
                 ) : (
