@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
@@ -21,6 +22,13 @@ from ai_brief.digest.models import (
 from ai_brief.schema import DigestStory
 
 log = get_logger("ai_brief.condenser")
+
+@dataclass(frozen=True)
+class ModelOutcome[T]:
+    """A value plus whether it came entirely from a valid model response."""
+
+    value: T
+    complete: bool
 
 _SENT_END = "。！？!?…”）)"
 
@@ -73,7 +81,7 @@ def _today_ai_prompt(items: list[EventItem]) -> str:
     return "\n".join(parts)
 
 
-async def condense_today_ai(items: list[EventItem]) -> TodayAIResult | None:
+async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResult] | None:
     if not items:
         return None
     raw = await extract_json_with_retry(
@@ -84,10 +92,17 @@ async def condense_today_ai(items: list[EventItem]) -> TodayAIResult | None:
         log.error("ai_condenser.today_ai_failed")
         return None
 
-    sum_by_idx = {
-        int(s.get("index")): str(s.get("summary", "")).strip()
-        for s in raw.get("summaries", []) if s.get("index") is not None
-    }
+    sum_by_idx: dict[int, str] = {}
+    summaries = raw.get("summaries")
+    if isinstance(summaries, list):
+        for summary in summaries:
+            if not isinstance(summary, dict) or summary.get("index") is None:
+                continue
+            try:
+                index = int(summary["index"])
+            except (TypeError, ValueError):
+                continue
+            sum_by_idx[index] = str(summary.get("summary", "")).strip()
     stories: list[DigestStory] = []
     for it in items:
         summary = _clip_sentence(
@@ -97,16 +112,34 @@ async def condense_today_ai(items: list[EventItem]) -> TodayAIResult | None:
             DigestStory(headline=it.headline[:80], summary=summary, url=it.url, label=it.label)
         )
 
-    intro = [str(b)[:40] for b in (raw.get("intro_bullets") or []) if str(b).strip()]
+    raw_intro = raw.get("intro_bullets")
+    intro = (
+        [str(b)[:40] for b in raw_intro if str(b).strip()]
+        if isinstance(raw_intro, list)
+        else []
+    )
+    subject = str(raw.get("subject", "")).strip()
+    preheader = str(raw.get("preheader", "")).strip()
+    editorial = str(raw.get("editorial", "")).strip()
+    complete = (
+        all(sum_by_idx.get(item.index) for item in items)
+        and bool(subject)
+        and bool(preheader)
+        and bool(editorial)
+        and bool(intro)
+    )
     if not intro:
-        intro = [s.headline for s in stories]
+        intro = [story.headline for story in stories]
 
-    return TodayAIResult(
-        subject=str(raw.get("subject", "")).strip()[:44] or stories[0].headline,
-        preheader=str(raw.get("preheader", "")).strip()[:60],
-        editorial=str(raw.get("editorial", "")).strip()[:220],
-        intro_bullets=intro[:4],
-        stories=stories,
+    return ModelOutcome(
+        value=TodayAIResult(
+            subject=subject[:44] or stories[0].headline,
+            preheader=preheader[:60],
+            editorial=editorial[:220],
+            intro_bullets=intro[:4],
+            stories=stories,
+        ),
+        complete=complete,
     )
 
 
@@ -161,7 +194,9 @@ def _rebalance(picks: list[int], items_by_idx: dict[int, BuilderItem]) -> list[i
     return a_pick + b_pick
 
 
-async def select_masters(items: list[BuilderItem]) -> list[tuple[BuilderItem, DigestStory]] | None:
+async def select_masters(
+    items: list[BuilderItem],
+) -> ModelOutcome[list[tuple[BuilderItem, DigestStory]]] | None:
     """返回选中的 (item, story) 列表（story.summary 已压缩）。story 顺序 = A组2条 + B组3条。"""
     if not items:
         return None
@@ -174,11 +209,31 @@ async def select_masters(items: list[BuilderItem]) -> list[tuple[BuilderItem, Di
         log.error("ai_condenser.masters_failed")
         return None
 
-    picks_by_idx = {
-        int(p.get("index")): p
-        for p in raw.get("picks", []) if p.get("index") is not None
-    }
+    picks_by_idx: dict[int, dict[str, Any]] = {}
+    raw_picks = raw.get("picks")
+    if isinstance(raw_picks, list):
+        for pick in raw_picks:
+            if not isinstance(pick, dict) or pick.get("index") is None:
+                continue
+            try:
+                index = int(pick["index"])
+            except (TypeError, ValueError):
+                continue
+            if index in by_idx and index not in picks_by_idx:
+                picks_by_idx[index] = pick
     order = _rebalance(list(picks_by_idx.keys()), by_idx)
+    selected_a = [index for index in picks_by_idx if by_idx[index].is_top5]
+    selected_b = [index for index in picks_by_idx if not by_idx[index].is_top5]
+    complete = (
+        len(picks_by_idx) == 5
+        and len(selected_a) == config.AI_MASTERS_PICK_TOP5
+        and len(selected_b) == config.AI_MASTERS_PICK_FIRE5
+        and all(
+            str(pick.get(field, "")).strip()
+            for pick in picks_by_idx.values()
+            for field in ("person", "headline", "summary")
+        )
+    )
 
     out: list[tuple[BuilderItem, DigestStory]] = []
     for idx in order:
@@ -195,7 +250,7 @@ async def select_masters(items: list[BuilderItem]) -> list[tuple[BuilderItem, Di
             it,
             DigestStory(headline=headline, summary=summary, url=it.url, label=person),
         ))
-    return out
+    return ModelOutcome(value=out, complete=complete)
 
 
 # ── AI研究：把选中论文的 Core Takeaways 压成一段可读内容 ────────────────
@@ -207,7 +262,7 @@ _RESEARCH_SYSTEM = """你是 AIVIZENS 的 AI 研究主编。给你一篇论文�
 只输出严格 JSON：{"summary": "≤180字内容"}。只输出 JSON。"""
 
 
-async def condense_research(paper: ResearchPaper) -> DigestStory | None:
+async def condense_research(paper: ResearchPaper) -> ModelOutcome[DigestStory] | None:
     """把一篇论文压成 AI研究 模块的单条 story。失败回退用原始 takeaways 拼接。"""
     if paper is None:
         return None
@@ -223,7 +278,12 @@ async def condense_research(paper: ResearchPaper) -> DigestStory | None:
         summary = " ".join(paper.takeaways)
     summary = _clip_sentence(summary, config.AI_RESEARCH_SUMMARY_CHARS)
     label = f"[{paper.source_tag}]" if paper.source_tag else ""
-    return DigestStory(headline=paper.title[:80], summary=summary, url=paper.url, label=label)
+    return ModelOutcome(
+        value=DigestStory(
+            headline=paper.title[:80], summary=summary, url=paper.url, label=label
+        ),
+        complete=raw is not None and bool(str(raw.get("summary", "")).strip()),
+    )
 
 
 # ── AI工程：课程要点(主题) + 核心要点(内容)，无需 LLM，直接映射 + 收句 ──
@@ -265,7 +325,9 @@ def _agent_prompt(tools: list[AgentTool]) -> str:
     return "\n\n".join(parts)
 
 
-async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None:
+async def select_agent_tools(
+    tools: list[AgentTool],
+) -> ModelOutcome[list[DigestStory]] | None:
     """从 3 个工具里选 2 个，返回 story 列表（headline=名称、summary=压缩介绍、url=仓库）。"""
     if not tools:
         return None
@@ -278,11 +340,15 @@ async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None
         temperature=0.4,
     )
     picks: list[tuple[int, str]] = []
-    if raw is not None:
-        for p in raw.get("picks", []):
-            if p.get("rank") is None:
+    if raw is not None and isinstance(raw.get("picks"), list):
+        for p in raw["picks"]:
+            if not isinstance(p, dict) or p.get("rank") is None:
                 continue
-            picks.append((int(p["rank"]), str(p.get("summary", "")).strip()))
+            try:
+                rank = int(p["rank"])
+            except (TypeError, ValueError):
+                continue
+            picks.append((rank, str(p.get("summary", "")).strip()))
     # 回退/收敛：不足 2 个就按榜单顺序补齐
     chosen: list[int] = [r for r, _ in picks if r in by_rank][: config.AGENT_TOOLS_PICK]
     sum_by_rank = dict(picks)
@@ -301,4 +367,13 @@ async def select_agent_tools(tools: list[AgentTool]) -> list[DigestStory] | None
         )
         label = f"⭐ {t.stars} stars/周" if t.stars else ""
         out.append(DigestStory(headline=t.name[:80], summary=summary, url=t.url, label=label))
-    return out
+    valid_model_picks = [
+        (rank, summary)
+        for rank, summary in picks
+        if rank in by_rank and summary
+    ]
+    complete = (
+        len(valid_model_picks) == config.AGENT_TOOLS_PICK
+        and len({rank for rank, _summary in valid_model_picks}) == config.AGENT_TOOLS_PICK
+    )
+    return ModelOutcome(value=out, complete=complete)

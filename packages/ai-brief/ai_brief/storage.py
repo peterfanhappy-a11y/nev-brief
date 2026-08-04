@@ -335,20 +335,24 @@ class WorkflowBrief:
 def claim_brief_generation(
     conn: psycopg.Connection,
     brief_date: date,
+    run_id: UUID,
 ) -> BriefGenerationClaim:
-    """Atomically create/lock a mutable daily row and set it to generating."""
+    """Claim a mutable daily row for one run; active generating is not stealable."""
     sql = """
-        INSERT INTO ai_daily_briefs (brief_date, content, status, generated_at)
-        VALUES (%s, '{}'::jsonb, 'generating', statement_timestamp())
+        INSERT INTO ai_daily_briefs (
+            brief_date, content, status, source_run_id, generated_at
+        )
+        VALUES (%s, '{}'::jsonb, 'generating', %s, statement_timestamp())
         ON CONFLICT (brief_date) DO UPDATE
         SET status = 'generating',
+            source_run_id = EXCLUDED.source_run_id,
             failure_reason = NULL,
             updated_at = statement_timestamp()
-        WHERE ai_daily_briefs.status IN ('generating', 'blocked', 'awaiting_approval')
+        WHERE ai_daily_briefs.status IN ('blocked', 'awaiting_approval')
         RETURNING status;
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (brief_date,))
+        cur.execute(sql, (brief_date, run_id))
         row = cur.fetchone()
     return "started" if row is not None else "conflict"
 
@@ -376,12 +380,12 @@ def save_generated_brief(
             status = %s,
             quality_report = %s::jsonb,
             digest_sources = %s::jsonb,
-            source_run_id = %s,
             generated_at = statement_timestamp(),
             failure_reason = %s,
             updated_at = statement_timestamp()
         WHERE brief_date = %s
           AND status = 'generating'
+          AND source_run_id = %s
         RETURNING id;
     """
     with conn.cursor() as cur:
@@ -393,9 +397,9 @@ def save_generated_brief(
                 status,
                 json.dumps(safe_report, ensure_ascii=False),
                 json.dumps(safe_sources, ensure_ascii=False),
-                source_run_id,
                 "quality_gate_failed" if status == "blocked" else None,
                 brief_date,
+                source_run_id,
             ),
         )
         row = cur.fetchone()
@@ -403,7 +407,11 @@ def save_generated_brief(
         raise WorkflowTransitionError("generating brief disappeared before finalization")
 
 
-def mark_brief_generation_failed(conn: psycopg.Connection, brief_date: date) -> None:
+def mark_brief_generation_failed(
+    conn: psycopg.Connection,
+    brief_date: date,
+    run_id: UUID,
+) -> bool:
     """Move a claimed row to blocked without changing its last complete content."""
     sql = """
         UPDATE ai_daily_briefs
@@ -411,10 +419,12 @@ def mark_brief_generation_failed(conn: psycopg.Connection, brief_date: date) -> 
             failure_reason = 'brief_generation_failed',
             updated_at = statement_timestamp()
         WHERE brief_date = %s
-          AND status = 'generating';
+          AND status = 'generating'
+          AND source_run_id = %s;
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (brief_date,))
+        cur.execute(sql, (brief_date, run_id))
+        return cur.rowcount == 1
 
 
 def _lock_workflow_brief(

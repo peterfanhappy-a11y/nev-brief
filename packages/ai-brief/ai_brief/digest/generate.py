@@ -45,6 +45,8 @@ class DigestBundle:
     ai_research: DigestSection | None = None
     ai_engineering: DigestSection | None = None
     agent_tools: DigestSection | None = None
+    deepseek_complete: bool = True
+    qwen_complete: bool = True
 
 
 def _filename_index(filename: str) -> int | None:
@@ -141,38 +143,38 @@ def _pick_and_upload(
     mode: str,
     brief_date: str,
     module: str,
-) -> tuple[str | None, str]:
+) -> tuple[str | None, str, bool]:
     """Qwen 从已备好的候选图里选 1 张 → 上传 → (public_url, alt)。图已按模块处理好，直接传。"""
     if not candidates:
-        return None, ""
+        return None, "", False
     images = [(data, ctype) for _, data, ctype, _ in candidates]
     captions = [cap for _, _, _, cap in candidates]
-    pick = image_judge.pick_image(images, captions, mode=mode)
-    if pick < 0 or pick >= len(candidates):
-        pick = 0
+    outcome = image_judge.pick_image(images, captions, mode=mode)
+    pick = outcome.index if 0 <= outcome.index < len(candidates) else 0
     _, data, ctype, caption = candidates[pick]
     path = uploader.image_path(brief_date, module, data, ctype)
     url = uploader.upload_image(data, ctype, path=path)
-    return url, caption
+    return url, caption, outcome.complete
 
 
 async def _build_today_ai(
     brief_date: str,
     digest: DigestEnvelope | None,
-) -> tuple[DigestSection | None, condenser.TodayAIResult | None]:
+) -> tuple[DigestSection | None, condenser.TodayAIResult | None, bool, bool]:
     if digest is None or not digest.html:
         log.warning("ai_digest.events_missing", date=brief_date)
-        return None, None
+        return None, None, True, True
 
     items = parse_events_digest(digest.html)
     if not items:
         log.warning("ai_digest.events_empty")
-        return None, None
+        return None, None, True, True
     items = items[: config.TODAY_AI_TOP_N]  # 上游一次给 8 条，只取 TOP-N
 
-    result = await condenser.condense_today_ai(items)
-    if result is None:
-        return None, None
+    outcome = await condenser.condense_today_ai(items)
+    if outcome is None:
+        return None, None, False, True
+    result = outcome.value
 
     # 源图多是整页长截图 → 先从每张里裁出最像配图的 hero 横幅带，再让 Qwen 在这些干净带里选
     by_idx = _attachments_by_index(digest)
@@ -183,7 +185,7 @@ async def _build_today_ai(
             continue  # SVG 无法 PIL 裁带 → 跳过，避免污染候选
         band, ctype = _find_hero_band(att.data, config.TODAY_AI_BANNER_ASPECT)
         candidates.append((it.index, band, ctype, it.headline))
-    header_url, alt = _pick_and_upload(
+    header_url, alt, qwen_complete = _pick_and_upload(
         candidates, mode="today_ai", brief_date=brief_date, module="today-ai"
     )
 
@@ -191,25 +193,26 @@ async def _build_today_ai(
         theme=Theme.MODEL_RESEARCH, header_image=header_url,
         header_image_alt=alt, stories=result.stories,
     )
-    return section, result
+    return section, result, outcome.complete, qwen_complete
 
 
 async def _build_ai_masters(
     brief_date: str,
     digest: DigestEnvelope | None,
-) -> DigestSection | None:
+) -> tuple[DigestSection | None, bool, bool]:
     if digest is None or not digest.text:
         log.warning("ai_digest.builder_missing", date=brief_date)
-        return None
+        return None, True, True
 
     items = parse_builder_digest(digest.text)
     if not items:
         log.warning("ai_digest.builder_empty")
-        return None
+        return None, True, True
 
-    picks = await condenser.select_masters(items)
-    if not picks:
-        return None
+    outcome = await condenser.select_masters(items)
+    if outcome is None:
+        return None, False, True
+    picks = outcome.value
     stories: list[DigestStory] = [story for _, story in picks]
 
     # 头图只能来自被选中且有图的条目（即被选中的后5条 index 6-10）；推文截图保持完整，不裁 hero 带
@@ -218,13 +221,19 @@ async def _build_ai_masters(
         (it.index, by_idx[it.index].data, by_idx[it.index].content_type, it.headline)
         for it, _ in picks if it.has_image and it.index in by_idx
     ]
-    header_url, alt = _pick_and_upload(
+    header_url, alt, qwen_complete = _pick_and_upload(
         candidates, mode="ai_masters", brief_date=brief_date, module="ai-masters"
     )
 
-    return DigestSection(
-        theme=Theme.PRODUCT_TOOLS, header_image=header_url,
-        header_image_alt=alt, stories=stories,
+    return (
+        DigestSection(
+            theme=Theme.PRODUCT_TOOLS,
+            header_image=header_url,
+            header_image_alt=alt,
+            stories=stories,
+        ),
+        outcome.complete,
+        qwen_complete,
     )
 
 
@@ -233,15 +242,15 @@ async def _build_ai_masters(
 async def _build_research(
     brief_date: str,
     digest: DigestEnvelope | None,
-) -> DigestSection | None:
+) -> tuple[DigestSection | None, bool, bool]:
     """AI研究：Qwen 从附件里选最清晰的图 → 用它对应的那篇论文做主题+内容+链接。"""
     if digest is None or not digest.html:
         log.warning("ai_digest.research_missing", date=brief_date)
-        return None
+        return None, True, True
     papers = parse_research_digest(digest.html)
     if not papers:
         log.warning("ai_digest.research_empty")
-        return None
+        return None, True, True
 
     imgs = _image_attachments(digest)
     # 每张图 → 缩放后的候选；caption 用图名，选中后按图名匹配回论文
@@ -255,9 +264,8 @@ async def _build_research(
     if candidates:
         images = [(d, c) for _, d, c, _ in candidates]
         caps = [cap for _, _, _, cap in candidates]
-        pick = image_judge.pick_image(images, caps, mode="research")
-        if pick < 0 or pick >= len(candidates):
-            pick = 0
+        image_outcome = image_judge.pick_image(images, caps, mode="research")
+        pick = image_outcome.index if 0 <= image_outcome.index < len(candidates) else 0
         picked_att = imgs[pick]
         # 图名匹配回论文（arxiv.png ↔ [Arxiv]）；匹配不到就用第一篇
         for p in papers:
@@ -268,13 +276,23 @@ async def _build_research(
         path = uploader.image_path(brief_date, "ai-research", data, ctype)
         header_url = uploader.upload_image(data, ctype, path=path)
         alt = chosen_paper.title
+        qwen_complete = image_outcome.complete
+    else:
+        qwen_complete = False
 
-    story = await condenser.condense_research(chosen_paper)
-    if story is None:
-        return None
-    return DigestSection(
-        theme=Theme.AI_RESEARCH, header_image=header_url, header_image_alt=alt,
-        cta_label="阅读论文", stories=[story],
+    outcome = await condenser.condense_research(chosen_paper)
+    if outcome is None:
+        return None, False, qwen_complete
+    return (
+        DigestSection(
+            theme=Theme.AI_RESEARCH,
+            header_image=header_url,
+            header_image_alt=alt,
+            cta_label="阅读论文",
+            stories=[outcome.value],
+        ),
+        outcome.complete,
+        qwen_complete,
     )
 
 
@@ -312,22 +330,28 @@ async def _build_engineering(
 async def _build_agent(
     brief_date: str,
     digest: DigestEnvelope | None,
-) -> DigestSection | None:
+) -> tuple[DigestSection | None, bool]:
     """Agent工具：3 个工具选 2 个（DeepSeek 判影响度）；无头图（源无附件）。"""
     if digest is None or not digest.html:
         log.warning("ai_digest.agent_missing", date=brief_date)
-        return None
+        return None, True
     tools = parse_agent_digest(digest.html)
     if not tools:
         log.warning("ai_digest.agent_empty")
-        return None
+        return None, True
 
-    stories = await condenser.select_agent_tools(tools)
-    if not stories:
-        return None
-    return DigestSection(
-        theme=Theme.AGENT_TOOLS, header_image=None, header_image_alt="",
-        cta_label="查看仓库", stories=stories,
+    outcome = await condenser.select_agent_tools(tools)
+    if outcome is None:
+        return None, False
+    return (
+        DigestSection(
+            theme=Theme.AGENT_TOOLS,
+            header_image=None,
+            header_image_alt="",
+            cta_label="查看仓库",
+            stories=outcome.value,
+        ),
+        outcome.complete,
     )
 
 
@@ -337,11 +361,17 @@ async def build_digest_modules(
 ) -> DigestBundle:
     """Build modules for a GMT+8 brief date from transport-neutral inputs."""
     date_str = brief_date.isoformat()
-    today_ai, meta = await _build_today_ai(date_str, digests.get("events"))
-    ai_masters = await _build_ai_masters(date_str, digests.get("builder"))
-    ai_research = await _build_research(date_str, digests.get("research"))
+    today_ai, meta, today_deepseek, today_qwen = await _build_today_ai(
+        date_str, digests.get("events")
+    )
+    ai_masters, masters_deepseek, masters_qwen = await _build_ai_masters(
+        date_str, digests.get("builder")
+    )
+    ai_research, research_deepseek, research_qwen = await _build_research(
+        date_str, digests.get("research")
+    )
     ai_engineering = await _build_engineering(date_str, digests.get("engineering"))
-    agent_tools = await _build_agent(date_str, digests.get("agent"))
+    agent_tools, agent_deepseek = await _build_agent(date_str, digests.get("agent"))
 
     return DigestBundle(
         subject=meta.subject if meta else "",
@@ -353,4 +383,8 @@ async def build_digest_modules(
         ai_research=ai_research,
         ai_engineering=ai_engineering,
         agent_tools=agent_tools,
+        deepseek_complete=all(
+            (today_deepseek, masters_deepseek, research_deepseek, agent_deepseek)
+        ),
+        qwen_complete=all((today_qwen, masters_qwen, research_qwen)),
     )

@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import io
 import re
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -21,6 +22,12 @@ from ai_brief import config
 log = get_logger("ai_brief.image_judge")
 
 _MAX_EDGE = 768  # 判图不需要原图（2-3MB 截图），缩到长边 768 省带宽/时延
+
+
+@dataclass(frozen=True)
+class ImagePick:
+    index: int
+    complete: bool
 
 
 def _downscale(data: bytes, content_type: str) -> tuple[bytes, str]:
@@ -64,17 +71,17 @@ def pick_image(
     base_url: str | None = None,
     model: str | None = None,
     timeout: float = 180.0,
-) -> int:
-    """从 images 里挑 1 张，返回下标。images[i]=(bytes, content_type)。"""
+) -> ImagePick:
+    """Choose an image and report whether Qwen produced a valid selection."""
     if not images:
-        return -1
+        return ImagePick(index=-1, complete=False)
     if len(images) == 1:
-        return 0
+        return ImagePick(index=0, complete=True)
 
     api_key = api_key or config.qwen_api_key()
     if not api_key:
         log.warning("ai_image_judge.no_key_fallback_0")
-        return 0
+        return ImagePick(index=0, complete=False)
 
     criterion = _CRITERIA.get(mode, _CRITERIA["today_ai"])
     content: list[dict[str, Any]] = [{
@@ -114,17 +121,21 @@ def pick_image(
         reasoning = msg.get("reasoning_content") or ""
     except Exception as e:  # noqa: BLE001
         log.warning("ai_image_judge.failed_fallback_0", err=str(e)[:200])
-        return 0
+        return ImagePick(index=0, complete=False)
 
-    idx = _pick_index(text, reasoning, len(images))
+    parsed = _model_pick_index(text, reasoning, len(images))
+    if parsed is None or parsed == -1:
+        log.warning("ai_image_judge.invalid_output_fallback_0")
+        return ImagePick(index=0, complete=False)
+    idx = parsed
     log.info("ai_image_judge.picked", mode=mode, idx=idx, raw=str(text)[-40:])
-    return idx
+    return ImagePick(index=idx, complete=True)
 
 
 _MARK_RE = re.compile(r"选择\s*[=＝:：]\s*(-?\d+)")
 
 
-def _pick_index(content: str, reasoning: str, n: int) -> int:
+def _model_pick_index(content: str, reasoning: str, n: int) -> int | None:
     """先找最后一个「选择=N」标记（N 可为 -1 表示都不合格）；再回退 content 末尾的合法数字。
 
     回退只看 content：reasoning 里会提到图0/图1/图2，用它做 last-number 会误判。
@@ -136,7 +147,13 @@ def _pick_index(content: str, reasoning: str, n: int) -> int:
     for i in (int(x) for x in reversed(re.findall(r"\d+", str(content)))):
         if 0 <= i < n:
             return i
-    return 0
+    return None
+
+
+def _pick_index(content: str, reasoning: str, n: int) -> int:
+    """Compatibility parser retaining the historical index-zero fallback."""
+    parsed = _model_pick_index(content, reasoning, n)
+    return parsed if parsed is not None else 0
 
 
 def _parse_index(text: str, n: int) -> int:  # 兼容旧测试

@@ -107,23 +107,6 @@ def _module_count(bundle: DigestBundle) -> int:
     )
 
 
-def _deepseek_complete(bundle: DigestBundle) -> bool:
-    tool_count = sum(
-        section is not None
-        for section in (bundle.ai_research, bundle.ai_engineering, bundle.agent_tools)
-    )
-    return bundle.today_ai is not None and bundle.ai_masters is not None and tool_count >= 2
-
-
-def _qwen_complete(bundle: DigestBundle) -> bool:
-    qwen_sections: tuple[DigestSection | None, ...] = (
-        bundle.today_ai,
-        bundle.ai_masters,
-        bundle.ai_research,
-    )
-    return all(section is None or bool(section.header_image) for section in qwen_sections)
-
-
 def _digest_sources(
     digests: dict[DigestKind, DigestEnvelope | None],
     bundle: DigestBundle,
@@ -164,13 +147,18 @@ async def generate_for_review(
 ) -> GenerationResult:
     """Generate a candidate and stop at blocked or mandatory human review."""
     date_str = brief_date.isoformat()
-    run_id = storage.start_digest_run(conn, brief_date, type(adapter).__name__)
-    conn.commit()  # Durable run identity always precedes the daily-row claim.
+    try:
+        run_id = storage.start_digest_run(conn, brief_date, type(adapter).__name__)
+        conn.commit()  # Durable run identity always precedes the daily-row claim.
+    except Exception:  # noqa: BLE001 - alert without persisting exception details
+        conn.rollback()
+        _alert(AlertLevel.P1, "AI 简报运行启动失败", f"{date_str} stage=start")
+        raise
 
     stage = "state"
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     try:
-        claim = storage.claim_brief_generation(conn, brief_date)
+        claim = storage.claim_brief_generation(conn, brief_date, run_id)
         if claim == "conflict":
             storage.finish_digest_run(
                 conn,
@@ -201,8 +189,8 @@ async def generate_for_review(
             brief,
             digests,
             existing_status="generating",
-            deepseek_complete=_deepseek_complete(bundle),
-            qwen_complete=_qwen_complete(bundle),
+            deepseek_complete=bundle.deepseek_complete,
+            qwen_complete=bundle.qwen_complete,
             now=datetime.now(UTC),
         )
         status: Literal["blocked", "awaiting_approval"] = (
@@ -248,7 +236,7 @@ async def generate_for_review(
     except Exception:  # noqa: BLE001 - convert pipeline faults into durable safe state
         conn.rollback()
         try:
-            storage.mark_brief_generation_failed(conn, brief_date)
+            storage.mark_brief_generation_failed(conn, brief_date, run_id)
             storage.finish_digest_run(
                 conn,
                 run_id,
@@ -261,6 +249,11 @@ async def generate_for_review(
             conn.commit()
         except Exception:  # noqa: BLE001 - preserve rollback if failure recording fails
             conn.rollback()
+            _alert(
+                AlertLevel.P1,
+                "AI 简报失败状态记录失败",
+                f"{date_str} stage={stage}",
+            )
             raise
         _alert(AlertLevel.P1, "AI 简报生成失败", f"{date_str} stage={stage}")
         return GenerationResult(date_str, "failed", run_id, exit_code=1)

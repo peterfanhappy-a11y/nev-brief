@@ -46,6 +46,8 @@ def _bundle() -> SimpleNamespace:
         ai_research=_section(Theme.AI_RESEARCH),
         ai_engineering=_section(Theme.AI_ENGINEERING),
         agent_tools=_section(Theme.AGENT_TOOLS, header_image=None),
+        deepseek_complete=True,
+        qwen_complete=True,
     )
 
 
@@ -122,18 +124,73 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_called_once()
 
 
-def test_generation_claim_allows_exactly_the_three_regenerable_states() -> None:
+async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> None:
+    connection = _connection()
+    adapter = _Adapter()
+    bundle = _bundle()
+    bundle.deepseek_complete = False
+    bundle.qwen_complete = False
+    validate = MagicMock(return_value=_quality(passed=False))
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "save_generated_brief"),
+        patch.object(storage, "finish_digest_run"),
+        patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
+        patch.object(runner, "validate_brief", validate),
+        patch.object(runner, "_alert"),
+    ):
+        await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+
+    assert validate.call_args.kwargs["deepseek_complete"] is False
+    assert validate.call_args.kwargs["qwen_complete"] is False
+
+
+def test_generation_claim_binds_owner_and_rejects_an_active_generating_row() -> None:
     connection = _connection()
     cursor = MagicMock()
     cursor.fetchone.return_value = ("generating",)
     connection.cursor.return_value.__enter__.return_value = cursor
     connection.cursor.return_value.__exit__.return_value = False
 
-    assert storage.claim_brief_generation(connection, BRIEF_DATE) == "started"
+    assert storage.claim_brief_generation(connection, BRIEF_DATE, RUN_ID) == "started"
     sql, params = cursor.execute.call_args.args
     normalized = " ".join(sql.split())
-    assert "status IN ('generating', 'blocked', 'awaiting_approval')" in normalized
-    assert params == (BRIEF_DATE,)
+    assert "source_run_id" in normalized
+    assert "status IN ('blocked', 'awaiting_approval')" in normalized
+    assert "status IN ('generating'" not in normalized
+    assert params == (BRIEF_DATE, RUN_ID)
+
+
+def test_generation_finalize_and_failure_are_owner_compare_and_swap_operations() -> None:
+    connection = _connection()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = ("brief-id",)
+    cursor.rowcount = 0
+    connection.cursor.return_value.__enter__.return_value = cursor
+    connection.cursor.return_value.__exit__.return_value = False
+
+    storage.save_generated_brief(
+        connection,
+        brief_date=BRIEF_DATE,
+        content={"subject": "owned"},
+        model="model",
+        digest_sources={},
+        quality_report=_safe_report(True),
+        source_run_id=RUN_ID,
+        status="awaiting_approval",
+    )
+    save_sql = " ".join(cursor.execute.call_args.args[0].split())
+    assert "status = 'generating'" in save_sql
+    assert "source_run_id = %s" in save_sql
+    assert cursor.execute.call_args.args[1][-2:] == (BRIEF_DATE, RUN_ID)
+
+    assert storage.mark_brief_generation_failed(connection, BRIEF_DATE, RUN_ID) is False
+    fail_sql = " ".join(cursor.execute.call_args.args[0].split())
+    assert "status = 'generating'" in fail_sql
+    assert "source_run_id = %s" in fail_sql
+    assert cursor.execute.call_args.args[1] == (BRIEF_DATE, RUN_ID)
 
 
 async def test_generation_conflicts_before_adapter_or_model_calls() -> None:
@@ -202,11 +259,65 @@ async def test_generation_exception_records_safe_failed_run_without_partial_cont
     assert result.status == "failed"
     assert result.exit_code == 1
     connection.rollback.assert_called()
-    mark_brief_failed.assert_called_once_with(connection, BRIEF_DATE)
+    mark_brief_failed.assert_called_once_with(connection, BRIEF_DATE, RUN_ID)
     assert finish.call_args.kwargs["error_summary"] == "brief_generation_failed"
     assert finish.call_args.kwargs["digest_sources"]["events"] == envelope.metadata()
     persisted = repr(finish.call_args) + repr(alert.call_args)
     assert raw_secret not in persisted
+
+
+async def test_start_run_failure_rolls_back_and_alerts_without_raw_details() -> None:
+    connection = _connection()
+    raw_secret = "postgresql://user:password@db/private"  # noqa: S105
+    with (
+        patch.object(storage, "start_digest_run", side_effect=RuntimeError(raw_secret)),
+        patch.object(runner, "_alert") as alert,
+        pytest.raises(RuntimeError, match="postgresql"),
+    ):
+        await runner.generate_for_review(connection, BRIEF_DATE, _Adapter())
+
+    connection.rollback.assert_called_once_with()
+    alert.assert_called_once()
+    assert raw_secret not in repr(alert.call_args)
+
+
+async def test_first_run_commit_failure_rolls_back_and_alerts() -> None:
+    connection = _connection()
+    connection.commit.side_effect = RuntimeError("commit failed private detail")
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(runner, "_alert") as alert,
+        pytest.raises(RuntimeError, match="commit failed"),
+    ):
+        await runner.generate_for_review(connection, BRIEF_DATE, _Adapter())
+
+    connection.rollback.assert_called_once_with()
+    alert.assert_called_once()
+    assert "private detail" not in repr(alert.call_args)
+
+
+async def test_failed_run_recording_failure_alerts_before_reraising() -> None:
+    connection = _connection()
+    raw_secret = "failure recording password=hunter2"  # noqa: S105
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "mark_brief_generation_failed"),
+        patch.object(storage, "finish_digest_run", side_effect=RuntimeError(raw_secret)),
+        patch.object(
+            runner,
+            "build_digest_modules",
+            AsyncMock(side_effect=RuntimeError("model failed")),
+        ),
+        patch.object(runner, "_alert") as alert,
+        pytest.raises(RuntimeError, match="failure recording"),
+    ):
+        await runner.generate_for_review(connection, BRIEF_DATE, _Adapter())
+
+    assert connection.rollback.call_count >= 2
+    alert.assert_called_once()
+    assert raw_secret not in repr(alert.call_args)
 
 
 async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed() -> None:
@@ -416,7 +527,7 @@ def _seed_generated_brief(
 ) -> UUID:
     run_id = storage.start_digest_run(conn, brief_date, "integration-test")
     conn.commit()
-    assert storage.claim_brief_generation(conn, brief_date) == "started"
+    assert storage.claim_brief_generation(conn, brief_date, run_id) == "started"
     report = _safe_report(passed)
     status = "awaiting_approval" if passed else "blocked"
     storage.save_generated_brief(
@@ -470,6 +581,74 @@ def _cleanup_workflow_fixtures(
         cur.execute("DELETE FROM ai_digest_runs WHERE brief_date = ANY(%s::date[]);", (dates,))
         cur.execute("DELETE FROM ai_subscribers WHERE email = ANY(%s::text[]);", (emails,))
     conn.commit()
+
+
+@pytest.mark.integration
+def test_postgres_generation_claim_has_one_owner_and_rejects_stale_worker() -> None:
+    brief_date = date(2096, 8, 9)
+    first = _postgres_connection()
+    second = _postgres_connection()
+    try:
+        _cleanup_workflow_fixtures(first, [brief_date], [])
+        first_run = storage.start_digest_run(first, brief_date, "first-worker")
+        first.commit()
+        second_run = storage.start_digest_run(second, brief_date, "second-worker")
+        second.commit()
+
+        assert storage.claim_brief_generation(first, brief_date, first_run) == "started"
+        first.commit()
+        assert storage.claim_brief_generation(second, brief_date, second_run) == "conflict"
+        second.rollback()
+        with first.cursor() as cur:
+            cur.execute(
+                "SELECT status, source_run_id FROM ai_daily_briefs WHERE brief_date = %s;",
+                (brief_date,),
+            )
+            assert cur.fetchone() == ("generating", first_run)
+        first.commit()
+
+        assert storage.mark_brief_generation_failed(first, brief_date, first_run) is True
+        first.commit()
+        assert storage.claim_brief_generation(second, brief_date, second_run) == "started"
+        second.commit()
+
+        with pytest.raises(storage.WorkflowTransitionError, match="disappeared"):
+            storage.save_generated_brief(
+                first,
+                brief_date=brief_date,
+                content=_brief_content(brief_date),
+                model="stale-model",
+                digest_sources={},
+                quality_report=_safe_report(True),
+                source_run_id=first_run,
+                status="awaiting_approval",
+            )
+        first.rollback()
+        assert storage.mark_brief_generation_failed(first, brief_date, first_run) is False
+        first.rollback()
+
+        storage.save_generated_brief(
+            second,
+            brief_date=brief_date,
+            content=_brief_content(brief_date),
+            model="current-model",
+            digest_sources={},
+            quality_report=_safe_report(True),
+            source_run_id=second_run,
+            status="awaiting_approval",
+        )
+        second.commit()
+        with second.cursor() as cur:
+            cur.execute(
+                "SELECT status, source_run_id, model FROM ai_daily_briefs WHERE brief_date = %s;",
+                (brief_date,),
+            )
+            assert cur.fetchone() == ("awaiting_approval", second_run, "current-model")
+    finally:
+        second.rollback()
+        second.close()
+        _cleanup_workflow_fixtures(first, [brief_date], [])
+        first.close()
 
 
 @pytest.mark.integration
