@@ -157,6 +157,16 @@ def _story_items(section: DigestSection | None) -> tuple[tuple[int, DigestStory]
     )
 
 
+def _required_digest_kinds(brief: AiBriefContent) -> tuple[DigestKind, ...]:
+    required: list[DigestKind] = ["events", "builder"]
+    required.extend(
+        _SECTION_DIGEST_KINDS[section_name]
+        for section_name in _TOOL_SECTIONS
+        if _story_count(_section(brief, section_name)) > 0
+    )
+    return tuple(required)
+
+
 def _schema_is_valid(brief: AiBriefContent) -> bool:
     try:
         payload = brief.model_dump(mode="python", warnings=False)
@@ -336,6 +346,7 @@ def _validate_digests(
     warnings: list[QualityIssue],
     metrics: dict[str, int | float | str | bool],
 ) -> tuple[bool, bool]:
+    required_kinds = _required_digest_kinds(brief)
     freshness_values: list[float] = []
     future_kinds: set[DigestKind] = set()
     fallback_used = False
@@ -348,7 +359,11 @@ def _validate_digests(
         freshness = _freshness_hours(envelope, now)
         metrics[metric_key] = freshness
         freshness_values.append(freshness)
-        if _raw_freshness_hours(envelope, now) < -_FUTURE_CLOCK_SKEW_TOLERANCE_HOURS:
+        if (
+            kind in required_kinds
+            and _raw_freshness_hours(envelope, now)
+            < -_FUTURE_CLOCK_SKEW_TOLERANCE_HOURS
+        ):
             future_kinds.add(kind)
             required_fresh = False
             blockers.append(
@@ -368,13 +383,7 @@ def _validate_digests(
                 )
             )
 
-    required_sections = ("today_ai", "ai_masters") + tuple(
-        section_name
-        for section_name in _TOOL_SECTIONS
-        if _story_count(_section(brief, section_name)) > 0
-    )
-    for section_name in required_sections:
-        kind = _SECTION_DIGEST_KINDS[section_name]
+    for kind in required_kinds:
         envelope = digests.get(kind)
         limit = (
             _PRIMARY_DIGEST_MAX_AGE_HOURS

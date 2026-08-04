@@ -523,6 +523,23 @@ def test_exactly_one_missing_tool_module_warns_but_passes() -> None:
     assert report.passed is True
 
 
+@pytest.mark.parametrize("age_hours", [-1.0, 41.0])
+def test_optional_digest_future_or_stale_time_does_not_block_missing_tool_fallback(
+    age_hours: float,
+) -> None:
+    """Future and stale checks must share the required-Digest scope."""
+    brief = _valid_brief().model_copy(update={"agent_tools": None})
+    digests = _valid_digests()
+    digests["agent"] = _envelope("agent", age_hours=age_hours)
+
+    report = _report(brief, digests, now=NOW)
+
+    assert _codes(report, "warnings") == ["tool_module_missing"]
+    assert "required_digest_stale" not in _codes(report)
+    assert report.metrics["required_digests_fresh"] is True
+    assert report.passed is True
+
+
 def test_qwen_no_image_fallback_warns_but_passes() -> None:
     """Losing image-selection completion must remain visible without blocking text publication."""
     report = _report(qwen_complete=False)
