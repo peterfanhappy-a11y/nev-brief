@@ -1,5 +1,32 @@
 import type { AiBriefContent } from "@/lib/ai-briefs";
 
+interface DisposableFixtureEnvironment {
+  AIVIZENS_DISPOSABLE_STACK?: string;
+  SUPABASE_URL?: string;
+}
+
+export function assertDisposableFixtureTarget(
+  environment: DisposableFixtureEnvironment,
+): void {
+  if (environment.AIVIZENS_DISPOSABLE_STACK !== "true") {
+    throw new Error(
+      "Fixture mutation requires AIVIZENS_DISPOSABLE_STACK=true",
+    );
+  }
+
+  let target: URL;
+  try {
+    target = new URL(environment.SUPABASE_URL ?? "");
+  } catch {
+    throw new Error("Fixture mutation requires an http loopback SUPABASE_URL");
+  }
+
+  const loopbackHosts = new Set(["127.0.0.1", "localhost", "[::1]"]);
+  if (target.protocol !== "http:" || !loopbackHosts.has(target.hostname)) {
+    throw new Error("Fixture mutation requires an http loopback SUPABASE_URL");
+  }
+}
+
 export const PUBLISHED_BRIEF_DATE = "2026-08-01";
 export const AWAITING_BRIEF_DATE = "2026-08-02";
 export const AWAITING_SECRET = "AWAITING_ONLY_SECRET_7F3C91";

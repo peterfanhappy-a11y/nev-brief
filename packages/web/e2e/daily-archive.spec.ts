@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   AWAITING_BRIEF_DATE,
   AWAITING_SECRET,
+  assertDisposableFixtureTarget,
   DAILY_ARCHIVE_FIXTURE_ROWS,
   PUBLISHED_BRIEF_CONTENT,
   PUBLISHED_BRIEF_DATE,
@@ -12,6 +13,10 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 test.beforeAll(async ({ request }) => {
+  assertDisposableFixtureTarget({
+    AIVIZENS_DISPOSABLE_STACK: process.env.AIVIZENS_DISPOSABLE_STACK,
+    SUPABASE_URL: supabaseUrl,
+  });
   expect(supabaseUrl).toBeTruthy();
   expect(serviceRoleKey).toBeTruthy();
 
@@ -31,8 +36,10 @@ test.beforeAll(async ({ request }) => {
 });
 
 test("homepage exposes only the published daily issue", async ({ page }) => {
-  await page.goto("/");
+  const response = await page.goto("/");
 
+  expect(response?.status()).toBe(200);
+  expect(await response!.text()).not.toContain(AWAITING_SECRET);
   await expect(
     page.locator(`a[href="/daily/${PUBLISHED_BRIEF_DATE}"]`),
   ).toBeVisible();
@@ -46,8 +53,10 @@ test("homepage exposes only the published daily issue", async ({ page }) => {
 test("published archive renders complete content and public metadata", async ({
   page,
 }) => {
-  await page.goto(`/daily/${PUBLISHED_BRIEF_DATE}`);
+  const response = await page.goto(`/daily/${PUBLISHED_BRIEF_DATE}`);
 
+  expect(response?.status()).toBe(200);
+  expect(await response!.text()).not.toContain(AWAITING_SECRET);
   await expect(
     page.getByRole("heading", { name: PUBLISHED_BRIEF_CONTENT.subject }),
   ).toBeVisible();
@@ -121,5 +130,17 @@ test("awaiting-approval fixture is a real public 404", async ({ page }) => {
   const response = await page.goto(`/daily/${AWAITING_BRIEF_DATE}`);
 
   expect(response?.status()).toBe(404);
+  expect(await response!.text()).not.toContain(AWAITING_SECRET);
   await expect(page.getByText(AWAITING_SECRET)).toHaveCount(0);
+});
+
+test("awaiting-approval Open Graph image is a real public 404", async ({
+  request,
+}) => {
+  const response = await request.get(
+    `/daily/${AWAITING_BRIEF_DATE}/opengraph-image`,
+  );
+
+  expect(response.status()).toBe(404);
+  expect(await response.text()).not.toContain(AWAITING_SECRET);
 });
