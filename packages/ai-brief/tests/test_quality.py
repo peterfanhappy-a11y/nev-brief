@@ -324,7 +324,10 @@ def test_missing_critical_source_url_blocks_every_linked_digest_section(path: st
         ("https://example.invalid/story", "placeholder_url"),
         ("https://placeholder.invalid/story", "placeholder_url"),
         ("https://openai.com/TBD", "placeholder_url"),
+        ("https://openai.com/TBD-v2", "placeholder_url"),
         ("https://openai.com/TODO", "placeholder_url"),
+        ("https://openai.com/TODO.html", "placeholder_url"),
+        ("https://openai.com/placeholder.json", "placeholder_url"),
     ],
 )
 def test_critical_url_rejects_non_https_and_placeholders(url: str, code: str) -> None:
@@ -337,6 +340,30 @@ def test_critical_url_rejects_non_https_and_placeholders(url: str, code: str) ->
 
     assert any(
         issue.code == code and issue.path == "today_ai.stories[0].url"
+        for issue in report.blockers
+    )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://[",
+        "https://openai.com:bad-port/story",
+        "https://exa mple.com/story",
+        "https://%zz/story",
+    ],
+)
+def test_malformed_https_url_returns_a_stable_blocker(url: str) -> None:
+    """Malformed HTTPS parsing must fail closed instead of raising or reaching provenance."""
+    brief = _valid_brief()
+    assert brief.today_ai is not None
+    brief.today_ai.stories[0].url = url
+
+    report = _report(brief)
+
+    assert any(
+        issue.code == "placeholder_url"
+        and issue.path == "today_ai.stories[0].url"
         for issue in report.blockers
     )
 
@@ -374,6 +401,29 @@ def test_placeholder_marker_inside_a_legitimate_token_is_not_blocked() -> None:
     assert report.passed is True
 
 
+def test_todoist_source_is_an_unknown_domain_warning_not_a_placeholder() -> None:
+    """The TODO token must not match inside a legitimate Digest-provenanced hostname."""
+    valid_url = "https://todoist.com/inspiration/ai-workflows"
+    brief = _valid_brief()
+    assert brief.today_ai is not None
+    brief.today_ai.stories[0].url = valid_url
+    digests = _valid_digests()
+    digests["events"] = _envelope(
+        "events",
+        source_urls=(
+            valid_url,
+            "https://openai.com/news/two",
+            "https://openai.com/news/three",
+        ),
+    )
+
+    report = _report(brief, digests)
+
+    assert "placeholder_url" not in _codes(report)
+    assert "source_domain_unknown" in _codes(report, "warnings")
+    assert report.passed is True
+
+
 def test_stale_required_digest_blocks_using_the_supplied_clock() -> None:
     """Using wall-clock time or ignoring the 24-hour boundary would make replay nondeterministic."""
     digests = _valid_digests()
@@ -388,6 +438,34 @@ def test_stale_required_digest_blocks_using_the_supplied_clock() -> None:
     )
     assert report.metrics["events_freshness_hours"] == pytest.approx(24.01)
     assert report.metrics["required_digests_fresh"] is False
+
+
+def test_digest_received_far_in_the_future_blocks_using_the_supplied_clock() -> None:
+    """Clamping every negative age to zero must not accept an impossible receipt time."""
+    digests = _valid_digests()
+    digests["events"] = _envelope("events", age_hours=-1.0)
+
+    report = _report(digests=digests, now=NOW)
+
+    assert any(
+        issue.code == "required_digest_stale"
+        and issue.path == "digests.events.received_at"
+        for issue in report.blockers
+    )
+    assert report.metrics["events_freshness_hours"] == 0.0
+    assert report.metrics["required_digests_fresh"] is False
+
+
+def test_digest_at_five_minute_future_clock_skew_boundary_passes() -> None:
+    """The documented five-minute tolerance must include its exact boundary."""
+    digests = _valid_digests()
+    digests["events"] = _envelope("events", age_hours=-(5 / 60))
+
+    report = _report(digests=digests, now=NOW)
+
+    assert "required_digest_stale" not in _codes(report)
+    assert report.metrics["events_freshness_hours"] == 0.0
+    assert report.metrics["required_digests_fresh"] is True
 
 
 @pytest.mark.parametrize(

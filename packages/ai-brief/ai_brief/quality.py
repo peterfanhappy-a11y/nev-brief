@@ -7,7 +7,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import unescape
-from urllib.parse import urlsplit
+from ipaddress import ip_address
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from pydantic import ValidationError
 
@@ -26,6 +27,7 @@ _PRIMARY_STORY_MINIMUM = 3
 _TOOL_MODULE_MINIMUM = 2
 _PRIMARY_DIGEST_MAX_AGE_HOURS = 24.0
 _TOOL_DIGEST_MAX_AGE_HOURS = 40.0
+_FUTURE_CLOCK_SKEW_TOLERANCE_HOURS = 5 / 60
 _SUMMARY_NEAR_LIMIT_RATIO = 0.9
 
 _SECTION_SUMMARY_LIMITS = {
@@ -86,18 +88,26 @@ _PLACEHOLDER_DOMAINS = frozenset(
         "test",
     }
 )
-_PLACEHOLDER_PHRASES = (
-    "change-me",
-    "changeme",
-    "example.test",
-    "javascript:",
-    "placeholder",
-    "replace-me",
-    "todo",
-    "your-domain",
+_PLACEHOLDER_TOKENS = frozenset(
+    {
+        "change-me",
+        "changeme",
+        "placeholder",
+        "replace-me",
+        "tbd",
+        "todo",
+        "your-domain",
+    }
 )
-_PLACEHOLDER_TOKEN = re.compile(r"(?:^|[/?:#&=_.-])tbd(?:$|[/?:#&=_.-])", re.IGNORECASE)
+_PLACEHOLDER_TOKEN_PATTERN = "|".join(
+    re.escape(token) for token in sorted(_PLACEHOLDER_TOKENS)
+)
+_PLACEHOLDER_TOKEN = re.compile(
+    rf"(?<![a-z0-9])(?:{_PLACEHOLDER_TOKEN_PATTERN})(?![a-z0-9])",
+    re.IGNORECASE,
+)
 _SOURCE_URL = re.compile(r"https://[^\s<>\"']+", re.IGNORECASE)
+_HOST_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -163,12 +173,11 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _raw_freshness_hours(envelope: DigestEnvelope, now: datetime) -> float:
-    age = (_as_utc(now) - _as_utc(envelope.received_at)).total_seconds() / 3600
-    return max(0.0, age)
+    return (_as_utc(now) - _as_utc(envelope.received_at)).total_seconds() / 3600
 
 
 def _freshness_hours(envelope: DigestEnvelope, now: datetime) -> float:
-    return round(_raw_freshness_hours(envelope, now), 3)
+    return round(max(0.0, _raw_freshness_hours(envelope, now)), 3)
 
 
 def _host_is_known(host: str) -> bool:
@@ -179,24 +188,67 @@ def _host_is_placeholder(host: str) -> bool:
     return any(host == domain or host.endswith(f".{domain}") for domain in _PLACEHOLDER_DOMAINS)
 
 
+def _host_is_malformed(host: str) -> bool:
+    try:
+        ip_address(host)
+        return False
+    except ValueError:
+        pass
+    try:
+        ascii_host = host.encode("idna").decode("ascii")
+    except UnicodeError:
+        return True
+    labels = ascii_host.split(".")
+    return (
+        len(ascii_host) > 253
+        or any(_HOST_LABEL.fullmatch(label) is None for label in labels)
+    )
+
+
+def _has_placeholder_token(
+    *,
+    host: str,
+    path: str,
+    query: str,
+    fragment: str,
+) -> bool:
+    tokens = [label.lower() for label in host.split(".")]
+    tokens.extend(unquote(segment).strip().lower() for segment in path.split("/"))
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        tokens.extend((key.strip().lower(), value.strip().lower()))
+    tokens.append(unquote(fragment).strip().lower())
+    return any(_PLACEHOLDER_TOKEN.search(token) is not None for token in tokens)
+
+
 def _url_problem(url: str) -> tuple[str | None, str | None]:
     candidate = url.strip()
     if not candidate:
         return "critical_url_missing", None
-
-    lowered = candidate.lower()
-    if (
-        candidate.startswith("#")
-        or any(phrase in lowered for phrase in _PLACEHOLDER_PHRASES)
-        or _PLACEHOLDER_TOKEN.search(lowered)
-    ):
+    if candidate.startswith("#"):
         return "placeholder_url", None
 
-    parsed = urlsplit(candidate)
+    try:
+        parsed = urlsplit(candidate)
+        host = (parsed.hostname or "").lower().rstrip(".")
+        _ = parsed.port  # Access validates malformed/non-range ports.
+    except ValueError:
+        return "placeholder_url", None
+    if parsed.scheme.lower() == "javascript":
+        return "placeholder_url", None
     if parsed.scheme.lower() != "https":
         return "url_not_https", None
-    host = (parsed.hostname or "").lower().rstrip(".")
-    if not host or _host_is_placeholder(host):
+    if (
+        not host
+        or any(character.isspace() for character in candidate)
+        or _host_is_malformed(host)
+        or _host_is_placeholder(host)
+        or _has_placeholder_token(
+            host=host,
+            path=parsed.path,
+            query=parsed.query,
+            fragment=parsed.fragment,
+        )
+    ):
         return "placeholder_url", None
     return None, host
 
@@ -285,6 +337,7 @@ def _validate_digests(
     metrics: dict[str, int | float | str | bool],
 ) -> tuple[bool, bool]:
     freshness_values: list[float] = []
+    future_kinds: set[DigestKind] = set()
     fallback_used = False
     required_fresh = True
 
@@ -295,6 +348,16 @@ def _validate_digests(
         freshness = _freshness_hours(envelope, now)
         metrics[metric_key] = freshness
         freshness_values.append(freshness)
+        if _raw_freshness_hours(envelope, now) < -_FUTURE_CLOCK_SKEW_TOLERANCE_HOURS:
+            future_kinds.add(kind)
+            required_fresh = False
+            blockers.append(
+                _issue(
+                    "required_digest_stale",
+                    "Digest receipt time exceeds the allowed future clock skew.",
+                    f"digests.{kind}.received_at",
+                )
+            )
         if envelope.used_fallback:
             fallback_used = True
             warnings.append(
@@ -327,6 +390,8 @@ def _validate_digests(
                     f"digests.{kind}",
                 )
             )
+            continue
+        if kind in future_kinds:
             continue
         if _raw_freshness_hours(envelope, now) > limit:
             required_fresh = False
