@@ -129,7 +129,7 @@ async def test_agent_invalid_output_reports_incomplete_when_rank_fallback_builds
 
 
 def test_qwen_missing_credentials_reports_incomplete_fallback_to_first() -> None:
-    with patch.object(image_judge.config, "qwen_api_key", return_value=None):
+    with patch.object(image_judge.config, "qwen_api_key", return_value=None):  # type: ignore[attr-defined]
         result = image_judge.pick_image(
             [(b"first", "image/png"), (b"second", "image/png")],
             ["first", "second"],
@@ -141,7 +141,7 @@ def test_qwen_missing_credentials_reports_incomplete_fallback_to_first() -> None
 
 
 def test_qwen_request_failure_reports_incomplete_fallback_to_first() -> None:
-    with patch.object(image_judge.httpx, "post", side_effect=RuntimeError("request failed")):
+    with patch.object(image_judge.httpx, "post", side_effect=RuntimeError("request failed")):  # type: ignore[attr-defined]
         result = image_judge.pick_image(
             [(b"first", "image/png"), (b"second", "image/png")],
             ["first", "second"],
@@ -158,7 +158,7 @@ def test_qwen_invalid_output_reports_incomplete_even_when_first_image_is_uploade
     response.json.return_value = {
         "choices": [{"message": {"content": "no selection", "reasoning_content": ""}}]
     }
-    with patch.object(image_judge.httpx, "post", return_value=response):
+    with patch.object(image_judge.httpx, "post", return_value=response):  # type: ignore[attr-defined]
         result = image_judge.pick_image(
             [(b"first", "image/png"), (b"second", "image/png")],
             ["first", "second"],

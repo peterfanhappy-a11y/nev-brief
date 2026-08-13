@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 from ai_brief.preview_tokens import build_preview_url, generate_preview_signature
@@ -49,9 +50,9 @@ def test_rejects_malformed_or_impossible_dates(brief_date: str) -> None:
 @pytest.mark.parametrize("expires", [True, 0, -1, 1.5, "1785812100"])
 def test_rejects_invalid_expiry_shape(expires: object) -> None:
     with pytest.raises(ValueError, match="expires"):
-        generate_preview_signature(  # type: ignore[arg-type]
+        generate_preview_signature(
             VECTOR["date"],
-            expires,
+            cast(Any, expires),
             secret=VECTOR["secret"],
             environment="production",
         )

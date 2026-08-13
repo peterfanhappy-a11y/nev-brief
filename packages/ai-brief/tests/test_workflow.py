@@ -5,16 +5,17 @@ from __future__ import annotations
 import os
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, Literal, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
 import psycopg
 import pytest
 from ai_brief import composer, runner, storage
-from ai_brief.digest.input import DigestEnvelope
+from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
-from ai_brief.schema import AiBriefContent, DigestSection, DigestStory, Theme
+from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, Theme
+from ai_brief.storage import DigestRunStatus
 
 BRIEF_DATE = date(2026, 8, 4)
 RUN_ID = UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690")
@@ -72,7 +73,7 @@ class _Adapter:
     def __init__(self) -> None:
         self.fetch_calls = 0
 
-    def fetch(self, brief_date: date) -> dict[str, None]:
+    def fetch(self, brief_date: date) -> dict[DigestKind, DigestEnvelope | None]:
         self.fetch_calls += 1
         assert brief_date == BRIEF_DATE
         return {
@@ -90,7 +91,7 @@ class _Adapter:
 )
 async def test_generation_quality_result_controls_review_state(
     passed: bool,
-    expected_status: str,
+    expected_status: Literal["blocked", "awaiting_approval"],
 ) -> None:
     connection = _connection()
     adapter = _Adapter()
@@ -529,7 +530,7 @@ def _seed_generated_brief(
     conn.commit()
     assert storage.claim_brief_generation(conn, brief_date, run_id) == "started"
     report = _safe_report(passed)
-    status = "awaiting_approval" if passed else "blocked"
+    status: BriefStatus = "awaiting_approval" if passed else "blocked"
     storage.save_generated_brief(
         conn,
         brief_date=brief_date,
@@ -538,12 +539,12 @@ def _seed_generated_brief(
         digest_sources={},
         quality_report=report,
         source_run_id=run_id,
-        status=status,
+        status=cast(Literal["blocked", "awaiting_approval"], status),
     )
     storage.finish_digest_run(
         conn,
         run_id,
-        status=status,
+        status=cast(DigestRunStatus, status),
         digest_sources={},
         quality_report=report,
         stage="quality" if not passed else None,
@@ -566,7 +567,7 @@ def _insert_active_subscriber(conn: psycopg.Connection[Any], email: str) -> UUID
         row = cur.fetchone()
     assert row is not None
     conn.commit()
-    return row[0]
+    return cast(UUID, row[0])
 
 
 def _cleanup_workflow_fixtures(

@@ -132,9 +132,12 @@ def _envelope(
 
 
 def _valid_digests() -> dict[DigestKind, DigestEnvelope | None]:
+    kinds: tuple[DigestKind, ...] = (
+        "events", "builder", "research", "engineering", "agent"
+    )
     return {
         kind: _envelope(kind)
-        for kind in ("events", "builder", "research", "engineering", "agent")
+        for kind in kinds
     }
 
 
