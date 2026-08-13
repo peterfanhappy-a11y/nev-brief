@@ -1,3 +1,4 @@
+-- 0013_ai_digest_runs.sql
 -- Durable, privacy-safe pipeline run records and aggregate operational views.
 
 CREATE TABLE ai_digest_runs (

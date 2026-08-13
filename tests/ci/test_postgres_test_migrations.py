@@ -30,6 +30,7 @@ def test_selects_all_stock_postgres_migrations_and_excludes_supabase_storage() -
         "infra/supabase/migrations/0009_ai_pipeline.sql",
         "infra/supabase/migrations/0011_ai_subscription_confirmation.sql",
         "infra/supabase/migrations/0012_ai_brief_workflow.sql",
+        "infra/supabase/migrations/0013_ai_digest_runs.sql",
     ]
 
 
@@ -51,7 +52,7 @@ def test_fails_when_declared_supabase_only_migration_is_missing(tmp_path: Path) 
     )
 
 
-def test_all_migrations_suffix_matches_0006_through_0012_in_order() -> None:
+def test_all_migrations_suffix_matches_0006_through_0013_in_order() -> None:
     migration_names = [
         "0006_sources_type_add_nextjs_json.sql",
         "0007_articles_processed_simhash_unique.sql",
@@ -60,6 +61,7 @@ def test_all_migrations_suffix_matches_0006_through_0012_in_order() -> None:
         "0010_ai_brief_images_bucket.sql",
         "0011_ai_subscription_confirmation.sql",
         "0012_ai_brief_workflow.sql",
+        "0013_ai_digest_runs.sql",
     ]
     missing = [
         name for name in migration_names if not (MIGRATIONS_DIR / name).is_file()
