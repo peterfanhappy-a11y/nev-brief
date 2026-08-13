@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock, patch
 
+import pytest
 from ai_brief import deliverer, storage
 from ai_brief.storage import PendingAiDelivery
 
@@ -20,7 +21,7 @@ def _pending() -> PendingAiDelivery:
     )
 
 
-def test_send_disabled_does_not_claim_or_send(monkeypatch) -> None:
+def test_send_disabled_does_not_claim_or_send(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AI_EMAIL_SEND_ENABLED", "false")
     conn = MagicMock()
     with patch.object(storage, "claim_pending_deliveries") as claim:
@@ -29,7 +30,9 @@ def test_send_disabled_does_not_claim_or_send(monkeypatch) -> None:
     claim.assert_not_called()
 
 
-def test_idempotency_key_is_stable_even_if_legacy_suffix_is_set(monkeypatch) -> None:
+def test_idempotency_key_is_stable_even_if_legacy_suffix_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("AI_IDEMPOTENCY_SUFFIX", "unsafe-test-override")
     conn = MagicMock()
     with (
