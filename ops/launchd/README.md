@@ -1,33 +1,34 @@
 # Mac mini launchd 部署
 
-跟 Windows (`ops/windows/`) 对位 — 都是 06:00 daily 触发 orchestrator。
+ AIVIZENS 在 Mac Mini 上拆为 06:45 生成与 08:00 发布；NEV 旧任务保持独立。
 
 ## 安装（一键）
 
 把项目 clone 到 `$HOME/nev-brief`（或导出 `PROJECT_ROOT` 覆盖），然后：
 
 ```bash
-bash ops/launchd/install-daily.sh
+bash ops/launchd/install-ai-daily.sh
 ```
 
 脚本会自动：
 1. 检查 `uv` 是否装好
-2. 把 `com.nev.daily.plist` 里的 `REPLACE_ME` 替换成 `$HOME`
+2. 把两个 AIVIZENS plist 里的 `REPLACE_ME` 替换成 `$HOME`
 3. 拷到 `~/Library/LaunchAgents/`
-4. `launchctl load`
+4. `launchctl bootstrap`
 5. 创建 `logs/` 目录
 
 ## 验证
 
 ```bash
-launchctl list | grep com.nev.daily
+launchctl print gui/$(id -u)/com.aivizens.ai-generate
+launchctl print gui/$(id -u)/com.aivizens.ai-release
 ```
 
 ## 手动 trigger（测试）
 
 ```bash
-launchctl start com.nev.daily
-tail -f ~/nev-brief/logs/daily-$(date +%Y%m%d).log
+launchctl kickstart gui/$(id -u)/com.aivizens.ai-generate
+launchctl kickstart gui/$(id -u)/com.aivizens.ai-release
 ```
 
 ## 卸载
@@ -43,9 +44,9 @@ rm ~/Library/LaunchAgents/com.nev.daily.plist
 
 ## 文件说明
 
-- `com.nev.daily.plist` — launchd 模板，含 `REPLACE_ME` 占位符
-- `run-daily.sh` — 真正的 runner（cd 到项目根、定位 uv、跑 orchestrator、tee 日志）
-- `install-daily.sh` — 一键安装脚本
+- `com.aivizens.ai-generate.plist` / `com.aivizens.ai-release.plist` — 两个任务模板
+- `run-ai-generate.sh` / `run-ai-release.sh` — 生成与发布 runner
+- `install-ai-daily.sh` — 一键安装两个 AIVIZENS 任务
 - `README.md` — 你正在看的这个
 
 ## 注意
@@ -53,4 +54,4 @@ rm ~/Library/LaunchAgents/com.nev.daily.plist
 - Mac mini 系统时区必须是 Asia/Shanghai，否则 06:00 不准（`sudo systemsetup -settimezone Asia/Shanghai`）
 - 笔记本/Mac mini 必须保持开机；Sleep 时 launchd 不会 wake（要 wake 用 `pmset repeat wakeorpoweron MTWRFSU 05:55:00`）
 - `.env` 必须在 `PROJECT_ROOT` 根目录（orchestrator 通过 dotenv 加载）
-- 后续 Hermes Agent 主调度 + launchd 兜底见 spec §7.5
+- 06:45 生成完成后，人工使用 `preview-url` 检查并运行 `approve`；08:00 任务只发布已批准内容。

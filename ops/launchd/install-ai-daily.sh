@@ -7,20 +7,23 @@
 set -euo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-$HOME/nev-brief}"
-PLIST_SRC="$PROJECT_ROOT/ops/launchd/com.aivizens.ai-daily.plist"
-PLIST_DEST="$HOME/Library/LaunchAgents/com.aivizens.ai-daily.plist"
-RUNNER="$PROJECT_ROOT/ops/launchd/run-ai-daily.sh"
+PLIST_GEN="$PROJECT_ROOT/ops/launchd/com.aivizens.ai-generate.plist"
+PLIST_REL="$PROJECT_ROOT/ops/launchd/com.aivizens.ai-release.plist"
+DEST_GEN="$HOME/Library/LaunchAgents/com.aivizens.ai-generate.plist"
+DEST_REL="$HOME/Library/LaunchAgents/com.aivizens.ai-release.plist"
+RUN_GEN="$PROJECT_ROOT/ops/launchd/run-ai-generate.sh"
+RUN_REL="$PROJECT_ROOT/ops/launchd/run-ai-release.sh"
 
 if [[ ! -d "$PROJECT_ROOT" ]]; then
     echo "❌ PROJECT_ROOT 不存在: $PROJECT_ROOT" >&2
     exit 1
 fi
-if [[ ! -f "$PLIST_SRC" ]]; then
-    echo "❌ plist 模板缺失: $PLIST_SRC" >&2
+if [[ ! -f "$PLIST_GEN" || ! -f "$PLIST_REL" ]]; then
+    echo "❌ generate/release plist 模板缺失" >&2
     exit 1
 fi
-if [[ ! -f "$RUNNER" ]]; then
-    echo "❌ runner 脚本缺失: $RUNNER" >&2
+if [[ ! -f "$RUN_GEN" || ! -f "$RUN_REL" ]]; then
+    echo "❌ generate/release runner 脚本缺失" >&2
     exit 1
 fi
 
@@ -32,31 +35,34 @@ if ! command -v uv >/dev/null 2>&1 \
     exit 1
 fi
 
-chmod +x "$RUNNER"
+chmod +x "$RUN_GEN" "$RUN_REL"
 mkdir -p "$PROJECT_ROOT/logs"
 
-if launchctl list | grep -q "com.aivizens.ai-daily"; then
-    echo "→ 卸载已有 com.aivizens.ai-daily..."
-    launchctl unload "$PLIST_DEST" 2>/dev/null || true
-fi
+launchctl bootout "gui/$(id -u)/com.aivizens.ai-generate" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/com.aivizens.ai-release" 2>/dev/null || true
+launchctl bootout "gui/$(id -u)/com.aivizens.ai-daily" 2>/dev/null || true
 
 mkdir -p "$HOME/Library/LaunchAgents"
-sed "s|REPLACE_ME|$HOME|g" "$PLIST_SRC" > "$PLIST_DEST"
-echo "→ 写入 $PLIST_DEST"
+sed "s|REPLACE_ME|$HOME|g" "$PLIST_GEN" > "$DEST_GEN"
+sed "s|REPLACE_ME|$HOME|g" "$PLIST_REL" > "$DEST_REL"
+echo "→ 写入 $DEST_GEN 和 $DEST_REL"
 
-launchctl load "$PLIST_DEST"
-echo "→ launchctl load OK"
+launchctl bootstrap "gui/$(id -u)" "$DEST_GEN"
+launchctl bootstrap "gui/$(id -u)" "$DEST_REL"
+echo "→ launchctl bootstrap OK"
 
-if launchctl list | grep -q "com.aivizens.ai-daily"; then
+if launchctl print "gui/$(id -u)/com.aivizens.ai-generate" >/dev/null 2>&1 \
+   && launchctl print "gui/$(id -u)/com.aivizens.ai-release" >/dev/null 2>&1; then
     echo ""
-    echo "✅ com.aivizens.ai-daily 已注册，每天 06:10 自动跑（NEV 06:00 之后错峰）"
+    echo "✅ AIVIZENS generate 06:45 / release 08:00 已注册"
     echo ""
     echo "手动测一次:"
-    echo "  launchctl start com.aivizens.ai-daily"
-    echo "  tail -f $PROJECT_ROOT/logs/ai-daily-\$(date +%Y%m%d).log"
+    echo "  launchctl kickstart gui/$(id -u)/com.aivizens.ai-generate"
+    echo "  launchctl kickstart gui/$(id -u)/com.aivizens.ai-release"
     echo ""
     echo "卸载:"
-    echo "  launchctl unload $PLIST_DEST"
+    echo "  launchctl bootout gui/$(id -u)/com.aivizens.ai-generate"
+    echo "  launchctl bootout gui/$(id -u)/com.aivizens.ai-release"
 else
     echo "❌ 加载后没在 launchctl list 里看到，请检查 plist 语法" >&2
     exit 1
