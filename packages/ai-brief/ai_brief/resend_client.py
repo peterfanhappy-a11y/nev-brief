@@ -90,5 +90,5 @@ def send_email(
     email_id = result.get("id") if isinstance(result, dict) else None
     if not email_id:
         raise ResendPermanentError(f"Resend returned no id: {result!r}")
-    log.info("ai_resend.sent", to=to, email_id=email_id)
+    log.info("ai_resend.sent", email_id=email_id)
     return email_id

@@ -20,7 +20,7 @@ def test_send_email_separates_body_confirmation_link_from_one_click_header() -> 
             subject="AIVIZENS",
             html=f'<a href="{page_url}">unsubscribe</a>',
             text=f"unsubscribe: {page_url}",
-            idempotency_key="ai-2026-07-02-sub-1",
+            idempotency_key="aivizens-2026-07-02-sub-1",
             one_click_unsubscribe_url=api_url,
         )
 

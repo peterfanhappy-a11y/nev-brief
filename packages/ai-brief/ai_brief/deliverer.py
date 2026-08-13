@@ -1,11 +1,10 @@
 """Deliverer — 排空 ai_deliveries 的 pending 队列。
 
-每行独立 commit（一封坏邮件不回滚其余）：claim → send → mark_sent/failed/reset → commit。
-subject 从行内读（每日动态）；幂等键 ai-{date}-{sub}；RFC 8058 header 指向 API。
+每行独立 commit（一封坏邮件不回滚其余）：claim → send → mark_sent/failed → commit。
+subject 从行内读（每日动态）；幂等键 aivizens-{date}-{sub}；RFC 8058 header 指向 API。
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from datetime import date
 
@@ -41,13 +40,7 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
         log.info("ai_send.suppressed_inactive", delivery_id=d.delivery_id)
         return False
 
-    # 生产用 ai-{date}-{sub}（每订阅者每日唯一，防重发）。测试当天想重发看新版时，
-    # 设 AI_IDEMPOTENCY_SUFFIX=v2 拿到新 key 绕过 Resend 24h 去重。
-    suffix = os.environ.get("AI_IDEMPOTENCY_SUFFIX", "")
-    idempotency_key = (
-        f"ai-{d.brief_date.isoformat()}-{d.subscriber_id}"
-        f"{('-' + suffix) if suffix else ''}"
-    )
+    idempotency_key = f"aivizens-{d.brief_date.isoformat()}-{d.subscriber_id}"
     one_click_unsub_url = (
         f"{config.WEB_BASE_URL}/api/unsubscribe"
         f"?token={d.unsubscribe_token}&product=ai"
@@ -68,7 +61,9 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
             delivery_id=d.delivery_id,
             error_type=type(e).__name__,
         )
-        storage.mark_failed(conn, delivery_id=d.delivery_id, error=str(e))
+        storage.mark_failed(
+            conn, delivery_id=d.delivery_id, error=f"permanent:{type(e).__name__}"
+        )
         conn.commit()
         return False
     except ResendTransientError as e:
@@ -77,10 +72,8 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
             delivery_id=d.delivery_id,
             error_type=type(e).__name__,
         )
-        storage.reset_to_pending(
-            conn,
-            delivery_id=d.delivery_id,
-            error=f"transient:{type(e).__name__}",
+        storage.mark_failed(
+            conn, delivery_id=d.delivery_id, error=f"transient:{type(e).__name__}"
         )
         conn.commit()
         return False
@@ -90,7 +83,9 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
             delivery_id=d.delivery_id,
             error_type=type(e).__name__,
         )
-        storage.mark_failed(conn, delivery_id=d.delivery_id, error=f"unexpected: {e!r}")
+        storage.mark_failed(
+            conn, delivery_id=d.delivery_id, error=f"unexpected:{type(e).__name__}"
+        )
         conn.commit()
         return False
 
@@ -108,6 +103,9 @@ def send_pending(
     retry_transient: bool = False,
 ) -> SendResult:
     """排空至多 limit 封 pending 投递。每行独立 commit。"""
+    if not config.email_send_enabled():
+        log.info("ai_deliverer.disabled")
+        return SendResult(attempted=0, sent=0, failed=0)
     if retry_transient:
         storage.retry_transient_deliveries(conn, brief_date=brief_date)
         conn.commit()

@@ -33,7 +33,7 @@ Values live only in the relevant provider secret store, Vercel Production enviro
 | Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_VL_MODEL` | Image-selection model access and configuration. |
 | Resend | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `RESEND_FROM_EMAIL_AI`, `RESEND_FROM_NAME_AI` | Email API access and approved sender identity. |
 | Gmail IMAP | `AI_DIGEST_SENDER`, `AI_GMAIL_IMAP_HOST`, `AI_GMAIL_IMAP_USER`, `AI_GMAIL_IMAP_PASSWORD`, `AI_IMAP_PROXY` | Digest mailbox selection and network access. |
-| AI assets/delivery | `AI_IMAGE_BUCKET`, `AI_IDEMPOTENCY_SUFFIX` | Image storage and the current delivery idempotency override contract. |
+| AI assets/delivery | `AI_IMAGE_BUCKET`, `AI_EMAIL_SEND_ENABLED` | Image storage and the explicit Resend send kill switch. Delivery idempotency is fixed as `aivizens-{brief_date}-{subscriber_id}`. |
 | Web | `WEB_BASE_URL`, `NEXT_PUBLIC_WEB_BASE_URL` | Server-side and browser-visible canonical web origins. |
 | Turnstile | `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Server verification and browser widget keys. |
 | Monitoring/admin | `FEISHU_WEBHOOK_URL`, `SENTRY_DSN`, `HEALTHCHECKS_PING_URL`, `ADMIN_TOKEN` | Alerts, error reporting, health pings, and admin authentication. |

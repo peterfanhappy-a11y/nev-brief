@@ -796,9 +796,7 @@ def lock_active_subscriber(
     with conn.cursor() as cur:
         cur.execute(sql, (subscriber_id,))
         row = cur.fetchone()
-    return row is not None and row[0] == "active"
-
-
+        return row is not None and row[0] == "active"
 def mark_suppressed(conn: psycopg.Connection, *, delivery_id: str) -> None:
     """Terminally suppress a claimed delivery whose subscriber is no longer active."""
     sql = """
@@ -826,16 +824,6 @@ def mark_failed(conn: psycopg.Connection, *, delivery_id: str, error: str) -> No
     sql = """
         UPDATE ai_deliveries
         SET status = 'failed', error = %s, retry_count = retry_count + 1, updated_at = NOW()
-        WHERE id = %s;
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql, (error[:500], delivery_id))
-
-
-def reset_to_pending(conn: psycopg.Connection, *, delivery_id: str, error: str) -> None:
-    sql = """
-        UPDATE ai_deliveries
-        SET status = 'pending', error = %s, retry_count = retry_count + 1, updated_at = NOW()
         WHERE id = %s;
     """
     with conn.cursor() as cur:
