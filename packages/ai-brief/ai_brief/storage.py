@@ -708,6 +708,7 @@ class PendingAiDelivery:
 def claim_pending_deliveries(
     conn: psycopg.Connection,
     limit: int = 50,
+    brief_date: date | None = None,
 ) -> list[PendingAiDelivery]:
     """原子领取至多 limit 封 pending 投递，标记 sending 并返回内容。"""
     sql = """
@@ -720,6 +721,7 @@ def claim_pending_deliveries(
             WHERE d.subscriber_id = s.id
               AND d.status = 'pending'
               AND s.status <> 'active'
+              AND (%s IS NULL OR d.brief_date = %s)
         ),
         claimed AS (
             SELECT d.id
@@ -727,6 +729,7 @@ def claim_pending_deliveries(
             JOIN ai_subscribers s ON s.id = d.subscriber_id
             WHERE d.status = 'pending'
               AND s.status = 'active'
+              AND (%s IS NULL OR d.brief_date = %s)
             ORDER BY d.created_at
             FOR UPDATE OF d, s SKIP LOCKED
             LIMIT %s
@@ -746,7 +749,7 @@ def claim_pending_deliveries(
             (SELECT unsubscribe_token::text FROM ai_subscribers WHERE id = d.subscriber_id);
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (limit,))
+        cur.execute(sql, (brief_date, brief_date, brief_date, brief_date, limit))
         rows = cur.fetchall()
     return [
         PendingAiDelivery(
@@ -755,6 +758,27 @@ def claim_pending_deliveries(
         )
         for r in rows
     ]
+
+
+def retry_transient_deliveries(
+    conn: psycopg.Connection,
+    *,
+    brief_date: date | None = None,
+    max_retries: int = 3,
+) -> int:
+    """Requeue only explicitly transient failures below the retry ceiling."""
+    sql = """
+        UPDATE ai_deliveries
+        SET status = 'pending', updated_at = statement_timestamp()
+        WHERE status = 'failed'
+          AND retry_count < %s
+          AND error LIKE 'transient:%'
+          AND (%s IS NULL OR brief_date = %s)
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (max_retries, brief_date, brief_date))
+        return len(cur.fetchall())
 
 
 def lock_active_subscriber(

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import date
 
 import psycopg
 from nev_shared.logger import get_logger
@@ -76,7 +77,11 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
             delivery_id=d.delivery_id,
             error_type=type(e).__name__,
         )
-        storage.reset_to_pending(conn, delivery_id=d.delivery_id, error=str(e))
+        storage.reset_to_pending(
+            conn,
+            delivery_id=d.delivery_id,
+            error=f"transient:{type(e).__name__}",
+        )
         conn.commit()
         return False
     except Exception as e:  # noqa: BLE001 — defensive
@@ -95,9 +100,18 @@ def _send_one(conn: psycopg.Connection, d: PendingAiDelivery) -> bool:
     return True
 
 
-def send_pending(conn: psycopg.Connection, *, limit: int = 200) -> SendResult:
+def send_pending(
+    conn: psycopg.Connection,
+    *,
+    limit: int = 200,
+    brief_date: date | None = None,
+    retry_transient: bool = False,
+) -> SendResult:
     """排空至多 limit 封 pending 投递。每行独立 commit。"""
-    pendings = storage.claim_pending_deliveries(conn, limit=limit)
+    if retry_transient:
+        storage.retry_transient_deliveries(conn, brief_date=brief_date)
+        conn.commit()
+    pendings = storage.claim_pending_deliveries(conn, limit=limit, brief_date=brief_date)
     if not pendings:
         return SendResult(attempted=0, sent=0, failed=0)
     conn.commit()  # 释放 claim 锁，后续可逐行独立 commit
