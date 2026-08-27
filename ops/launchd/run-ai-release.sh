@@ -4,6 +4,12 @@ PROJECT_ROOT="${PROJECT_ROOT:-$HOME/nev-brief}"
 LOG_DIR="$PROJECT_ROOT/logs"
 LOG_FILE="$LOG_DIR/ai-release-$(TZ=Asia/Shanghai date +%Y%m%d).log"
 mkdir -p "$LOG_DIR"
+if [[ -f "$PROJECT_ROOT/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
 UV_BIN="$(command -v uv 2>/dev/null || true)"
 [[ -n "$UV_BIN" ]] || UV_BIN="$HOME/.local/bin/uv"
 [[ -x "$UV_BIN" ]] || { echo "uv not found" | tee -a "$LOG_FILE" >&2; exit 1; }

@@ -1,6 +1,6 @@
 # Mac mini launchd 部署
 
- AIVIZENS 在 Mac Mini 上拆为 06:45 生成与 08:00 发布；NEV 旧任务保持独立。
+ AIVIZENS 在 Mac Mini 上拆为 06:45 生成/质量通过后自动审批与 08:00 发布投递；NEV 旧任务保持独立。
 
 ## 安装（一键）
 
@@ -54,4 +54,6 @@ rm ~/Library/LaunchAgents/com.nev.daily.plist
 - Mac mini 系统时区必须是 Asia/Shanghai，否则 06:00 不准（`sudo systemsetup -settimezone Asia/Shanghai`）
 - 笔记本/Mac mini 必须保持开机；Sleep 时 launchd 不会 wake（要 wake 用 `pmset repeat wakeorpoweron MTWRFSU 05:55:00`）
 - `.env` 必须在 `PROJECT_ROOT` 根目录（orchestrator 通过 dotenv 加载）
-- 06:45 生成完成后，人工使用 `preview-url` 检查并运行 `approve`；08:00 任务只发布已批准内容。
+- 06:45 任务生成日报；只有生成命令以 0 退出（质量门禁通过）时才自动执行 `approve`。
+- 08:00 任务只发布已批准内容并排空投递队列；请确认 `PROJECT_ROOT/.env` 中 `AI_EMAIL_SEND_ENABLED=true` 才会实际发送。
+- 质量阻断或生成失败时不会审批、发布或发送；失败详情写入 `logs/ai-generate-YYYYMMDD.log`。
