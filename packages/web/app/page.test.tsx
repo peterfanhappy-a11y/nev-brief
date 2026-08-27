@@ -49,9 +49,8 @@ describe("AIVIZENS homepage", () => {
     expect(
       screen.getByRole("heading", { name: "真实发布日报" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "真实发布日报" }),
-    ).toHaveAttribute("href", "/daily/2026-08-03");
+    const briefCard = screen.getByRole("heading", { name: "真实发布日报" }).closest("article");
+    expect(briefCard?.querySelector('a[href="/daily/2026-08-03"]')).not.toBeNull();
   });
 
   it("preserves the approved subscription, trust, logo, and social shell", async () => {
@@ -77,6 +76,8 @@ describe("AIVIZENS homepage", () => {
     ]) {
       expect(screen.getByRole("img", { name: company })).toBeInTheDocument();
     }
+    const bytedanceLogo = screen.getByRole("img", { name: "字节跳动" });
+    expect(bytedanceLogo.parentElement?.parentElement).not.toHaveClass("grayscale");
 
     for (const social of ["微博", "微信", "抖音", "小红书"]) {
       expect(screen.getByRole("link", { name: social })).toHaveAttribute(

@@ -26,40 +26,45 @@ function BriefCard({ brief }: { brief: AiBriefSummary }) {
   const modules = brief.modules.filter((module) => module.trim().length > 0);
 
   return (
-    <article className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
-      <div
-        className={`h-1.5 bg-gradient-to-r ${moduleAccent(modules)}`}
-        aria-hidden="true"
-      />
-      <div className="flex flex-1 flex-col p-5">
-        <time
-          dateTime={brief.briefDate}
-          className="mb-3 text-xs font-medium tracking-wide text-gray-400"
-        >
-          {brief.briefDate}
-        </time>
-        <h3 className="mb-3 text-lg font-semibold leading-snug text-gray-900 transition-colors group-hover:text-indigo-600">
-          <Link href={`/daily/${brief.briefDate}`}>{brief.subject}</Link>
-        </h3>
-        <p className="mb-5 flex-1 text-sm leading-relaxed text-gray-600">
-          {brief.editorial}
-        </p>
-        {modules.length > 0 && (
-          <ul
-            className="flex flex-wrap gap-2 border-t border-gray-50 pt-4"
-            aria-label="本期栏目"
+    <article className="h-full">
+      <Link
+        href={`/daily/${brief.briefDate}`}
+        className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+      >
+        <div
+          className={`h-1.5 bg-gradient-to-r ${moduleAccent(modules)}`}
+          aria-hidden="true"
+        />
+        <div className="flex flex-1 flex-col p-5">
+          <time
+            dateTime={brief.briefDate}
+            className="mb-3 text-xs font-medium tracking-wide text-gray-400"
           >
-            {modules.map((module) => (
-              <li
-                key={module}
-                className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600"
-              >
-                {module}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+            {brief.briefDate}
+          </time>
+          <h3 className="mb-3 text-lg font-semibold leading-snug text-gray-900 transition-colors group-hover:text-indigo-600">
+            {brief.subject}
+          </h3>
+          <p className="mb-5 flex-1 text-sm leading-relaxed text-gray-600">
+            {brief.editorial}
+          </p>
+          {modules.length > 0 && (
+            <ul
+              className="flex flex-wrap gap-2 border-t border-gray-50 pt-4"
+              aria-label="本期栏目"
+            >
+              {modules.map((module) => (
+                <li
+                  key={module}
+                  className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600"
+                >
+                  {module}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Link>
     </article>
   );
 }

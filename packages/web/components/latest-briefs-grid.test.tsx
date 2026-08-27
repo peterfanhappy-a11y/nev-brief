@@ -89,9 +89,15 @@ describe("LatestBriefsGrid", () => {
     ).toBeInTheDocument();
     expect(within(newestCard!).getByText("今日AI")).toBeInTheDocument();
     expect(within(newestCard!).getByText("Agent工具")).toBeInTheDocument();
-    expect(
-      within(newestCard!).getByRole("link", { name: /智能体开始接管重复工作/ }),
-    ).toHaveAttribute("href", "/daily/2026-08-03");
+    const cardLink = newestCard!.querySelector('a[href="/daily/2026-08-03"]');
+    expect(cardLink).not.toBeNull();
+    expect(cardLink).toContainElement(
+      within(newestCard!).getByText(
+        "今天值得关注的是智能体从演示走向真实团队协作。",
+      ),
+    );
+    expect(cardLink).toContainElement(within(newestCard!).getByText("2026-08-03"));
+    expect(cardLink).toContainElement(within(newestCard!).getByText("Agent工具"));
 
     expect(screen.getByText("开源模型生态继续扩张")).toBeInTheDocument();
     expect(screen.queryByText("不应渲染的第七期")).not.toBeInTheDocument();
