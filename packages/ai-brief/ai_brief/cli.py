@@ -55,6 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("generate", help="生成候选简报并等待人工审核")
     g.add_argument("--date", type=_parse_date, required=True)
+    g.add_argument("--backfill", action="store_true", help="一次性回填，核心日报时效上限 40 小时")
 
     v = sub.add_parser("preview-url", help="生成只读审核预览 URL")
     v.add_argument("--date", type=_parse_date, required=True)
@@ -86,7 +87,9 @@ async def _cmd_daily(args: argparse.Namespace) -> int:
 async def _cmd_generate(args: argparse.Namespace) -> int:
     conn = connect()
     try:
-        result = await generate_for_review(conn, args.date, GmailDigestAdapter())
+        result = await generate_for_review(
+            conn, args.date, GmailDigestAdapter(), backfill=args.backfill
+        )
         print(
             json.dumps(
                 {"date": result.brief_date, "status": result.status, "run_id": str(result.run_id)},

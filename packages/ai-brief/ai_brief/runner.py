@@ -144,6 +144,8 @@ async def generate_for_review(
     conn: psycopg.Connection,
     brief_date: date,
     adapter: DigestInputAdapter,
+    *,
+    backfill: bool = False,
 ) -> GenerationResult:
     """Generate a candidate and stop at blocked or mandatory human review."""
     date_str = brief_date.isoformat()
@@ -185,14 +187,26 @@ async def generate_for_review(
         brief = _build_brief_without_lookup(brief_date, bundle, yesterday_top)
 
         stage = "quality"
-        report = validate_brief(
-            brief,
-            digests,
-            existing_status="generating",
-            deepseek_complete=bundle.deepseek_complete,
-            qwen_complete=bundle.qwen_complete,
-            now=datetime.now(UTC),
-        )
+        if backfill:
+            log.warning("ai_runner.backfill_enabled", brief_date=date_str, max_age_hours=40)
+            report = validate_brief(
+                brief,
+                digests,
+                existing_status="generating",
+                deepseek_complete=bundle.deepseek_complete,
+                qwen_complete=bundle.qwen_complete,
+                now=datetime.now(UTC),
+                primary_digest_max_age_hours=40.0,
+            )
+        else:
+            report = validate_brief(
+                brief,
+                digests,
+                existing_status="generating",
+                deepseek_complete=bundle.deepseek_complete,
+                qwen_complete=bundle.qwen_complete,
+                now=datetime.now(UTC),
+            )
         status: Literal["blocked", "awaiting_approval"] = (
             "awaiting_approval" if report.passed else "blocked"
         )

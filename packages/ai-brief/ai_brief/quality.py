@@ -345,6 +345,7 @@ def _validate_digests(
     blockers: list[QualityIssue],
     warnings: list[QualityIssue],
     metrics: dict[str, int | float | str | bool],
+    primary_digest_max_age_hours: float | None = None,
 ) -> tuple[bool, bool]:
     required_kinds = _required_digest_kinds(brief)
     freshness_values: list[float] = []
@@ -386,7 +387,9 @@ def _validate_digests(
     for kind in required_kinds:
         envelope = digests.get(kind)
         limit = (
-            _PRIMARY_DIGEST_MAX_AGE_HOURS
+            primary_digest_max_age_hours
+            if kind in {"events", "builder"} and primary_digest_max_age_hours is not None
+            else _PRIMARY_DIGEST_MAX_AGE_HOURS
             if kind in {"events", "builder"}
             else _TOOL_DIGEST_MAX_AGE_HOURS
         )
@@ -424,6 +427,7 @@ def validate_brief(
     deepseek_complete: bool,
     qwen_complete: bool,
     now: datetime,
+    primary_digest_max_age_hours: float | None = None,
 ) -> QualityReport:
     """Validate a generated brief without I/O or ambient clock access."""
     blockers: list[QualityIssue] = []
@@ -559,6 +563,7 @@ def validate_brief(
         blockers,
         warnings,
         metrics,
+        primary_digest_max_age_hours=primary_digest_max_age_hours,
     )
     metrics["digest_date_fallback"] = fallback_used
     metrics["required_digests_fresh"] = required_fresh

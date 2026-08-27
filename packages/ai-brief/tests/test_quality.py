@@ -180,6 +180,27 @@ def test_valid_brief_passes_with_complete_counts_and_freshness_metrics() -> None
     assert report.metrics["quality_passed"] is True
 
 
+def test_backfill_allows_primary_digests_up_to_forty_hours() -> None:
+    digests = _valid_digests()
+    digests["events"] = _envelope("events", age_hours=30)
+    digests["builder"] = _envelope("builder", age_hours=30)
+
+    report = _report(digests=digests, primary_digest_max_age_hours=40.0)
+
+    assert report.passed is True
+
+
+def test_backfill_still_blocks_primary_digests_older_than_forty_hours() -> None:
+    digests = _valid_digests()
+    digests["events"] = _envelope("events", age_hours=41)
+    digests["builder"] = _envelope("builder", age_hours=41)
+
+    report = _report(digests=digests, primary_digest_max_age_hours=40.0)
+
+    assert report.passed is False
+    assert "required_digest_stale" in _codes(report)
+
+
 @pytest.mark.parametrize(
     ("section_name", "code"),
     [

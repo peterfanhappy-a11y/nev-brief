@@ -9,6 +9,7 @@ from ai_brief.cli import _build_parser, _cmd_daily
 def test_cli_parser_exposes_review_workflow_commands() -> None:
     parser = _build_parser()
     assert parser.parse_args(["generate", "--date", "2026-08-12"]).cmd == "generate"
+    assert parser.parse_args(["generate", "--date", "2026-08-12", "--backfill"]).backfill is True
     assert parser.parse_args(["preview-url", "--date", "2026-08-12"]).cmd == "preview-url"
     assert parser.parse_args(["approve", "--date", "2026-08-12"]).cmd == "approve"
     assert parser.parse_args(["release", "--date", "2026-08-12"]).cmd == "release"
