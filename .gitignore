@@ -17,6 +17,9 @@ node_modules/
 out/
 .turbo/
 *.tsbuildinfo
+test-results/
+playwright-report/
+blob-report/
 
 # Env
 .env
@@ -43,3 +46,9 @@ preview.html
 
 .vercel
 .env*
+
+# Local Superpowers brainstorming artifacts
+.superpowers/
+
+# Isolated implementation worktrees
+.worktrees/

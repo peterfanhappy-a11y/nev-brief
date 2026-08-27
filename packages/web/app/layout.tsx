@@ -1,9 +1,25 @@
 import type { Metadata } from "next";
+
+import { siteBaseUrl } from "@/lib/site-url";
+
 import "./globals.css";
 
+const title = "AIVIZENS · 每日 AI 精选";
+const description = "每日 5 分钟，学会 AI。最新 AI 资讯、行业趋势与实用工具。";
+
 export const metadata: Metadata = {
-  title: "AIVIZENS · 每日 AI 精选",
-  description: "每日 5 分钟，学会 AI。最新 AI 资讯、行业趋势与实用工具。",
+  metadataBase: new URL(siteBaseUrl()),
+  title,
+  description,
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "AIVIZENS",
+    title,
+    description,
+    locale: "zh_CN",
+  },
   icons: {
     icon: "/favicon.svg",
   },

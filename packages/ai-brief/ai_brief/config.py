@@ -160,6 +160,13 @@ def image_bucket() -> str:
     return ai_settings().ai_image_bucket
 
 
+def email_send_enabled() -> bool:
+    """Global kill switch; sending stays disabled unless explicitly enabled."""
+    return os.environ.get("AI_EMAIL_SEND_ENABLED", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
+
+
 # ── 抓取行为 ──────────────────────────────────────────────────────────
 CRAWL_USER_AGENT = "AIVIZENS-Bot/1.0 (+https://aivizens.com/about)"
 CRAWL_MIN_INTERVAL_S = 2.0        # 每源逐篇抓取的最小间隔

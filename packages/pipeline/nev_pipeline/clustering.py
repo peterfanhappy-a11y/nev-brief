@@ -46,7 +46,10 @@ def find_or_create_cluster(article: ClusterCandidate, recent: list[ClusterCandid
             continue
         if not _entity_overlap(article, candidate):
             continue
-        if abs((article.published_at - candidate.published_at).total_seconds()) > _WINDOW.total_seconds():
+        age_delta = abs(
+            (article.published_at - candidate.published_at).total_seconds()
+        )
+        if age_delta > _WINDOW.total_seconds():
             continue
         if not are_similar(article.simhash, candidate.simhash, threshold=_SIMHASH_THRESHOLD):
             continue

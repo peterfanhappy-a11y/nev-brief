@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "@/lib/supabase";
 
+export { siteBaseUrl } from "@/lib/site-url";
+
 export type Candidate = {
   rank: number;
   cluster_id: string;
@@ -126,14 +128,6 @@ export function findCandidateByPrefix(
 export function humanDate(briefDate: string): string {
   const [y, m, d] = briefDate.split("-");
   return `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
-}
-
-export function siteBaseUrl(): string {
-  return (
-    process.env.WEB_BASE_URL ??
-    process.env.NEXT_PUBLIC_WEB_BASE_URL ??
-    "https://aivizens.com"
-  );
 }
 
 /**

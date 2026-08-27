@@ -1,11 +1,11 @@
-from datetime import datetime, time
+from datetime import time
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
 
+from python.enums import Plan, PushChannel, SubscriberStatus, Topic
 from python.subscriber import Subscriber, SubscriberPreferences
-from python.enums import SubscriberStatus, Plan, PushChannel, Topic
 
 
 def test_subscriber_minimal_construction():

@@ -6,7 +6,10 @@ UA 标识、单篇失败跳过不炸全局。httpx trust_env=False 避免走 Cla
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, cast
 
 import httpx
 import yaml
@@ -21,10 +24,12 @@ from ai_brief.storage import AiArticle
 
 log = get_logger("ai_brief.crawl")
 
+Source = dict[str, Any]
 
-def load_sources(path=config.SOURCES_YAML) -> list[dict]:  # noqa: ANN001
+
+def load_sources(path: str | Path = config.SOURCES_YAML) -> list[Source]:
     with open(path, encoding="utf-8") as f:
-        data = yaml.safe_load(f)
+        data = cast(dict[str, list[Source]], yaml.safe_load(f))
     return [s for s in data.get("sources", []) if s.get("enabled", False)]
 
 
@@ -59,7 +64,7 @@ class _Seed:
     baseline_image: str | None    # RSS media/enclosure image
 
 
-async def _collect_seeds(client: httpx.AsyncClient, source: dict) -> list[_Seed]:
+async def _collect_seeds(client: httpx.AsyncClient, source: Source) -> list[_Seed]:
     """RSS 用 feed（含 summary/image 基线），html_list 用选择器。"""
     stype = source["type"]
     url = source["url"]
@@ -90,7 +95,7 @@ async def _collect_seeds(client: httpx.AsyncClient, source: dict) -> list[_Seed]
 async def crawl_source(
     client: httpx.AsyncClient,
     robots: RobotsChecker,
-    source: dict,
+    source: Source,
 ) -> list[AiArticle]:
     name = source["name"]
     locale = source.get("locale", "en")
@@ -144,8 +149,8 @@ async def crawl_source(
 
 
 async def crawl_all(
-    sources: list[dict] | None = None,
-    on_source=None,  # noqa: ANN001 — Callable[[list[AiArticle]], None]，每源抓完回调（用于增量落库）
+    sources: list[Source] | None = None,
+    on_source: Callable[[list[AiArticle]], None] | None = None,
 ) -> list[AiArticle]:
     """抓取所有 enabled 源，返回全部 AiArticle。源之间串行（各自内部已限速）。
 

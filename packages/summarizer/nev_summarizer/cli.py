@@ -4,14 +4,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import psycopg
-
 from nev_shared.config import get_settings
 from nev_shared.logger import configure_logging, get_logger
 
-from nev_summarizer.runner import run_brief_for_date, DEFAULT_TOP_N
+from nev_summarizer.runner import DEFAULT_TOP_N, run_brief_for_date
 
 log = get_logger("summarizer.cli")
 
@@ -49,7 +48,7 @@ async def _async_run(args: argparse.Namespace) -> int:
     configure_logging(level=settings.log_level)
     conn = psycopg.connect(settings.database_url)
     try:
-        brief_date = args.date or datetime.now(timezone.utc).date()
+        brief_date = args.date or datetime.now(UTC).date()
         result = await run_brief_for_date(conn, brief_date, top_n=args.top_n)
         conn.commit()
         print(

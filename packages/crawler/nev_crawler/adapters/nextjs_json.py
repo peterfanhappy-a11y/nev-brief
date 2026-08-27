@@ -14,16 +14,16 @@ extra 配置:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from nev_shared.logger import get_logger
+from python.content import ArticleRaw
 from selectolax.parser import HTMLParser
 
 from nev_crawler.adapters.base import Adapter, FetchResult
 from nev_crawler.http_client import make_client
-from nev_shared.logger import get_logger
-from python.content import ArticleRaw
 
 log = get_logger("nextjs_json")
 
@@ -93,7 +93,7 @@ class NextJSJSONAdapter(Adapter):
             pf = extra.get("published_field")
             if pf and (ts := it.get(pf)) and isinstance(ts, (int, float)):
                 try:
-                    published_at = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    published_at = datetime.fromtimestamp(ts, tz=UTC)
                 except (ValueError, OSError):
                     published_at = None
 

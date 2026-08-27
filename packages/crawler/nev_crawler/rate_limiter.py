@@ -13,7 +13,7 @@ class DomainRateLimiter:
     spec §5.2.3: 每域 ≤ 1 QPS + 0.5-2s 随机抖动
     """
 
-    def __init__(self, qps_per_domain: float = 1.0, jitter: float = 1.5):
+    def __init__(self, qps_per_domain: float = 1.0, jitter: float = 1.5) -> None:
         if qps_per_domain <= 0:
             raise ValueError("qps_per_domain must be positive")
         self._min_interval = 1.0 / qps_per_domain
@@ -28,6 +28,7 @@ class DomainRateLimiter:
             elapsed = now - last
             wait = self._min_interval - elapsed
             if wait > 0:
-                jitter = random.uniform(0, self._jitter) if self._jitter > 0 else 0
+                # Scheduling jitter is deliberately non-cryptographic.
+                jitter = random.uniform(0, self._jitter) if self._jitter > 0 else 0  # noqa: S311
                 await asyncio.sleep(wait + jitter)
             self._last_call[domain] = time.monotonic()

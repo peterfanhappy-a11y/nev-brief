@@ -1,6 +1,7 @@
 """Single-article pipeline orchestrator."""
 from __future__ import annotations
 
+from datetime import UTC
 from typing import Any
 
 from nev_pipeline.clustering import ClusterCandidate, find_or_create_cluster
@@ -30,8 +31,8 @@ async def process_article(
 
     # HTML scrape sources (汽车之家, 车质网) often lack published_at.
     # Fall back to "now" so clustering + scoring don't crash.
-    from datetime import datetime, timezone
-    pub_at = raw.get("published_at") or datetime.now(tz=timezone.utc)
+    from datetime import datetime
+    pub_at = raw.get("published_at") or datetime.now(tz=UTC)
 
     article_candidate = ClusterCandidate(
         brands=entities.brands,

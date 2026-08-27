@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
+import pytest
 from nev_shared.db import get_supabase_client
 
 
-def test_get_supabase_client_returns_singleton(monkeypatch):
+def test_get_supabase_client_returns_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "fake")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "x")

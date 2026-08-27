@@ -65,18 +65,18 @@ def send_email(
     html: str,
     text: str,
     idempotency_key: str,
-    unsubscribe_url: str,
+    one_click_unsubscribe_url: str,
 ) -> str:
     """发送一封邮件，返回 Resend email id。"""
     _configure_sdk()
-    params: dict = {
+    params: resend.Emails.SendParams = {
         "from": f"{FROM_NAME} <{FROM_EMAIL}>",
         "to": [to],
         "subject": subject,
         "html": html,
         "text": text,
         "headers": {
-            "List-Unsubscribe": f"<{unsubscribe_url}>",
+            "List-Unsubscribe": f"<{one_click_unsubscribe_url}>",
             "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
             "Idempotency-Key": idempotency_key,
         },
@@ -90,5 +90,5 @@ def send_email(
     email_id = result.get("id") if isinstance(result, dict) else None
     if not email_id:
         raise ResendPermanentError(f"Resend returned no id: {result!r}")
-    log.info("ai_resend.sent", to=to, email_id=email_id)
+    log.info("ai_resend.sent", email_id=email_id)
     return email_id

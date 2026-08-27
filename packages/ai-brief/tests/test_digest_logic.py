@@ -1,9 +1,12 @@
 """condenser / image_judge 的纯逻辑单测（不触 API）。"""
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from ai_brief.digest import condenser, image_judge
 from ai_brief.digest.condenser import _rebalance
 from ai_brief.digest.image_judge import _parse_index
-from ai_brief.digest.models import BuilderItem
+from ai_brief.digest.models import AgentTool, BuilderItem, EventItem, ResearchPaper
 
 
 def _items() -> dict[int, BuilderItem]:
@@ -15,7 +18,7 @@ def _items() -> dict[int, BuilderItem]:
     return out
 
 
-def test_rebalance_enforces_2A_3B() -> None:
+def test_rebalance_enforces_2a_3b() -> None:
     by = _items()
     order = _rebalance([1, 2, 6, 7, 8], by)          # 正好 2A + 3B
     assert order == [1, 2, 6, 7, 8]
@@ -32,7 +35,7 @@ def test_rebalance_fixes_wrong_counts() -> None:
     assert 6 in b                                       # 保留模型选的 B，其余按序补
 
 
-def test_rebalance_all_B_only_picked() -> None:
+def test_rebalance_all_b_only_picked() -> None:
     by = _items()
     order = _rebalance([6, 7, 8, 9, 10], by)
     a = [i for i in order if i <= 5]
@@ -60,3 +63,108 @@ def test_parse_index() -> None:
     assert _parse_index("我选 0 号", 3) == 0
     assert _parse_index("5", 3) == 0                    # 越界 → 回退 0
     assert _parse_index("没有数字", 3) == 0
+
+
+async def test_today_ai_invalid_model_output_reports_incomplete_despite_source_fallback() -> None:
+    items = [
+        EventItem(
+            index=index,
+            category="AI",
+            value_tag="important",
+            headline=f"Headline {index}",
+            url=f"https://openai.com/{index}",
+            body=f"Source body {index}",
+            image_note="",
+        )
+        for index in range(1, 4)
+    ]
+    with patch.object(condenser, "extract_json_with_retry", new=AsyncMock(return_value={})):
+        result = await condenser.condense_today_ai(items)
+
+    assert result is not None
+    assert result.complete is False
+    assert [story.summary for story in result.value.stories] == [
+        "Source body 1",
+        "Source body 2",
+        "Source body 3",
+    ]
+
+
+async def test_research_request_failure_reports_incomplete_with_source_fallback() -> None:
+    paper = ResearchPaper(
+        source_tag="Arxiv",
+        title="Research title",
+        takeaways=["Takeaway one", "Takeaway two"],
+        url="https://arxiv.org/abs/1234.5678",
+    )
+    with patch.object(condenser, "extract_json_with_retry", new=AsyncMock(return_value=None)):
+        result = await condenser.condense_research(paper)
+
+    assert result is not None
+    assert result.complete is False
+    assert result.value.summary == "Takeaway one Takeaway two"
+
+
+async def test_agent_invalid_output_reports_incomplete_when_rank_fallback_builds_stories() -> None:
+    tools = [
+        AgentTool(
+            rank=rank,
+            name=f"tool-{rank}",
+            stars="10",
+            points=[f"point-{rank}"],
+            url=f"https://github.com/example/tool-{rank}",
+        )
+        for rank in range(1, 4)
+    ]
+    with patch.object(
+        condenser,
+        "extract_json_with_retry",
+        new=AsyncMock(return_value={"picks": []}),
+    ):
+        result = await condenser.select_agent_tools(tools)
+
+    assert result is not None
+    assert result.complete is False
+    assert [story.headline for story in result.value] == ["tool-1", "tool-2"]
+
+
+def test_qwen_missing_credentials_reports_incomplete_fallback_to_first() -> None:
+    with patch.object(image_judge.config, "qwen_api_key", return_value=None):  # type: ignore[attr-defined]
+        result = image_judge.pick_image(
+            [(b"first", "image/png"), (b"second", "image/png")],
+            ["first", "second"],
+            mode="today_ai",
+        )
+
+    assert result.index == 0
+    assert result.complete is False
+
+
+def test_qwen_request_failure_reports_incomplete_fallback_to_first() -> None:
+    with patch.object(image_judge.httpx, "post", side_effect=RuntimeError("request failed")):  # type: ignore[attr-defined]
+        result = image_judge.pick_image(
+            [(b"first", "image/png"), (b"second", "image/png")],
+            ["first", "second"],
+            mode="today_ai",
+            api_key="fixture-key",
+        )
+
+    assert result.index == 0
+    assert result.complete is False
+
+
+def test_qwen_invalid_output_reports_incomplete_even_when_first_image_is_uploaded() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "choices": [{"message": {"content": "no selection", "reasoning_content": ""}}]
+    }
+    with patch.object(image_judge.httpx, "post", return_value=response):  # type: ignore[attr-defined]
+        result = image_judge.pick_image(
+            [(b"first", "image/png"), (b"second", "image/png")],
+            ["first", "second"],
+            mode="today_ai",
+            api_key="fixture-key",
+        )
+
+    assert result.index == 0
+    assert result.complete is False

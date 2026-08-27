@@ -10,14 +10,23 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
+import os
 from datetime import date, datetime
 
 from nev_shared.config import get_settings
 from nev_shared.logger import configure_logging
 
-from ai_brief import composer, deliverer, storage
+from ai_brief import composer, deliverer, stats, storage
 from ai_brief.crawler import runner as crawl_runner
-from ai_brief.runner import connect, run_daily
+from ai_brief.digest.gmail_input import GmailDigestAdapter
+from ai_brief.preview_tokens import build_preview_url
+from ai_brief.runner import (
+    approve_brief,
+    connect,
+    generate_for_review,
+    release_approved,
+)
 from ai_brief.schema import AiBriefContent
 
 
@@ -29,7 +38,7 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="ai_brief", description="AIVIZENS AI 趋势每日简报")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    d = sub.add_parser("daily", help="全流程：crawl→select→summarize→compose→deliver")
+    d = sub.add_parser("daily", help="已停用：请使用 generate/approve/release/deliver")
     d.add_argument("--date", type=_parse_date, default=None)
     d.add_argument("--dry-run", action="store_true", help="停在 compose 前，只生成简报文档")
     d.add_argument("--only-email", default=None, help="只给该邮箱生成投递（测试用）")
@@ -43,23 +52,122 @@ def _build_parser() -> argparse.ArgumentParser:
     c.add_argument("--preview-out", default=None, help="写一份预览 HTML 到文件，不落库")
 
     sub.add_parser("deliver", help="仅排空 pending 投递队列")
+
+    g = sub.add_parser("generate", help="生成候选简报并等待人工审核")
+    g.add_argument("--date", type=_parse_date, required=True)
+    g.add_argument("--backfill", action="store_true", help="一次性回填，核心日报时效上限 40 小时")
+
+    v = sub.add_parser("preview-url", help="生成只读审核预览 URL")
+    v.add_argument("--date", type=_parse_date, required=True)
+    v.add_argument("--ttl-minutes", type=int, default=15)
+
+    a = sub.add_parser("approve", help="批准候选简报")
+    a.add_argument("--date", type=_parse_date, required=True)
+
+    r = sub.add_parser("release", help="发布已批准简报并创建投递")
+    r.add_argument("--date", type=_parse_date, required=True)
+    r.add_argument("--only-email", default=None)
+
+    d = sub.choices["deliver"]
+    d.add_argument("--date", type=_parse_date, default=None)
+    d.add_argument("--retry-transient", action="store_true")
+
+    s = sub.add_parser("stats", help="输出隐私安全运营统计")
+    s.add_argument("--date", type=_parse_date, default=None)
+    s.add_argument("--json", action="store_true")
     return p
 
 
 async def _cmd_daily(args: argparse.Namespace) -> int:
+    del args
+    print("ERR daily is retired; use generate, approve, release, and deliver", flush=True)
+    return 2
+
+
+async def _cmd_generate(args: argparse.Namespace) -> int:
     conn = connect()
     try:
-        brief_date = args.date or datetime.now().date()
-        r = await run_daily(
-            conn, brief_date,
-            only_email=args.only_email, dry_run=args.dry_run, skip_crawl=args.skip_crawl,
+        result = await generate_for_review(
+            conn, args.date, GmailDigestAdapter(), backfill=args.backfill
         )
         print(
-            f"OK daily {r.brief_date} steps={'/'.join(r.steps)} "
-            f"modules={r.modules} composed={r.composed} sent={r.sent} failed={r.failed}"
-            + (f" ABORTED@{r.aborted_at}" if r.aborted_at else "")
+            json.dumps(
+                {"date": result.brief_date, "status": result.status, "run_id": str(result.run_id)},
+                ensure_ascii=False,
+            )
         )
-        return 1 if r.aborted_at else 0
+        return result.exit_code
+    finally:
+        conn.close()
+
+
+def _cmd_preview_url(args: argparse.Namespace) -> int:
+    if args.ttl_minutes <= 0 or args.ttl_minutes > 15:
+        print("ERR ttl-minutes must be between 1 and 15")
+        return 2
+    expires = int(datetime.now().timestamp()) + args.ttl_minutes * 60
+    try:
+        print(
+            build_preview_url(
+                args.date.isoformat(),
+                expires,
+                secret=os.environ.get("PREVIEW_SIGNING_SECRET"),
+            )
+        )
+        return 0
+    except ValueError as exc:
+        print(f"ERR {exc}")
+        return 2
+
+
+def _cmd_approve(args: argparse.Namespace) -> int:
+    operator = os.environ.get("AIVIZENS_OPERATOR_ID", "").strip()
+    if not operator:
+        print("ERR AIVIZENS_OPERATOR_ID is required")
+        return 2
+    conn = connect()
+    try:
+        result = approve_brief(conn, args.date, approved_by=operator)
+        print(
+            json.dumps(
+                {"date": result.brief_date, "status": result.status, "changed": result.changed},
+                ensure_ascii=False,
+            )
+        )
+        return result.exit_code
+    finally:
+        conn.close()
+
+
+def _cmd_release(args: argparse.Namespace) -> int:
+    conn = connect()
+    try:
+        result = release_approved(conn, args.date, only_email=args.only_email)
+        print(
+            json.dumps(
+                {
+                    "date": result.brief_date,
+                    "status": result.status,
+                    "released": result.released,
+                    "composed": result.composed,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return result.exit_code
+    finally:
+        conn.close()
+
+
+def _cmd_stats(args: argparse.Namespace) -> int:
+    conn = connect()
+    try:
+        payload = stats.fetch_stats(conn, args.date)
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True))
+        else:
+            print(json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True, indent=2))
+        return 0
     finally:
         conn.close()
 
@@ -69,7 +177,7 @@ async def _cmd_crawl(_args: argparse.Namespace) -> int:
     try:
         total_new = 0
 
-        def _sink(articles) -> None:  # noqa: ANN001 — 每源增量落库
+        def _sink(articles: list[storage.AiArticle]) -> None:
             nonlocal total_new
             total_new += storage.insert_articles(conn, articles)
             conn.commit()
@@ -103,10 +211,14 @@ def _cmd_compose(args: argparse.Namespace) -> int:
         conn.close()
 
 
-def _cmd_deliver(_args: argparse.Namespace) -> int:
+def _cmd_deliver(args: argparse.Namespace) -> int:
     conn = connect()
     try:
-        res = deliverer.send_pending(conn)
+        res = deliverer.send_pending(
+            conn,
+            brief_date=args.date,
+            retry_transient=args.retry_transient,
+        )
         print(f"OK deliver attempted={res.attempted} sent={res.sent} failed={res.failed}")
         return 0
     finally:
@@ -114,16 +226,26 @@ def _cmd_deliver(_args: argparse.Namespace) -> int:
 
 
 def main() -> int:
-    configure_logging(level=get_settings().log_level)
     args = _build_parser().parse_args()
+    configure_logging(level=get_settings().log_level)
     if args.cmd == "daily":
         return asyncio.run(_cmd_daily(args))
+    if args.cmd == "generate":
+        return asyncio.run(_cmd_generate(args))
+    if args.cmd == "preview-url":
+        return _cmd_preview_url(args)
+    if args.cmd == "approve":
+        return _cmd_approve(args)
+    if args.cmd == "release":
+        return _cmd_release(args)
     if args.cmd == "crawl":
         return asyncio.run(_cmd_crawl(args))
     if args.cmd == "compose":
         return _cmd_compose(args)
     if args.cmd == "deliver":
         return _cmd_deliver(args)
+    if args.cmd == "stats":
+        return _cmd_stats(args)
     return 2
 
 

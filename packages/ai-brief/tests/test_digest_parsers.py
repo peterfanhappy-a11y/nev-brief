@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ai_brief.digest.builder_parser import parse_builder_digest
 from ai_brief.digest.events_parser import parse_events_digest
+from ai_brief.digest.research_parser import parse_research_digest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -16,6 +17,14 @@ def _events_html() -> str:
 
 def _builder_text() -> str:
     return (FIXTURES / "builder_digest_2026-07-11.txt").read_text(encoding="utf-8")
+
+
+def _current_events_html() -> str:
+    return (FIXTURES / "events_digest_2026-08-16.html").read_text(encoding="utf-8")
+
+
+def _current_research_html() -> str:
+    return (FIXTURES / "research_digest_2026-08-16.html").read_text(encoding="utf-8")
 
 
 # ── events (今日AI) ────────────────────────────────────────────────
@@ -42,6 +51,29 @@ def test_events_label_split_and_body() -> None:
     assert c.category == "海外" and c.value_tag == "最吸引眼球"
     assert "清理陷阱" in c.headline
     assert "RAG" in c.body                          # 正文完整
+
+
+def test_events_parses_current_email_markup() -> None:
+    items = parse_events_digest(_current_events_html())
+    assert len(items) == 3
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].image_note == "TechCrunch"
+    assert items[0].headline == "A new open model changes the serving race"
+    assert "benchmark" in items[0].body
+    assert items[0].url == "https://example.com/events/open-model"
+    assert [item.index for item in items] == [1, 2, 3]
+
+
+def test_research_parses_current_email_markup() -> None:
+    papers = parse_research_digest(_current_research_html())
+    assert len(papers) == 2
+    assert papers[0].source_tag == "Arxiv"
+    assert papers[0].title == "Evaluating long-horizon research agents"
+    assert len(papers[0].takeaways) == 2
+    assert papers[0].url == "https://arxiv.org/abs/2608.00001"
+    assert papers[1].source_tag == "HuggingFace"
+    assert papers[1].url == "https://huggingface.co/papers/2608.00002"
 
 
 # ── builder (AI大神) ───────────────────────────────────────────────

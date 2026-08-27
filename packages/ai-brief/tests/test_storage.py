@@ -2,24 +2,29 @@
 真实 DB 往返在 T12 E2E 验证。"""
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
+from typing import Any
 from unittest.mock import MagicMock
 
 from ai_brief import storage
 from ai_brief.storage import AiArticle
 
 
-def _mock_conn(fetch_rows=None, rowcounts=None):
+def _mock_conn(
+    fetch_rows: Sequence[tuple[Any, ...]] | None = None,
+    rowcounts: Sequence[int] | None = None,
+) -> tuple[MagicMock, MagicMock]:
     """构造一个 cursor 作为 context manager 的 mock 连接。"""
     cur = MagicMock()
     cur.fetchall.return_value = fetch_rows or []
-    cur.fetchone.return_value = (fetch_rows or [None])[0] if fetch_rows else None
+    cur.fetchone.return_value = fetch_rows[0] if fetch_rows else None
     if rowcounts is not None:
         type(cur).rowcount = MagicMock()
         cur.rowcount = 0
         # execute 每次调用后设置 rowcount
         rc_iter = iter(rowcounts)
-        def _exec(*_a, **_k):
+        def _exec(*_a: Any, **_k: Any) -> None:
             cur.rowcount = next(rc_iter)
         cur.execute.side_effect = _exec
     conn = MagicMock()
@@ -67,7 +72,25 @@ def test_claim_pending_maps_rows() -> None:
     assert len(pending) == 1
     assert pending[0].delivery_id == "did1"
     assert pending[0].subject == "主题"
-    assert pending[0].unsubscribe_token == "tok1"
+    assert pending[0].unsubscribe_token == "tok1"  # noqa: S105 - inert test value
+    sql = cur.execute.call_args.args[0]
+    assert "s.status <> 'active'" in sql
+    assert "s.status = 'active'" in sql
+    assert sql.count("%s::date IS NULL") == 2
+    assert "FOR UPDATE OF d, s SKIP LOCKED" in sql
+
+
+def test_lock_active_subscriber_holds_row_lock() -> None:
+    conn, cur = _mock_conn(fetch_rows=[("active",)])
+    assert storage.lock_active_subscriber(conn, subscriber_id="sid1") is True
+    sql, params = cur.execute.call_args.args
+    assert "FOR UPDATE" in sql
+    assert params == ("sid1",)
+
+
+def test_lock_active_subscriber_rejects_unsubscribed() -> None:
+    conn, _cur = _mock_conn(fetch_rows=[("unsubscribed",)])
+    assert storage.lock_active_subscriber(conn, subscriber_id="sid1") is False
 
 
 def test_fetch_previous_brief_returns_content() -> None:

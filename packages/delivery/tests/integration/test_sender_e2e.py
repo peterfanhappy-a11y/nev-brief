@@ -19,6 +19,8 @@ from nev_delivery.sender import send_pending
 from nev_delivery.storage import PendingDelivery
 from nev_shared.config import get_settings
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def db_conn():
@@ -60,7 +62,8 @@ def test_sender_e2e_marks_sent(db_conn):
             brief_date=brief_d,
             content_html="<p>hi</p>",
             content_text="hi",
-            unsubscribe_token="00000000-0000-0000-0000-000000000000",
+            # Fixed UUID-shaped placeholder, never a production credential.
+            unsubscribe_token="00000000-0000-0000-0000-000000000000",  # noqa: S106
         )
         with patch("nev_delivery.sender.claim_pending_deliveries", return_value=[test_pending]), \
              patch("nev_delivery.sender.send_email", return_value="re_e2e_123"):

@@ -86,8 +86,8 @@ async def main() -> None:
     out = "logs/ai_preview.html"
     import os
     os.makedirs("logs", exist_ok=True)
-    with open(out, "w", encoding="utf-8") as f:
-        f.write(composer.render_preview(brief, date.today()))
+    with open(out, "w", encoding="utf-8") as output_file:
+        output_file.write(composer.render_preview(brief, date.today()))
     print(f"\n=== 预览 HTML 写入 {out} ===")
 
 

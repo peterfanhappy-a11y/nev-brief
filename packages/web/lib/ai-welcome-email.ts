@@ -1,19 +1,32 @@
 import { Resend } from "resend";
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
+const MAX_SEND_ATTEMPTS = 2;
+const DELIVERY_ERROR = "AI welcome email delivery failed";
 
+function requiredEmailEnvironment(
+  name: "RESEND_API_KEY" | "RESEND_FROM_EMAIL" | "WEB_BASE_URL",
+  testFallback: string,
+): string {
+  const value = process.env[name];
+  if (value) return value;
+  if (process.env.NODE_ENV === "test") return testFallback;
+  throw new Error(`${name} is required to send AI welcome email`);
+}
+
+/** Send only after a subscriber has successfully confirmed their email. */
 export async function sendAiWelcomeEmail(
   to: string,
   unsubscribeToken: string,
+  confirmationTokenHash: string,
 ): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.warn("[resend/ai] RESEND_API_KEY missing — skip welcome email");
-    return;
-  }
-
-  const baseUrl = process.env.WEB_BASE_URL || "http://localhost:3002";
+  const apiKey = requiredEmailEnvironment("RESEND_API_KEY", "test-resend-key");
+  const baseUrl = requiredEmailEnvironment("WEB_BASE_URL", "http://localhost:3002");
+  const fromEmail = requiredEmailEnvironment(
+    "RESEND_FROM_EMAIL",
+    "test-sender@aivizens.invalid",
+  );
   const unsubUrl = `${baseUrl}/unsubscribe?token=${unsubscribeToken}&product=ai`;
+  const idempotencyKey = `ai-welcome:${confirmationTokenHash}`;
 
   const html = `<!DOCTYPE html>
 <html><head><meta charset="utf-8" /></head>
@@ -47,11 +60,23 @@ export async function sendAiWelcomeEmail(
 © 2026 AIVIZENS`;
 
   const resend = new Resend(apiKey);
-  await resend.emails.send({
-    from: `AIVIZENS <${FROM_EMAIL}>`,
+  const message = {
+    from: `AIVIZENS 趋势 <${fromEmail}>`,
     to,
     subject: "欢迎加入 AIVIZENS · 每日 5 分钟学会 AI",
     html,
     text,
-  });
+  };
+
+  for (let attempt = 0; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await resend.emails.send(message, { idempotencyKey });
+      if (result.error === null && result.data) return;
+    } catch {
+      // Retry once with the same hash-only idempotency key. Provider details
+      // may contain recipient data, so never surface the rejected error.
+    }
+  }
+
+  throw new Error(DELIVERY_ERROR);
 }

@@ -49,7 +49,10 @@ def topic_heading(t: str) -> str:
 def _make_env(autoescape: bool) -> jinja2.Environment:
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(_TEMPLATES_DIR)),
-        autoescape=jinja2.select_autoescape(["html", "j2"]) if autoescape else False,
+        # Text-email templates intentionally render without HTML escaping.
+        autoescape=(  # noqa: S701
+            jinja2.select_autoescape(["html", "j2"]) if autoescape else False
+        ),
         trim_blocks=True,
         lstrip_blocks=True,
     )

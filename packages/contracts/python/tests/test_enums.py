@@ -1,6 +1,7 @@
 from python.enums import (
-    SubscriberStatus, Plan, PushChannel, Topic, SourceType, SourceCategory,
-    ArticleStatus, DeliveryStatus, SalesSource, Locale,
+    ArticleStatus,
+    SubscriberStatus,
+    Topic,
 )
 
 
@@ -11,7 +12,10 @@ def test_subscriber_status_values():
 
 
 def test_all_topics_defined():
-    expected = {"new_car","sales","policy","tech","overseas","people","finance","recall","supply_chain"}
+    expected = {
+        "new_car", "sales", "policy", "tech", "overseas",
+        "people", "finance", "recall", "supply_chain",
+    }
     assert {t.value for t in Topic} == expected
 
 

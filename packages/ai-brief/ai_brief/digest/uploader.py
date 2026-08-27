@@ -15,7 +15,13 @@ from ai_brief import config
 
 log = get_logger("ai_brief.uploader")
 
-_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg", "image/webp": "webp", "image/gif": "gif"}
+_EXT = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+}
 
 
 def upload_image(

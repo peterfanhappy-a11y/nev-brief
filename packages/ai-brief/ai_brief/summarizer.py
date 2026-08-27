@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
@@ -29,7 +30,8 @@ from ai_brief.storage import Candidate
 
 log = get_logger("ai_brief.summarizer")
 
-SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报。文风参考 The Rundown AI：
+SYSTEM_PROMPT = (
+    """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报。文风参考 The Rundown AI：
 专业、精炼、有洞见，让读者「5 分钟看懂今天 AI 圈发生了什么、为什么重要」。
 
 【翻译与命名】公司/产品/模型名保留英文原名（GPT-5、Claude、Gemini、OpenAI）。译意不译词，
@@ -41,8 +43,11 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
 {
   "subject": "邮件主题：当日最重磅新闻改写成最抓眼球的中文标题，≤22字，让人一看就想点开",
   "preheader": "以「另外：」开头 + 第二重磅新闻的吸睛短标题，≤28字",
-  "editorial": "编辑导语：2-3 句话把当天最重磅的头条讲清楚（发生了什么、为什么重要），像 The Rundown 开头那段，专业有洞见，≤120字。不要用「今天」「以下」这类套话开头，直接切入新闻。",
-  "intro_bullets": ["每个 featured 主题一句话导读，带 emoji 开头，≤20字", ...],
+"""
+    '  "editorial": "编辑导语：2-3 句话把当天最重磅的头条讲清楚（发生了什么、为什么重要），'
+    "像 The Rundown 开头那段，专业有洞见，≤120字。"
+    '不要用「今天」「以下」这类套话开头，直接切入新闻。",\n'
+    """  "intro_bullets": ["每个 featured 主题一句话导读，带 emoji 开头，≤20字", ...],
   "featured": [
     {
       "ref": 0,                    // 对应下方 featured 文章编号
@@ -52,16 +57,21 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每�
       "significance": "意义：为什么这条重要，≤70字"
     }
   ],
-  "tools": [ {"ref": 3, "name": "工具中文名/产品名，≤12字", "one_liner": "这个工具能做什么，≤28字"} ],  // 0-5 条
-  "daily_tip": {"title": "≤14字", "body": "一条可立即上手的 AI 使用技巧/教程，≤180字"},
-  "quick_hits": [ {"ref": 5, "text": "一句话速览这条新闻，≤36字"} ]   // 3-5 条，从 quick_hits 候选选
-}
+"""
+    '  "tools": [ {"ref": 3, "name": "工具中文名/产品名，≤12字", '
+    '"one_liner": "这个工具能做什么，≤28字"} ],  // 0-5 条\n'
+    """  "daily_tip": {"title": "≤14字", "body": "一条可立即上手的 AI 使用技巧/教程，≤180字"},
+"""
+    '  "quick_hits": [ {"ref": 5, "text": "一句话速览这条新闻，≤36字"} ]   '
+    '// 3-5 条，从 quick_hits 候选选\n'
+    """}
 
 要求：
 - intro_bullets 数量 = featured 数量，一一对应。
 - featured 保持给定顺序与 theme，不要新增/凭空编造文章。
 - daily_tip 可基于给定主题自由发挥，无需对应某篇文章。
 - 只输出 JSON，不要解释。所有 ref 必须是给定编号。"""
+)
 
 
 @dataclass
@@ -108,7 +118,7 @@ def _build_prompt(
 
 
 def _assemble(
-    raw: dict,
+    raw: dict[str, Any],
     ref_map: dict[int, _RefArticle],
     brief_date: str,
     yesterday_top: YesterdayTop | None,
@@ -182,7 +192,10 @@ def _assemble(
 
     return AiBriefContent(
         brief_date=brief_date,
-        subject=str(raw.get("subject", ""))[:44] or (featured[0].headline if featured else "AI 简报"),
+        subject=(
+            str(raw.get("subject", ""))[:44]
+            or (featured[0].headline if featured else "AI 简报")
+        ),
         preheader=str(raw.get("preheader", ""))[:60],
         editorial=str(raw.get("editorial", "")).strip()[:220],
         intro_bullets=intro[: len(featured)] or intro[:1],
@@ -211,7 +224,8 @@ async def summarize(
     featured_refs: list[_RefArticle] = []
     n = 0
     for key in config.THEME_ORDER:
-        pick = selection.themes.get(key, {}).get("pick")
+        theme_selection = selection.themes.get(key)
+        pick = theme_selection["pick"] if theme_selection else None
         c = by_id.get(pick) if pick else None
         if c:
             ra = _RefArticle(ref=n, candidate=c, theme=key)
@@ -247,12 +261,19 @@ async def summarize(
         selection.daily_tip_topic,
         yesterday_top.headline if yesterday_top else None,
     )
-    stats = Stage1Stats(candidates=selection.candidate_count, dupe_groups=selection.dupe_group_count)
+    stats = Stage1Stats(
+        candidates=selection.candidate_count,
+        dupe_groups=selection.dupe_group_count,
+    )
     model = config.get_model()
 
     err_feedback = ""
     for attempt in (1, 2):
-        prompt = user_prompt + (f"\n\n上次输出有误：{err_feedback}，请修正后重新输出。" if err_feedback else "")
+        prompt = user_prompt + (
+            f"\n\n上次输出有误：{err_feedback}，请修正后重新输出。"
+            if err_feedback
+            else ""
+        )
         raw = await extract_json_with_retry(
             SYSTEM_PROMPT, prompt, model=model,
             max_tokens=config.STAGE2_MAX_TOKENS, temperature=config.STAGE2_TEMPERATURE,

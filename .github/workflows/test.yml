@@ -13,8 +13,13 @@ jobs:
       - uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-      - run: uv sync
-      - run: uv run pytest packages/ -v --maxfail=3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: uv sync --frozen
+      - run: npm ci
+      - run: make verify
         env:
           SUPABASE_URL: https://test.supabase.co
           SUPABASE_SERVICE_ROLE_KEY: test-key
@@ -24,6 +29,13 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief
+      SUPABASE_URL: https://example.invalid
+      SUPABASE_SERVICE_ROLE_KEY: integration-test-service-role
+      DEEPSEEK_API_KEY: integration-test-deepseek
+      RESEND_API_KEY: integration-test-resend
+      PGPASSWORD: nev_local_dev
     services:
       postgres:
         image: postgres:16-alpine
@@ -41,12 +53,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
-      - run: uv sync
+      - run: uv sync --frozen
       - name: Apply migrations
         run: |
-          for f in infra/supabase/migrations/*.sql; do
-            PGPASSWORD=nev_local_dev psql -h localhost -p 54322 -U nev -d nev_brief -f "$f"
-          done
-      - run: uv run pytest tests/integration/ -v -m integration
-        env:
-          DATABASE_URL: postgresql://nev:nev_local_dev@localhost:54322/nev_brief
+          migration_list="${RUNNER_TEMP}/postgres-test-migrations.txt"
+          uv run python scripts/ci/list_postgres_test_migrations.py > "$migration_list"
+          while IFS= read -r migration; do
+            psql -h localhost -p 54322 -U nev -d nev_brief \
+              --set=ON_ERROR_STOP=on --file="$migration"
+          done < "$migration_list"
+      - run: make test-integration
+
+  web-acceptance:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: uv sync --frozen
+      - run: npm ci
+      - name: Install the pinned Chromium acceptance browser
+        run: npm exec --workspace @nev/web -- playwright install --with-deps chromium
+      - name: Run subscription database acceptance
+        run: npm --workspace @nev/web run test:integration
+      - name: Run subscription and daily archive browser acceptance
+        run: npm --workspace @nev/web run test:e2e -- ai-subscription.spec.ts daily-archive.spec.ts

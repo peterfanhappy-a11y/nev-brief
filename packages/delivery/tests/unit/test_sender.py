@@ -4,9 +4,8 @@ from __future__ import annotations
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-import pytest
 from nev_delivery.resend_client import ResendAuthError, ResendTransientError
-from nev_delivery.sender import SendResult, send_pending
+from nev_delivery.sender import send_pending
 from nev_delivery.storage import PendingDelivery
 
 PENDING = PendingDelivery(
@@ -16,7 +15,7 @@ PENDING = PendingDelivery(
     brief_date=date(2026, 5, 29),
     content_html="<p>hi</p>",
     content_text="hi",
-    unsubscribe_token="unsub-abc",
+    unsubscribe_token="unsub-abc",  # noqa: S106 - inert test value
 )
 
 

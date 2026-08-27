@@ -47,6 +47,39 @@ def _read_link(block: Node) -> str:
     return ""
 
 
+def _parse_current_markup(tree: HTMLParser) -> list[ResearchPaper]:
+    """Parse current emails where each h2 and its paragraphs are direct body children."""
+    papers: list[ResearchPaper] = []
+    for h2 in tree.css("h2"):
+        if h2.parent is None or h2.parent.tag != "body":
+            continue
+        tag, title = _split_title(h2.text())
+        if not title:
+            continue
+        takeaways: list[str] = []
+        url = ""
+        sibling = h2.next
+        while sibling is not None and sibling.tag != "h2":
+            if sibling.tag == "p":
+                txt = _clean(sibling.text())
+                anchors = sibling.css("a")
+                if anchors:
+                    for anchor in anchors:
+                        href = (anchor.attributes.get("href") or "").strip()
+                        if href.startswith("https://"):
+                            url = href
+                            break
+                elif txt and not txt.lower().startswith("link:"):
+                    txt = re.sub(r"^\s*\d+(?:[^\w]|_)*\s*", "", txt, count=1).strip()
+                    if txt:
+                        takeaways.append(txt)
+            sibling = sibling.next
+        papers.append(
+            ResearchPaper(source_tag=tag, title=title, takeaways=takeaways, url=url)
+        )
+    return papers
+
+
 def parse_research_digest(html: str) -> list[ResearchPaper]:
     tree = HTMLParser(html or "")
     papers: list[ResearchPaper] = []
@@ -72,4 +105,4 @@ def parse_research_digest(html: str) -> list[ResearchPaper]:
         papers.append(
             ResearchPaper(source_tag=tag, title=title, takeaways=takeaways, url=url)
         )
-    return papers
+    return papers or _parse_current_markup(tree)

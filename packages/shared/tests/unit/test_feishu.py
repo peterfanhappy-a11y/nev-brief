@@ -8,7 +8,7 @@ from nev_shared.feishu import AlertLevel, send_alert
 
 
 @respx.mock
-def test_send_alert_posts_correct_payload(monkeypatch):
+def test_send_alert_posts_correct_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     """P1 alert posts a feishu-shaped JSON to the webhook URL."""
     url = "https://open.feishu.cn/open-apis/bot/v2/hook/test-token"
     monkeypatch.setenv("FEISHU_WEBHOOK_URL", url)
@@ -28,7 +28,7 @@ def test_send_alert_posts_correct_payload(monkeypatch):
 
 
 @respx.mock
-def test_send_alert_swallows_http_errors(monkeypatch):
+def test_send_alert_swallows_http_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """If webhook is down, alert must NOT raise."""
     url = "https://open.feishu.cn/open-apis/bot/v2/hook/test-token"
     monkeypatch.setenv("FEISHU_WEBHOOK_URL", url)
@@ -41,7 +41,7 @@ def test_send_alert_swallows_http_errors(monkeypatch):
     send_alert(level=AlertLevel.P0, title="DB down", body="psycopg connect failed")
 
 
-def test_alert_level_values():
+def test_alert_level_values() -> None:
     assert AlertLevel.P0.value == "P0"
     assert AlertLevel.P1.value == "P1"
     assert AlertLevel.P2.value == "P2"

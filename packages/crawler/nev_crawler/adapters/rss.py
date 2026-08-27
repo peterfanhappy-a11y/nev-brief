@@ -1,16 +1,16 @@
 """RSS adapter — feedparser + httpx 拉取。"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 import feedparser
+from nev_shared.logger import get_logger
+from python.content import ArticleRaw
 
 from nev_crawler.adapters.base import Adapter, FetchResult
 from nev_crawler.http_client import make_client
-from nev_shared.logger import get_logger
-from python.content import ArticleRaw
 
 log = get_logger("rss")
 
@@ -45,11 +45,11 @@ class RSSAdapter(Adapter):
         return FetchResult(articles=articles)
 
 
-def _parse_pubdate(entry: Any) -> datetime | None:
+def _parse_pubdate(entry: Any) -> datetime | None:  # noqa: ANN401 - feedparser is dynamic
     parsed = entry.get("published_parsed") or entry.get("updated_parsed")
     if parsed is None:
         return None
     try:
-        return datetime(*parsed[:6], tzinfo=timezone.utc)
+        return datetime(*parsed[:6], tzinfo=UTC)
     except (ValueError, TypeError):
         return None

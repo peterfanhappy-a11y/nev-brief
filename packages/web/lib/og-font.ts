@@ -60,7 +60,12 @@ export function loadCjkFont(weight: 400 | 700, text: string): Promise<ArrayBuffe
   const key = `${weight}:${text}`;
   const existing = cache.get(key);
   if (existing) return existing;
-  const promise = fetchGoogleFontBytes("Noto Sans SC", weight, text);
+  const promise = fetchGoogleFontBytes("Noto Sans SC", weight, text).catch(
+    (error) => {
+      if (cache.get(key) === promise) cache.delete(key);
+      throw error;
+    },
+  );
   cache.set(key, promise);
   return promise;
 }

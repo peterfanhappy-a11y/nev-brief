@@ -16,12 +16,16 @@ async function unsubscribeByToken(
   }
   const product = parseProduct(productRaw);
   const sb = getSupabaseAdmin();
+  const update =
+    product === "ai"
+      ? { status: "unsubscribed", unsubscribed_at: new Date().toISOString() }
+      : { status: "unsubscribed" };
   const { error } = await sb
     .from(subscribersTable(product))
-    .update({ status: "unsubscribed" })
+    .update(update)
     .eq("unsubscribe_token", token);
   if (error) {
-    console.error("[unsubscribe] db error", error);
+    console.error("[unsubscribe] db error");
     return { ok: false, status: 500, body: "db" };
   }
   // Unknown token — still return 200 to avoid leaking validity to scanners.
@@ -59,4 +63,3 @@ export async function POST(req: Request) {
     headers: { "Content-Type": "text/plain; charset=utf-8" },
   });
 }
-

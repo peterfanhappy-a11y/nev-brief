@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import cast
 
 import feedparser
 from selectolax.parser import HTMLParser
@@ -41,11 +42,12 @@ def parse_feed(raw: bytes | str) -> list[FeedEntry]:
     return out
 
 
-def _entry_summary(entry) -> str | None:  # noqa: ANN001
+def _entry_summary(entry: object) -> str | None:
     # content:encoded 优先（通常全文），否则 summary
     raw = ""
-    if getattr(entry, "content", None):
-        raw = entry.content[0].get("value", "") if entry.content else ""
+    content = getattr(entry, "content", None)
+    if content:
+        raw = content[0].get("value", "")
     if not raw:
         raw = getattr(entry, "summary", "") or ""
     if not raw:
@@ -55,7 +57,7 @@ def _entry_summary(entry) -> str | None:  # noqa: ANN001
     return text or None
 
 
-def _entry_image(entry) -> str | None:  # noqa: ANN001
+def _entry_image(entry: object) -> str | None:
     for key in ("media_content", "media_thumbnail"):
         items = getattr(entry, key, None)
         if items:
@@ -70,8 +72,9 @@ def _entry_image(entry) -> str | None:  # noqa: ANN001
     # summary HTML 里的首个 <img>
     for field in ("content", "summary"):
         raw = ""
-        if field == "content" and getattr(entry, "content", None):
-            raw = entry.content[0].get("value", "")
+        content = getattr(entry, "content", None)
+        if field == "content" and content:
+            raw = content[0].get("value", "")
         elif field == "summary":
             raw = getattr(entry, "summary", "") or ""
         if raw and "<img" in raw:
@@ -83,12 +86,13 @@ def _entry_image(entry) -> str | None:  # noqa: ANN001
     return None
 
 
-def _entry_time(entry) -> str | None:  # noqa: ANN001
+def _entry_time(entry: object) -> str | None:
     for attr in ("published_parsed", "updated_parsed"):
         t = getattr(entry, attr, None)
         if t:
             try:
-                return datetime(*t[:6], tzinfo=timezone.utc).isoformat()
+                parts = cast(tuple[int, int, int, int, int, int], tuple(t[:6]))
+                return datetime(*parts, tzinfo=UTC).isoformat()
             except (ValueError, TypeError):
                 continue
     return None
