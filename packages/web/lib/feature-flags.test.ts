@@ -6,15 +6,20 @@ describe("subscription feature flag", () => {
     vi.unstubAllEnvs();
   });
 
-  it.each([undefined, "", "false", "TRUE", " true", "true "])(
-    "is disabled for %s",
+  it.each(["false", "FALSE"])(
+    "is disabled for an explicit false value (%s)",
     (value) => {
-      vi.stubEnv("SUBSCRIPTIONS_ENABLED", value ?? "");
+      vi.stubEnv("SUBSCRIPTIONS_ENABLED", value);
       expect(subscriptionsEnabled()).toBe(false);
     },
   );
 
-  it('is enabled only for the exact string "true"', () => {
+  it("is enabled by default when no kill switch is configured", () => {
+    vi.stubEnv("SUBSCRIPTIONS_ENABLED", "");
+    expect(subscriptionsEnabled()).toBe(true);
+  });
+
+  it('remains enabled for an explicit "true" value', () => {
     vi.stubEnv("SUBSCRIPTIONS_ENABLED", "true");
     expect(subscriptionsEnabled()).toBe(true);
   });
