@@ -27,6 +27,7 @@ BriefStatus = Literal[
 # code, or path accepted by storage.
 QUALITY_ISSUE_CODES = frozenset(
     {
+        "agent_tool_story_count_below_minimum",
         "ai_masters_story_count_below_minimum",
         "brief_status_protected",
         "critical_url_missing",

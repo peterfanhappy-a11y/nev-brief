@@ -24,6 +24,7 @@ from ai_brief.schema import (
 )
 
 _PRIMARY_STORY_MINIMUM = 3
+_AGENT_STORY_MINIMUM = 3
 _TOOL_MODULE_MINIMUM = 2
 _PRIMARY_DIGEST_MAX_AGE_HOURS = 24.0
 _TOOL_DIGEST_MAX_AGE_HOURS = 40.0
@@ -460,6 +461,14 @@ def validate_brief(
                 "ai_masters_story_count_below_minimum",
                 "AI Masters requires at least three stories.",
                 "ai_masters",
+            )
+        )
+    if agent_count > 0 and agent_count < _AGENT_STORY_MINIMUM:
+        blockers.append(
+            _issue(
+                "agent_tool_story_count_below_minimum",
+                "Agent tools requires three stories when the module is present.",
+                "agent_tools",
             )
         )
     if tool_module_count < _TOOL_MODULE_MINIMUM:

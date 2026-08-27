@@ -26,12 +26,35 @@ from ai_brief.digest.engineering_parser import parse_engineering_digest
 from ai_brief.digest.events_parser import parse_events_digest
 from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
+from ai_brief.digest.models import AgentTool
 from ai_brief.digest.research_parser import parse_research_digest
 from ai_brief.schema import DigestSection, DigestStory, Theme
 
 log = get_logger("ai_brief.digest.generate")
 
 _NUM_RE = re.compile(r"(\d+)")
+_EXCLUDED_AGENT_REPOS = frozenset(
+    {
+        "openai/codex",
+        "anthropic/claude",
+        "anthropics/claude",
+        "google/gemini",
+    }
+)
+
+
+def _filter_agent_tools(tools: list[AgentTool]) -> list[AgentTool]:
+    """Remove first-party coding/model repositories from the reader tool list."""
+    filtered: list[AgentTool] = []
+    for tool in tools:
+        haystack = f"{tool.name} {tool.url}".lower()
+        if any(
+            re.search(rf"(?<![a-z0-9]){re.escape(repo)}(?![a-z0-9_-])", haystack)
+            for repo in _EXCLUDED_AGENT_REPOS
+        ):
+            continue
+        filtered.append(tool)
+    return filtered
 
 
 @dataclass
@@ -335,7 +358,7 @@ async def _build_agent(
     if digest is None or not digest.html:
         log.warning("ai_digest.agent_missing", date=brief_date)
         return None, True
-    tools = parse_agent_digest(digest.html)
+    tools = _filter_agent_tools(parse_agent_digest(digest.html))
     if not tools:
         log.warning("ai_digest.agent_empty")
         return None, True

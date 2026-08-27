@@ -119,9 +119,21 @@ function DigestBlock({
                 {story.label}
               </p>
             )}
-            <h3 className="text-lg font-semibold text-gray-900">
-              {story.headline}
-            </h3>
+            {section.theme === "ai_engineering" ? (
+              <h3 className="text-lg font-semibold text-gray-900">
+                {storyIndex + 1}. {story.headline.split("：", 1)[0]}：
+                {story.headline.includes("：") && (
+                  <>
+                    <br />
+                    {story.headline.slice(story.headline.indexOf("：") + 1).trim()}
+                  </>
+                )}
+              </h3>
+            ) : (
+              <h3 className="text-lg font-semibold text-gray-900">
+                {storyIndex + 1}. {story.headline}
+              </h3>
+            )}
             <p className="mt-2 leading-relaxed text-gray-700">{story.summary}</p>
             {story.url && (
               <p className="mt-3 text-sm font-medium">

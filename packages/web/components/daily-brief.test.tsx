@@ -269,6 +269,38 @@ describe("DailyBrief", () => {
     ).toBeInTheDocument();
   });
 
+  it("numbers AI engineering fields and breaks content after the colon", () => {
+    vi.stubGlobal("React", React);
+    const brief: AiPublishedBrief = {
+      ...COMPLETE_BRIEF,
+      content: {
+        ...COMPLETE_BRIEF.content,
+        ai_engineering: {
+          ...COMPLETE_BRIEF.content.ai_engineering!,
+          stories: [
+            {
+              headline: "问题：先让 AI 看懂项目",
+              summary: "正文从下一行开始。",
+              url: "",
+              label: "",
+            },
+          ],
+        },
+      },
+    };
+
+    render(<DailyBrief brief={brief} />);
+
+    const engineering = screen
+      .getByRole("heading", { name: "AI工程" })
+      .closest("section");
+    expect(engineering).not.toBeNull();
+    expect(engineering).toHaveTextContent("1. 问题：");
+    expect(engineering).toHaveTextContent("先让 AI 看懂项目");
+    expect(engineering).toHaveTextContent("正文从下一行开始。");
+    expect(engineering!.innerHTML).toContain("1. 问题：<br");
+  });
+
   it("keeps slot IDs and display-array keys unique without text invariants", () => {
     vi.stubGlobal("React", React);
     const repeatedStory = {
