@@ -721,7 +721,7 @@ def claim_pending_deliveries(
             WHERE d.subscriber_id = s.id
               AND d.status = 'pending'
               AND s.status <> 'active'
-              AND (%s IS NULL OR d.brief_date = %s)
+              AND (%s::date IS NULL OR d.brief_date = %s::date)
         ),
         claimed AS (
             SELECT d.id
@@ -729,7 +729,7 @@ def claim_pending_deliveries(
             JOIN ai_subscribers s ON s.id = d.subscriber_id
             WHERE d.status = 'pending'
               AND s.status = 'active'
-              AND (%s IS NULL OR d.brief_date = %s)
+              AND (%s::date IS NULL OR d.brief_date = %s::date)
             ORDER BY d.created_at
             FOR UPDATE OF d, s SKIP LOCKED
             LIMIT %s

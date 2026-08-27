@@ -76,6 +76,7 @@ def test_claim_pending_maps_rows() -> None:
     sql = cur.execute.call_args.args[0]
     assert "s.status <> 'active'" in sql
     assert "s.status = 'active'" in sql
+    assert sql.count("%s::date IS NULL") == 2
     assert "FOR UPDATE OF d, s SKIP LOCKED" in sql
 
 

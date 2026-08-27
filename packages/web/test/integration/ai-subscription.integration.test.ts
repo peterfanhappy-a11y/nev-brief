@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import WebSocket from "ws";
 import { POST as subscribe } from "@/app/api/ai/subscribe/route";
 import { confirmSubscriptionAction } from "@/app/confirm/actions";
 import { unsubscribeAction } from "@/app/unsubscribe/actions";
@@ -70,6 +71,7 @@ async function diagnosticFetch(input: RequestInfo | URL, init?: RequestInit) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false, autoRefreshToken: false },
+  realtime: { transport: WebSocket as unknown as typeof globalThis.WebSocket },
   global: { fetch: diagnosticFetch },
 });
 
