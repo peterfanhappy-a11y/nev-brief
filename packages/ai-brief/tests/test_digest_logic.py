@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ai_brief.digest import condenser, image_judge
 from ai_brief.digest.condenser import _rebalance
+from ai_brief.digest.generate import _filter_agent_tools
 from ai_brief.digest.image_judge import _parse_index
 from ai_brief.digest.models import AgentTool, BuilderItem, EventItem, ResearchPaper
 
@@ -125,7 +126,89 @@ async def test_agent_invalid_output_reports_incomplete_when_rank_fallback_builds
 
     assert result is not None
     assert result.complete is False
-    assert [story.headline for story in result.value] == ["tool-1", "tool-2"]
+    assert [story.headline for story in result.value] == ["tool-1", "tool-2", "tool-3"]
+
+
+def test_filter_agent_tools_excludes_requested_repositories() -> None:
+    tools = [
+        AgentTool(rank=1, name="openai/codex", stars="", points=[], url="https://github.com/openai/codex"),
+        AgentTool(rank=2, name="Anthropic/claude", stars="", points=[], url="https://github.com/anthropics/claude"),
+        AgentTool(rank=3, name="Google/Gemini", stars="", points=[], url="https://github.com/google/gemini"),
+        AgentTool(rank=4, name="acme/agent-kit", stars="", points=[], url="https://github.com/acme/agent-kit"),
+    ]
+
+    filtered = _filter_agent_tools(tools)
+
+    assert [tool.name for tool in filtered] == ["acme/agent-kit"]
+
+
+def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
+    assert '"rank": 4' not in condenser._AGENT_SYSTEM
+    assert "rank 必须来自给定工具" in condenser._AGENT_SYSTEM
+
+
+async def test_agent_selection_returns_three_tools() -> None:
+    tools = [
+        AgentTool(
+            rank=rank,
+            name=f"tool-{rank}",
+            stars="10",
+            points=[f"point-{rank}"],
+            url=f"https://github.com/example/tool-{rank}",
+        )
+        for rank in range(1, 4)
+    ]
+    with patch.object(
+        condenser,
+        "extract_json_with_retry",
+        new=AsyncMock(
+            return_value={
+                "picks": [
+                    {"rank": 1, "summary": "one."},
+                    {"rank": 2, "summary": "two."},
+                    {"rank": 3, "summary": "three."},
+                ]
+            }
+        ),
+    ):
+        result = await condenser.select_agent_tools(tools)
+
+    assert result is not None
+    assert len(result.value) == 3
+    assert result.complete is True
+
+
+async def test_agent_selection_ignores_duplicate_model_ranks_when_three_unique_are_complete(
+) -> None:
+    tools = [
+        AgentTool(
+            rank=rank,
+            name=f"tool-{rank}",
+            stars="10",
+            points=[f"point-{rank}"],
+            url=f"https://github.com/example/tool-{rank}",
+        )
+        for rank in range(1, 4)
+    ]
+    with patch.object(
+        condenser,
+        "extract_json_with_retry",
+        new=AsyncMock(
+            return_value={
+                "picks": [
+                    {"rank": 1, "summary": "one."},
+                    {"rank": 2, "summary": "two."},
+                    {"rank": 2, "summary": "duplicate."},
+                    {"rank": 3, "summary": "three."},
+                ]
+            }
+        ),
+    ):
+        result = await condenser.select_agent_tools(tools)
+
+    assert result is not None
+    assert len(result.value) == 3
+    assert result.complete is True
 
 
 def test_qwen_missing_credentials_reports_incomplete_fallback_to_first() -> None:

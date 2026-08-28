@@ -304,17 +304,17 @@ def build_engineering_stories(lecture: EngineeringLecture) -> tuple[str, list[Di
     return lecture.key_point, stories
 
 
-# ── Agent工具：3 选 2 + 每个工具压一段介绍 ─────────────────────────────
+# ── Agent工具：过滤后选 3 + 每个工具压一段介绍 ─────────────────────────
 
 _AGENT_SYSTEM = """你是 AIVIZENS 的 AI 工具主编。给你 GitHub Trending 上 3 个 AI/Agent 开源工具，各带名称与「3 要点总结」。
 请：
-1) 从 3 个里选 2 个——标准：对读者的实际工作/学习帮助最大、最值得动手试用。
+1) 从给定工具里选 3 个——标准：对读者的实际工作/学习帮助最大、最值得动手试用。
 2) 对选中的每个工具，把它的 3 要点提炼成【一段完整、成句、可独立读懂】的中文介绍：这个工具是什么、解决什么问题、亮点在哪，尽量写满信息量。
    控制在 140 字以内（务必给结尾句留空间），通顺连贯、必须以句号收尾、不得写半截。产品/公司/技术名保留英文原名。
 
 只输出严格 JSON：
-{"picks": [ {"rank": 1, "summary": "≤150字介绍"}, {"rank": 3, "summary": "≤150字介绍"} ]}
-rank 用给定编号，恰好 2 个。只输出 JSON。"""
+{"picks": [ {"rank": 1, "summary": "≤150字介绍"}, {"rank": 2, "summary": "≤150字介绍"}, {"rank": 3, "summary": "≤150字介绍"} ]}
+rank 必须来自给定工具，恰好 3 个且每个 rank 只能出现一次。只输出 JSON。"""
 
 
 def _agent_prompt(tools: list[AgentTool]) -> str:
@@ -328,7 +328,7 @@ def _agent_prompt(tools: list[AgentTool]) -> str:
 async def select_agent_tools(
     tools: list[AgentTool],
 ) -> ModelOutcome[list[DigestStory]] | None:
-    """从 3 个工具里选 2 个，返回 story 列表（headline=名称、summary=压缩介绍、url=仓库）。"""
+    """从过滤后的工具里选 3 个，返回 story 列表（headline=名称、summary=压缩介绍、url=仓库）。"""
     if not tools:
         return None
     by_rank = {t.rank: t for t in tools}
@@ -349,7 +349,7 @@ async def select_agent_tools(
             except (TypeError, ValueError):
                 continue
             picks.append((rank, str(p.get("summary", "")).strip()))
-    # 回退/收敛：不足 2 个就按榜单顺序补齐
+    # 回退/收敛：不足 3 个就按榜单顺序补齐
     chosen: list[int] = [r for r, _ in picks if r in by_rank][: config.AGENT_TOOLS_PICK]
     sum_by_rank = dict(picks)
     for t in tools:
@@ -367,13 +367,12 @@ async def select_agent_tools(
         )
         label = f"⭐ {t.stars} stars/周" if t.stars else ""
         out.append(DigestStory(headline=t.name[:80], summary=summary, url=t.url, label=label))
-    valid_model_picks = [
-        (rank, summary)
+    valid_model_picks = {
+        rank: summary
         for rank, summary in picks
         if rank in by_rank and summary
-    ]
+    }
     complete = (
         len(valid_model_picks) == config.AGENT_TOOLS_PICK
-        and len({rank for rank, _summary in valid_model_picks}) == config.AGENT_TOOLS_PICK
     )
     return ModelOutcome(value=out, complete=complete)

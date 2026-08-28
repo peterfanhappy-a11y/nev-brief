@@ -83,6 +83,7 @@ def _valid_brief() -> AiBriefContent:
             [
                 _story("Agent 1", "https://github.com/acme/agent-one"),
                 _story("Agent 2", "https://github.com/acme/agent-two"),
+                _story("Agent 3", "https://github.com/acme/agent-three"),
             ],
             image=False,
         ),
@@ -113,6 +114,7 @@ def _envelope(
         "agent": (
             "https://github.com/acme/agent-one",
             "https://github.com/acme/agent-two",
+            "https://github.com/acme/agent-three",
         ),
     }
     trusted_urls = source_urls if source_urls is not None else default_urls[kind]
@@ -172,9 +174,9 @@ def test_valid_brief_passes_with_complete_counts_and_freshness_metrics() -> None
     assert report.metrics["ai_masters_story_count"] == 3
     assert report.metrics["research_story_count"] == 1
     assert report.metrics["engineering_story_count"] == 2
-    assert report.metrics["agent_story_count"] == 2
+    assert report.metrics["agent_story_count"] == 3
     assert report.metrics["tool_module_count"] == 3
-    assert report.metrics["parsed_items"] == 11
+    assert report.metrics["parsed_items"] == 12
     assert report.metrics["events_freshness_hours"] == 2.0
     assert report.metrics["max_digest_freshness_hours"] == 2.0
     assert report.metrics["quality_passed"] is True
@@ -206,9 +208,10 @@ def test_backfill_still_blocks_primary_digests_older_than_forty_hours() -> None:
     [
         ("today_ai", "today_ai_story_count_below_minimum"),
         ("ai_masters", "ai_masters_story_count_below_minimum"),
+        ("agent_tools", "agent_tool_story_count_below_minimum"),
     ],
 )
-def test_fewer_than_three_primary_stories_blocks(
+def test_fewer_than_required_stories_blocks(
     section_name: str,
     code: str,
 ) -> None:
@@ -416,7 +419,11 @@ def test_placeholder_marker_inside_a_legitimate_token_is_not_blocked() -> None:
     digests = _valid_digests()
     digests["agent"] = _envelope(
         "agent",
-        source_urls=(valid_url, "https://github.com/acme/agent-two"),
+        source_urls=(
+            valid_url,
+            "https://github.com/acme/agent-two",
+            "https://github.com/acme/agent-three",
+        ),
     )
 
     report = _report(brief, digests)

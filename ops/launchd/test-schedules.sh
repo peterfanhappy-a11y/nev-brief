@@ -29,4 +29,32 @@ if grep -R -n -- 'python -m ai_brief daily' "$GEN_RUN" "$REL_RUN"; then
   exit 1
 fi
 
+# Exercise the runner sequence with a disposable fake uv; no production DB/API is touched.
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+mkdir -p "$TMP_DIR/bin" "$TMP_DIR/project"
+cat > "$TMP_DIR/bin/uv" <<'FAKE_UV'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$*" >> "$TRACE_FILE"
+if [[ " ${*} " == *" python -m ai_brief generate "* && "${FAKE_GENERATE_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_GENERATE_STATUS"
+fi
+exit 0
+FAKE_UV
+chmod +x "$TMP_DIR/bin/uv"
+TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
+  AIVIZENS_OPERATOR_ID=test-operator bash "$GEN_RUN"
+grep -q 'python -m ai_brief approve --date' "$TMP_DIR/trace"
+: > "$TMP_DIR/trace"
+if TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
+  FAKE_GENERATE_STATUS=1 bash "$GEN_RUN"; then
+  echo 'failed generate unexpectedly succeeded' >&2
+  exit 1
+fi
+if grep -q 'python -m ai_brief approve --date' "$TMP_DIR/trace"; then
+  echo 'approve ran after failed generate' >&2
+  exit 1
+fi
+
 echo 'launchd schedule contract ok'

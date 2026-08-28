@@ -1,6 +1,7 @@
 """composer 渲染测试 — digest 驱动版（今日AI / AI大神 section）+ 评分 + 条件板块。"""
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any
 
@@ -125,6 +126,33 @@ def test_render_omits_missing_ai_masters() -> None:
     assert "今日AI" in html
     assert "AI大神" not in html          # 缺失模块省略
     assert "https://img/masters.png" not in html
+
+
+def test_render_engineering_labels_number_and_break_after_colon() -> None:
+    brief = _brief(
+        ai_engineering=DigestSection(
+            theme=Theme.AI_ENGINEERING,
+            subtitle="工程课程要点",
+            cta_label="",
+            stories=[
+                DigestStory(
+                    headline="问题：先让 AI 看懂项目",
+                    summary="正文从下一行开始。",
+                    url="",
+                )
+            ],
+        )
+    )
+
+    html, text = render(
+        brief,
+        date(2026, 7, 6),
+        delivery_id="d",
+        unsubscribe_token="t",  # noqa: S106 - inert test value
+    )
+
+    assert "1. 问题：<br>先让 AI 看懂项目" in html
+    assert re.search(r"1\. 问题：\s+先让 AI 看懂项目", text)
 
 
 def test_greeting_name_from_email() -> None:

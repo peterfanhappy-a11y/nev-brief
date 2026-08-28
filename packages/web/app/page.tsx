@@ -58,7 +58,7 @@ export default async function AiTrendsHome() {
             <p className="text-sm text-gray-500 mb-4">
               已有 <span className="font-semibold text-gray-900">100,000+</span> 读者，来自这些公司：
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 opacity-80 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
               {COMPANIES.map((c) => (
                 <div
                   key={c.slug}

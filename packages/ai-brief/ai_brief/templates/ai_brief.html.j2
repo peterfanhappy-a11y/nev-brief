@@ -38,10 +38,13 @@
     {% for s in section.stories %}
     <tr><td style="padding:14px 18px;{% if not loop.first or section.subtitle %}border-top:1px solid #e5e7eb;{% endif %}">
       {% if s.label %}<div style="font-size:11px;color:#9ca3af;font-weight:600;margin-bottom:5px;letter-spacing:1px;">{{ s.label }}</div>{% endif %}
-      {% if s.url %}
-      <a href="{{ s.url }}" style="text-decoration:none;"><span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ s.headline }}</span></a>
+      {% if theme_label(section.theme) == 'AI工程' %}
+      {% set field_label, field_separator, field_title = s.headline.partition('：') %}
+      <div style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ loop.index }}. {{ field_label }}：{% if field_separator %}<br>{{ field_title }}{% endif %}</div>
+      {% elif s.url %}
+      <a href="{{ s.url }}" style="text-decoration:none;"><span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ loop.index }}. {{ s.headline }}</span></a>
       {% else %}
-      <span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ s.headline }}</span>
+      <span style="font-size:16px;font-weight:800;color:#111827;line-height:1.45;">{{ loop.index }}. {{ s.headline }}</span>
       {% endif %}
       <div style="font-size:14px;line-height:1.75;color:#374151;margin-top:6px;">{{ s.summary }}</div>
       {% if s.url and section.cta_label %}

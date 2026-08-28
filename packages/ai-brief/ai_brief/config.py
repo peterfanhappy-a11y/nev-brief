@@ -116,7 +116,7 @@ AI_MASTERS_PICK_FIRE5 = 3         # 后5条选几条
 AI_RESEARCH_SUMMARY_CHARS = 200   # AI研究 单篇内容
 AI_ENGINEERING_POINT_CHARS = 150  # AI工程 每条核心要点
 AGENT_TOOL_SUMMARY_CHARS = 150    # Agent工具 每个工具介绍
-AGENT_TOOLS_PICK = 2              # 3 个工具选几个
+AGENT_TOOLS_PICK = 3              # 过滤后展示 3 个工具
 # 头图横幅裁剪（宽:高），源图多是长截图 → 裁成 banner；越大越矮
 TODAY_AI_BANNER_ASPECT = 3.0
 # 头图上传前缩到的最大宽度（研究图/工程图可能很大，缩小省邮件体积）
