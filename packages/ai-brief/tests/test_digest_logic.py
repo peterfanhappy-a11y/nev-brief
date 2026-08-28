@@ -142,6 +142,11 @@ def test_filter_agent_tools_excludes_requested_repositories() -> None:
     assert [tool.name for tool in filtered] == ["acme/agent-kit"]
 
 
+def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
+    assert '"rank": 4' not in condenser._AGENT_SYSTEM
+    assert "rank 必须来自给定工具" in condenser._AGENT_SYSTEM
+
+
 async def test_agent_selection_returns_three_tools() -> None:
     tools = [
         AgentTool(
@@ -161,6 +166,39 @@ async def test_agent_selection_returns_three_tools() -> None:
                 "picks": [
                     {"rank": 1, "summary": "one."},
                     {"rank": 2, "summary": "two."},
+                    {"rank": 3, "summary": "three."},
+                ]
+            }
+        ),
+    ):
+        result = await condenser.select_agent_tools(tools)
+
+    assert result is not None
+    assert len(result.value) == 3
+    assert result.complete is True
+
+
+async def test_agent_selection_ignores_duplicate_model_ranks_when_three_unique_are_complete(
+) -> None:
+    tools = [
+        AgentTool(
+            rank=rank,
+            name=f"tool-{rank}",
+            stars="10",
+            points=[f"point-{rank}"],
+            url=f"https://github.com/example/tool-{rank}",
+        )
+        for rank in range(1, 4)
+    ]
+    with patch.object(
+        condenser,
+        "extract_json_with_retry",
+        new=AsyncMock(
+            return_value={
+                "picks": [
+                    {"rank": 1, "summary": "one."},
+                    {"rank": 2, "summary": "two."},
+                    {"rank": 2, "summary": "duplicate."},
                     {"rank": 3, "summary": "three."},
                 ]
             }

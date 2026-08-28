@@ -313,8 +313,8 @@ _AGENT_SYSTEM = """你是 AIVIZENS 的 AI 工具主编。给你 GitHub Trending 
    控制在 140 字以内（务必给结尾句留空间），通顺连贯、必须以句号收尾、不得写半截。产品/公司/技术名保留英文原名。
 
 只输出严格 JSON：
-{"picks": [ {"rank": 1, "summary": "≤150字介绍"}, {"rank": 3, "summary": "≤150字介绍"}, {"rank": 4, "summary": "≤150字介绍"} ]}
-rank 用给定编号，恰好 3 个。只输出 JSON。"""
+{"picks": [ {"rank": 1, "summary": "≤150字介绍"}, {"rank": 2, "summary": "≤150字介绍"}, {"rank": 3, "summary": "≤150字介绍"} ]}
+rank 必须来自给定工具，恰好 3 个且每个 rank 只能出现一次。只输出 JSON。"""
 
 
 def _agent_prompt(tools: list[AgentTool]) -> str:
@@ -367,13 +367,12 @@ async def select_agent_tools(
         )
         label = f"⭐ {t.stars} stars/周" if t.stars else ""
         out.append(DigestStory(headline=t.name[:80], summary=summary, url=t.url, label=label))
-    valid_model_picks = [
-        (rank, summary)
+    valid_model_picks = {
+        rank: summary
         for rank, summary in picks
         if rank in by_rank and summary
-    ]
+    }
     complete = (
         len(valid_model_picks) == config.AGENT_TOOLS_PICK
-        and len({rank for rank, _summary in valid_model_picks}) == config.AGENT_TOOLS_PICK
     )
     return ModelOutcome(value=out, complete=complete)
