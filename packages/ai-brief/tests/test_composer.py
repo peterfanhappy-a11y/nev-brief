@@ -1,8 +1,8 @@
 """composer 渲染测试 — digest 驱动版（今日AI / AI大神 section）+ 评分 + 条件板块。"""
 from __future__ import annotations
 
-from datetime import date
 import re
+from datetime import date
 from typing import Any
 
 from ai_brief.composer import render
