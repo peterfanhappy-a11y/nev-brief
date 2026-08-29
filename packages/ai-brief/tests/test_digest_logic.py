@@ -1,13 +1,22 @@
 """condenser / image_judge 的纯逻辑单测（不触 API）。"""
 from __future__ import annotations
 
+import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from ai_brief.digest import condenser, image_judge
-from ai_brief.digest.condenser import _rebalance
-from ai_brief.digest.generate import _filter_agent_tools
+from ai_brief.digest.condenser import _rebalance, build_engineering_stories
+from ai_brief.digest.generate import _filter_agent_tools, _is_usable_header_image
 from ai_brief.digest.image_judge import _parse_index
-from ai_brief.digest.models import AgentTool, BuilderItem, EventItem, ResearchPaper
+from ai_brief.digest.models import (
+    AgentTool,
+    BuilderItem,
+    CorePoint,
+    EngineeringLecture,
+    EventItem,
+    ResearchPaper,
+)
+from PIL import Image
 
 
 def _items() -> dict[int, BuilderItem]:
@@ -140,6 +149,44 @@ def test_filter_agent_tools_excludes_requested_repositories() -> None:
     filtered = _filter_agent_tools(tools)
 
     assert [tool.name for tool in filtered] == ["acme/agent-kit"]
+
+
+def test_engineering_stories_move_takeaways_into_headlines_and_clean_bodies() -> None:
+    lecture = EngineeringLecture(
+        lecture_no=1,
+        source_title="",
+        source_url="",
+        key_point="验收标准必须明确",
+        core_points=[
+            CorePoint("问题", "：别让 AI 自己定义「完成」。"),
+            CorePoint("方法：用清单验收", "：机器测试通过才算完成。"),
+            CorePoint("行动：给完成定客观标准", "：由独立角色检查结果。"),
+        ],
+    )
+
+    _, stories = build_engineering_stories(lecture)
+
+    assert [story.headline for story in stories] == [
+        "问题：别让 AI 自己定义「完成」",
+        "方法：用清单验收",
+        "启示：给完成定客观标准",
+    ]
+    assert [story.summary for story in stories] == [
+        "别让 AI 自己定义「完成」。",
+        "机器测试通过才算完成。",
+        "由独立角色检查结果。",
+    ]
+
+
+def test_header_image_validation_rejects_a_uniform_white_attachment() -> None:
+    def png(color: str) -> bytes:
+        image = Image.new("RGB", (600, 400), color)
+        buf = io.BytesIO()
+        image.save(buf, "PNG")
+        return buf.getvalue()
+
+    assert _is_usable_header_image(png("white"), "image/png") is False
+    assert _is_usable_header_image(png("navy"), "image/png") is True
 
 
 def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
