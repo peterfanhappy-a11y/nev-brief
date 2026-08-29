@@ -3,7 +3,7 @@
 ## Production boundary
 
 Production remains Vercel (Next.js) → Supabase (PostgreSQL, REST, and RPC) →
-Resend, durable server-side rate limiting, and a five-second hold-to-submit
+Resend, durable server-side rate limiting, and a five-second hold-to-verify
 interaction. The local PostgREST and fake Resend services are acceptance-test infrastructure only.
 They are not deployed and they do not introduce an alternate production data
 path.
@@ -69,12 +69,13 @@ Do not attempt to reverse a hash. To correlate a reported request, use the
 approved application-side HMAC tooling with the production secret still in its
 secret manager; never copy that secret into SQL or a shell history.
 
-## Hold-to-submit and configuration
+## Hold-to-verify and configuration
 
-The public form does not load Cloudflare Turnstile. A reader must continuously
-hold the subscription button for five seconds before the browser sends a
-request. This is a friction control, not a security boundary: the durable
-server-side limiter and double opt-in remain mandatory.
+The public form does not load Cloudflare Turnstile. A reader selects “免费订阅”,
+then continuously holds the verification dialog's progress bar for five seconds.
+The browser automatically sends the subscription request when the hold completes.
+This is a friction control, not a security boundary: the durable server-side
+limiter and double opt-in remain mandatory.
 
 1. Confirm `SUBSCRIPTION_HASH_SECRET` exists in the intended Vercel environment
    without printing its value. Its absence produces `server_configuration` and

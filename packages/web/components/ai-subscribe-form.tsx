@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -14,16 +21,49 @@ export default function AiSubscribeForm({
   subscriptionsEnabled: boolean;
 }) {
   const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isHoldingRef = useRef(false);
+  const isSubmittingRef = useRef(false);
+  const subscribeButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const progressButtonRef = useRef<HTMLButtonElement>(null);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<
     "idle" | "submitting" | "success" | "error"
   >("idle");
+  const [verificationOpen, setVerificationOpen] = useState(false);
   const [isHolding, setIsHolding] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [errorMsg, setErrorMsg] = useState("");
 
-  useEffect(() => () => {
+  const cancelHold = useCallback((resetProgress = true) => {
     if (holdTimeout.current) clearTimeout(holdTimeout.current);
+    if (progressInterval.current) clearInterval(progressInterval.current);
+    holdTimeout.current = null;
+    progressInterval.current = null;
+    isHoldingRef.current = false;
+    setIsHolding(false);
+    if (resetProgress) setProgress(0);
   }, []);
+
+  const closeVerification = useCallback(() => {
+    cancelHold();
+    setVerificationOpen(false);
+    subscribeButtonRef.current?.focus();
+  }, [cancelHold]);
+
+  useEffect(() => () => cancelHold(false), [cancelHold]);
+
+  useEffect(() => {
+    if (!verificationOpen) return;
+
+    closeButtonRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeVerification();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [verificationOpen, closeVerification]);
 
   if (!subscriptionsEnabled) {
     return (
@@ -33,14 +73,9 @@ export default function AiSubscribeForm({
     );
   }
 
-  function cancelHold() {
-    if (holdTimeout.current) clearTimeout(holdTimeout.current);
-    holdTimeout.current = null;
-    setIsHolding(false);
-  }
-
   async function submitSubscription() {
-    if (status === "submitting") return;
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
     setStatus("submitting");
     setErrorMsg("");
     try {
@@ -53,17 +88,19 @@ export default function AiSubscribeForm({
       if (response.status !== 202) {
         setErrorMsg(data.error ?? "提交失败，请稍后重试");
         setStatus("error");
+        isSubmittingRef.current = false;
         return;
       }
       setStatus("success");
     } catch {
       setErrorMsg("网络错误，请重试");
       setStatus("error");
+      isSubmittingRef.current = false;
     }
   }
 
-  function startHold() {
-    if (status === "submitting" || isHolding) return;
+  function openVerification() {
+    if (isSubmittingRef.current) return;
     if (!email) {
       setErrorMsg("请填写邮箱");
       setStatus("error");
@@ -71,12 +108,39 @@ export default function AiSubscribeForm({
     }
 
     setErrorMsg("");
+    setVerificationOpen(true);
+    setProgress(0);
+  }
+
+  function startHold() {
+    if (isSubmittingRef.current || isHoldingRef.current) return;
+
+    isHoldingRef.current = true;
     setIsHolding(true);
+    progressInterval.current = setInterval(() => {
+      setProgress((current) => Math.min(current + 1, 99));
+    }, 50);
     holdTimeout.current = setTimeout(() => {
-      holdTimeout.current = null;
-      setIsHolding(false);
+      cancelHold(false);
+      setProgress(100);
+      setVerificationOpen(false);
       void submitSubscription();
     }, HOLD_DURATION_MS);
+  }
+
+  function trapFocus(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Tab") return;
+
+    const closeButton = closeButtonRef.current;
+    const progressButton = progressButtonRef.current;
+    if (!closeButton || !progressButton) return;
+
+    event.preventDefault();
+    if (event.shiftKey) {
+      (document.activeElement === closeButton ? progressButton : closeButton).focus();
+    } else {
+      (document.activeElement === progressButton ? closeButton : progressButton).focus();
+    }
   }
 
   function preventSubmit(event: FormEvent) {
@@ -111,32 +175,78 @@ export default function AiSubscribeForm({
           className="flex-1 h-12 text-base"
         />
         <Button
+          ref={subscribeButtonRef}
           type="button"
           disabled={status === "submitting"}
           className="h-12 px-6 text-base bg-gray-900 hover:bg-gray-800"
-          onPointerDown={(event) => {
-            event.preventDefault();
-            startHold();
-          }}
-          onPointerUp={cancelHold}
-          onPointerLeave={cancelHold}
-          onPointerCancel={cancelHold}
-          onKeyDown={(event) => {
-            if (event.key !== " " && event.key !== "Enter") return;
-            event.preventDefault();
-            startHold();
-          }}
-          onKeyUp={(event) => {
-            if (event.key === " " || event.key === "Enter") cancelHold();
-          }}
+          onClick={openVerification}
         >
-          {status === "submitting"
-            ? "提交中…"
-            : isHolding
-              ? "继续按住…"
-              : "按住 5 秒免费订阅"}
+          免费订阅
         </Button>
       </div>
+
+      {verificationOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="人机验证"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6"
+          onKeyDown={trapFocus}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) closeVerification();
+          }}
+        >
+          <div className="relative w-full max-w-md rounded-xl bg-white p-6 text-center shadow-xl">
+            <button
+              ref={closeButtonRef}
+              type="button"
+              aria-label="关闭验证"
+              className="absolute right-4 top-4 h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+              onClick={closeVerification}
+            >
+              ×
+            </button>
+            <h2 className="text-xl font-bold text-gray-900">人机验证</h2>
+            <p className="mt-3 text-sm text-gray-600">
+              请长按进度条 5 秒进行人机验证。
+            </p>
+
+            <button
+              ref={progressButtonRef}
+              type="button"
+              aria-label="长按进度条 5 秒"
+              className="relative mt-6 h-12 w-full overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                if (event.button > 0) return;
+                startHold();
+              }}
+              onPointerUp={() => cancelHold()}
+              onPointerLeave={() => cancelHold()}
+              onPointerCancel={() => cancelHold()}
+              onKeyDown={(event) => {
+                if (event.key !== " " && event.key !== "Enter") return;
+                event.preventDefault();
+                startHold();
+              }}
+              onKeyUp={(event) => {
+                if (event.key === " " || event.key === "Enter") cancelHold();
+              }}
+            >
+              <span
+                role="progressbar"
+                aria-label="验证进度"
+                aria-valuenow={progress}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="absolute inset-y-0 left-0 bg-indigo-600 transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
+              <span className="relative">{isHolding ? `验证中 ${progress}%` : "按住开始验证"}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {status === "error" && (
         <div className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-center text-sm text-red-600">
@@ -145,7 +255,7 @@ export default function AiSubscribeForm({
       )}
 
       <p className="mt-3 text-xs text-gray-500 text-center">
-        按住 5 秒完成订阅 · 免费 · 一键退订 · 我们尊重你的隐私
+        免费 · 邮箱确认 · 一键退订 · 我们尊重你的隐私
       </p>
     </form>
   );

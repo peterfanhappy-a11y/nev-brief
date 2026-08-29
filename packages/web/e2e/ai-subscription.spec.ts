@@ -33,8 +33,10 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
 
   await page.goto("/");
   await page.getByPlaceholder("输入你的邮箱").fill(email);
-  const subscribe = page.getByRole("button", { name: "按住 5 秒免费订阅" });
-  await subscribe.hover();
+  await page.getByRole("button", { name: "免费订阅" }).click();
+  await expect(page.getByRole("dialog", { name: "人机验证" })).toBeVisible();
+  const progressBar = page.getByRole("button", { name: "长按进度条 5 秒" });
+  await progressBar.hover();
   await page.mouse.down();
   await page.waitForTimeout(5_100);
   await page.mouse.up();
