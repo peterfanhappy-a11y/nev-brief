@@ -322,6 +322,29 @@ def test_qwen_request_failure_reports_incomplete_fallback_to_first() -> None:
     assert result.complete is False
 
 
+def test_today_ai_image_prompt_prioritizes_technology_before_people() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "choices": [{"message": {"content": "选择=0", "reasoning_content": ""}}]
+    }
+    with patch.object(
+        image_judge.httpx,  # type: ignore[attr-defined]
+        "post",
+        return_value=response,
+    ) as post:
+        result = image_judge.pick_image(
+            [(b"technology", "image/png"), (b"person", "image/png")],
+            ["芯片与服务器", "人物肖像"],
+            mode="today_ai",
+            api_key="fixture-key",
+        )
+
+    prompt = post.call_args.kwargs["json"]["messages"][0]["content"][0]["text"]
+    assert "科技感" in prompt
+    assert prompt.index("科技感") < prompt.index("人物")
+    assert result.complete is True
+
+
 def test_qwen_invalid_output_reports_incomplete_even_when_first_image_is_uploaded() -> None:
     response = MagicMock()
     response.json.return_value = {
