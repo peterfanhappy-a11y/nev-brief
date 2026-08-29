@@ -6,8 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from ai_brief.digest import condenser, image_judge
 from ai_brief.digest.condenser import _rebalance, build_engineering_stories
-from ai_brief.digest.generate import _filter_agent_tools, _is_usable_header_image
+from ai_brief.digest.generate import (
+    _filter_agent_tools,
+    _is_usable_header_image,
+    _today_ai_image_candidates,
+)
 from ai_brief.digest.image_judge import _parse_index
+from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.models import (
     AgentTool,
     BuilderItem,
@@ -187,6 +192,40 @@ def test_header_image_validation_rejects_a_uniform_white_attachment() -> None:
 
     assert _is_usable_header_image(png("white"), "image/png") is False
     assert _is_usable_header_image(png("navy"), "image/png") is True
+
+
+def test_today_ai_uses_attachment_order_when_filenames_have_no_story_index() -> None:
+    def png(color: str) -> bytes:
+        image = Image.new("RGB", (80, 50), color)
+        buf = io.BytesIO()
+        image.save(buf, "PNG")
+        return buf.getvalue()
+
+    items = [
+        EventItem(
+            index=index,
+            category="AI",
+            value_tag="重要",
+            headline=f"事件 {index}",
+            url=f"https://example.com/{index}",
+            body="正文",
+            image_note="",
+        )
+        for index in range(1, 4)
+    ]
+    attachments = [
+        Attachment("salesforce-claude.webp", "image/png", png("red")),
+        Attachment("chatgpt-work-login.jpg", "image/png", png("green")),
+        Attachment("openai-executive-exodus.jpg", "image/png", png("blue")),
+    ]
+
+    candidates = _today_ai_image_candidates(items, attachments)
+
+    assert [(index, caption) for index, _, _, caption in candidates] == [
+        (1, "事件 1"),
+        (2, "事件 2"),
+        (3, "事件 3"),
+    ]
 
 
 def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
