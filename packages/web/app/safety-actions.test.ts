@@ -204,7 +204,7 @@ describe("explicit mutation actions", () => {
     consoleError.mockRestore();
   });
 
-  it("sends an unsubscribe link only for a matching subscriber", async () => {
+  it("sends a recipient-bound unsubscribe link only for a matching subscriber", async () => {
     mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
     mocks.maybeSingle.mockResolvedValue({
       data: {
@@ -234,6 +234,19 @@ describe("explicit mutation actions", () => {
     ).rejects.toThrow("REDIRECT:/unsubscribe?status=requested");
 
     expect(mocks.sendUnsubscribe).not.toHaveBeenCalled();
+  });
+
+  it("shows a generic error when unsubscribe lookup storage is unavailable", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
+    mocks.maybeSingle.mockResolvedValue({ error: { message: "database unavailable" } });
+
+    await expect(
+      requestUnsubscribeAction(form({ email: "reader@example.com" })),
+    ).rejects.toThrow("REDIRECT:/unsubscribe?status=error");
+
+    expect(consoleError).toHaveBeenCalledWith("[unsubscribe] request lookup failed");
+    consoleError.mockRestore();
   });
 
   it.each([1, 2, 3])("upserts the allowed rating score %i", async (score) => {

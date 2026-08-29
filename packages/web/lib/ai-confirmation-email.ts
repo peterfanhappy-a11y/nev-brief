@@ -4,6 +4,15 @@ import { hashConfirmationToken } from "./subscription-token";
 const MAX_SEND_ATTEMPTS = 2;
 const DELIVERY_ERROR = "AI confirmation email delivery failed";
 
+export class ConfirmationEmailDeliveryError extends Error {
+  constructor(
+    readonly kind: "configuration" | "provider",
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 function requiredEmailEnvironment(
   name: "RESEND_API_KEY" | "RESEND_FROM_EMAIL" | "WEB_BASE_URL",
   testFallback: string,
@@ -17,7 +26,10 @@ function requiredEmailEnvironment(
     return testFallback;
   }
 
-  throw new Error(`${name} is required to send AI confirmation email`);
+  throw new ConfirmationEmailDeliveryError(
+    "configuration",
+    `${name} is required to send AI confirmation email`,
+  );
 }
 
 export async function sendAiConfirmationEmail(
@@ -82,5 +94,5 @@ ${confirmationUrl}
     }
   }
 
-  throw new Error(DELIVERY_ERROR);
+  throw new ConfirmationEmailDeliveryError("provider", DELIVERY_ERROR);
 }

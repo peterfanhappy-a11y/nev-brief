@@ -100,7 +100,6 @@ function request(email: string, ip = "203.0.113.10"): Request {
     },
     body: JSON.stringify({
       email,
-      turnstileToken: "integration-turnstile-token",
       utm: { source: "phase-1", medium: "integration", campaign: "task-6" },
     }),
   });

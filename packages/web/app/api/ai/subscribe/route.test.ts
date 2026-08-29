@@ -22,6 +22,7 @@ vi.mock("@/lib/subscription-token", () => ({
   createConfirmationToken: mocks.createToken,
 }));
 vi.mock("@/lib/ai-confirmation-email", () => ({
+  ConfirmationEmailDeliveryError: class ConfirmationEmailDeliveryError extends Error {},
   sendAiConfirmationEmail: mocks.sendConfirmation,
 }));
 vi.mock("@/lib/supabase", () => ({
@@ -226,7 +227,7 @@ describe("POST /api/ai/subscribe", () => {
     ["unsubscribed", true],
     ["active", false],
   ])(
-    "returns the same private success for %s when confirmation delivery is unavailable",
+    "returns the same private result for %s when confirmation delivery is unavailable",
     async (_state, confirmationRequired) => {
       mocks.rpc.mockResolvedValue({
         data: [{ confirmation_required: confirmationRequired }],

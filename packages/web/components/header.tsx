@@ -12,12 +12,20 @@ export default function Header() {
             className="h-8 w-auto"
           />
         </Link>
-        <a
-          href="#subscribe"
-          className="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
-        >
-          订阅
-        </a>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/unsubscribe"
+            className="text-sm font-medium text-gray-600 transition-colors hover:text-gray-900"
+          >
+            退订
+          </Link>
+          <Link
+            href="/#subscribe"
+            className="inline-flex items-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+          >
+            订阅
+          </Link>
+        </div>
       </div>
     </header>
   );

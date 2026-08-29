@@ -95,6 +95,14 @@ describe("daily archive page", () => {
       "href",
       "/#subscribe",
     );
+    expect(screen.getByRole("link", { name: "订阅" })).toHaveAttribute(
+      "href",
+      "/#subscribe",
+    );
+    expect(screen.getByRole("link", { name: "退订" })).toHaveAttribute(
+      "href",
+      "/unsubscribe",
+    );
   });
 
   it.each(["2026-8-03", "2026-02-29"])(

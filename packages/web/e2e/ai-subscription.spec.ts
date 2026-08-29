@@ -35,12 +35,12 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
   await page.getByPlaceholder("输入你的邮箱").fill(email);
   await page.getByRole("button", { name: "免费订阅" }).click();
   await expect(page.getByRole("dialog", { name: "人机验证" })).toBeVisible();
-  const progressBar = page.getByRole("button", { name: "长按进度条 5 秒" });
+  const progressBar = page.getByRole("button", { name: "长按进度条 2 秒" });
   await progressBar.hover();
   await page.mouse.down();
-  await page.waitForTimeout(5_100);
+  await page.waitForTimeout(2_100);
   await page.mouse.up();
-  await expect(page.getByRole("heading", { name: "请查收确认邮件" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "订阅请求已收到" })).toBeVisible();
 
   await expect
     .poll(async () => (await capturedMessages(request)).length)
@@ -82,4 +82,41 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
   await expect(
     page.getByRole("heading", { name: "已退订 AIVIZENS · AI 趋势" }),
   ).toBeVisible();
+});
+
+test.describe("touch verification", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 820, height: 1180 } });
+
+  test("prevents a context menu and submits after a two-second touch hold", async ({
+    page,
+    request,
+  }) => {
+    const email = `touch-${Date.now()}-${test.info().workerIndex}@example.com`;
+    const clear = await request.delete(`${fakeResendUrl}/_test/messages`);
+    expect(clear.status()).toBe(204);
+
+    await page.goto("/");
+    await page.getByPlaceholder("输入你的邮箱").fill(email);
+    await page.getByRole("button", { name: "免费订阅" }).click();
+    const progressBar = page.getByRole("button", { name: "长按进度条 2 秒" });
+
+    const menuWasAllowed = await progressBar.evaluate((element) =>
+      element.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })),
+    );
+    expect(menuWasAllowed).toBe(false);
+
+    await progressBar.dispatchEvent("pointerdown", {
+      button: 0,
+      pointerId: 7,
+      pointerType: "touch",
+    });
+    await page.waitForTimeout(2_100);
+    await progressBar.dispatchEvent("pointerup", {
+      button: 0,
+      pointerId: 7,
+      pointerType: "touch",
+    });
+
+    await expect(page.getByRole("heading", { name: "订阅请求已收到" })).toBeVisible();
+  });
 });

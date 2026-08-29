@@ -61,7 +61,11 @@ describe("AIVIZENS homepage", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "订阅" })).toHaveAttribute(
       "href",
-      "#subscribe",
+      "/#subscribe",
+    );
+    expect(screen.getByRole("link", { name: "退订" })).toHaveAttribute(
+      "href",
+      "/unsubscribe",
     );
     expect(screen.getByText("订阅暂未开放")).toBeInTheDocument();
     expect(screen.getByText("100,000+")).toBeInTheDocument();

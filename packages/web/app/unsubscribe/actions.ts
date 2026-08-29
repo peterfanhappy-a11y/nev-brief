@@ -13,17 +13,35 @@ export async function requestUnsubscribeAction(formData: FormData): Promise<neve
   const parsed = Email.safeParse(formData.get("email"));
   if (!parsed.success) redirect("/unsubscribe?status=requested");
 
+  let lookup: {
+    data: { email: string; status: string; unsubscribe_token: string } | null;
+    error: unknown;
+  };
   try {
-    const { data, error } = await getSupabaseAdmin()
+    lookup = await getSupabaseAdmin()
       .from("ai_subscribers")
       .select("email,status,unsubscribe_token")
       .eq("email", parsed.data)
       .maybeSingle();
-    if (!error && data && data.status !== "unsubscribed") {
-      await sendAiUnsubscribeEmail(data.email, data.unsubscribe_token);
-    }
   } catch {
-    console.error("[unsubscribe] request email failed");
+    console.error("[unsubscribe] request lookup failed");
+    redirect("/unsubscribe?status=error");
+  }
+
+  if (lookup.error) {
+    console.error("[unsubscribe] request lookup failed");
+    redirect("/unsubscribe?status=error");
+  }
+
+  if (lookup.data && lookup.data.status !== "unsubscribed") {
+    try {
+      await sendAiUnsubscribeEmail(
+        lookup.data.email,
+        lookup.data.unsubscribe_token,
+      );
+    } catch {
+      console.error("[unsubscribe] request email failed");
+    }
   }
 
   redirect("/unsubscribe?status=requested");

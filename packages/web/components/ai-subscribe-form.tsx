@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const HOLD_DURATION_MS = 5_000;
+const HOLD_DURATION_MS = 2_000;
 
 export default function AiSubscribeForm({
   variant = "hero",
@@ -22,6 +22,7 @@ export default function AiSubscribeForm({
 }) {
   const holdTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const holdStartedAt = useRef(0);
   const isHoldingRef = useRef(false);
   const isSubmittingRef = useRef(false);
   const subscribeButtonRef = useRef<HTMLButtonElement>(null);
@@ -117,8 +118,14 @@ export default function AiSubscribeForm({
 
     isHoldingRef.current = true;
     setIsHolding(true);
+    holdStartedAt.current = Date.now();
     progressInterval.current = setInterval(() => {
-      setProgress((current) => Math.min(current + 1, 99));
+      setProgress(
+        Math.min(
+          Math.round(((Date.now() - holdStartedAt.current) / HOLD_DURATION_MS) * 100),
+          99,
+        ),
+      );
     }, 50);
     holdTimeout.current = setTimeout(() => {
       cancelHold(false);
@@ -151,10 +158,10 @@ export default function AiSubscribeForm({
     return (
       <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-6 text-center">
         <h3 className="mb-2 text-xl font-bold text-indigo-700">
-          请查收确认邮件
+          订阅请求已收到
         </h3>
         <p className="text-sm text-gray-700">
-          点击邮件中的确认链接后，订阅才会生效。
+          如需确认，我们会向你的邮箱发送确认链接。若几分钟内未收到，请检查垃圾邮件或稍后重试。
         </p>
       </div>
     );
@@ -181,7 +188,7 @@ export default function AiSubscribeForm({
           className="h-12 px-6 text-base bg-gray-900 hover:bg-gray-800"
           onClick={openVerification}
         >
-          免费订阅
+          {status === "submitting" ? "正在提交…" : "免费订阅"}
         </Button>
       </div>
 
@@ -190,40 +197,63 @@ export default function AiSubscribeForm({
           role="dialog"
           aria-modal="true"
           aria-label="人机验证"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 backdrop-blur-sm sm:px-6"
           onKeyDown={trapFocus}
           onClick={(event) => {
             if (event.target === event.currentTarget) closeVerification();
           }}
         >
-          <div className="relative w-full max-w-md rounded-xl bg-white p-6 text-center shadow-xl">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-indigo-100 bg-white p-6 text-center shadow-2xl shadow-indigo-950/30 sm:p-8">
+            <div
+              aria-hidden="true"
+              className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-500 via-violet-500 to-cyan-400"
+            />
             <button
               ref={closeButtonRef}
               type="button"
               aria-label="关闭验证"
-              className="absolute right-4 top-4 h-8 w-8 rounded-full text-gray-500 hover:bg-gray-100"
+              className="absolute right-4 top-4 h-9 w-9 rounded-full text-gray-500 transition-colors hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
               onClick={closeVerification}
             >
               ×
             </button>
-            <h2 className="text-xl font-bold text-gray-900">人机验证</h2>
-            <p className="mt-3 text-sm text-gray-600">
-              请长按进度条 5 秒进行人机验证。
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-lg text-indigo-600" aria-hidden="true">
+              ✦
+            </div>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-indigo-600">
+              安全验证 · 约 2 秒
+            </p>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">确认是你本人</h2>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+              请长按进度条 2 秒进行人机验证。
             </p>
 
             <button
               ref={progressButtonRef}
               type="button"
-              aria-label="长按进度条 5 秒"
-              className="relative mt-6 h-12 w-full overflow-hidden rounded-full bg-gray-200 text-sm font-medium text-gray-700"
+              aria-label="长按进度条 2 秒"
+              className="relative mt-7 h-14 w-full touch-none select-none overflow-hidden rounded-2xl border border-indigo-100 bg-slate-100 text-sm font-semibold text-slate-700 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+              style={{
+                touchAction: "none",
+                userSelect: "none",
+                WebkitUserSelect: "none",
+                WebkitTouchCallout: "none",
+              }}
               onPointerDown={(event) => {
                 event.preventDefault();
                 if (event.button > 0) return;
+                try {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                } catch {
+                  // Older mobile browsers may not expose pointer capture.
+                }
                 startHold();
               }}
               onPointerUp={() => cancelHold()}
               onPointerLeave={() => cancelHold()}
               onPointerCancel={() => cancelHold()}
+              onContextMenu={(event) => event.preventDefault()}
+              onDragStart={(event) => event.preventDefault()}
               onKeyDown={(event) => {
                 if (event.key !== " " && event.key !== "Enter") return;
                 event.preventDefault();
@@ -239,11 +269,15 @@ export default function AiSubscribeForm({
                 aria-valuenow={progress}
                 aria-valuemin={0}
                 aria-valuemax={100}
-                className="absolute inset-y-0 left-0 bg-indigo-600 transition-[width]"
+                className="absolute inset-y-0 left-0 bg-gradient-to-r from-indigo-600 via-violet-600 to-cyan-500 transition-[width]"
                 style={{ width: `${progress}%` }}
               />
-              <span className="relative">{isHolding ? `验证中 ${progress}%` : "按住开始验证"}</span>
+              <span className="relative inline-flex items-center gap-2">
+                <span aria-hidden="true">{isHolding ? "✦" : "●"}</span>
+                {isHolding ? `验证中 ${progress}%` : "按住开始验证"}
+              </span>
             </button>
+            <p className="mt-4 text-xs text-slate-400">无需验证码，不会收集额外信息</p>
           </div>
         </div>
       )}

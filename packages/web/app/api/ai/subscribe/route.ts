@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { sendAiConfirmationEmail } from "@/lib/ai-confirmation-email";
+import {
+  ConfirmationEmailDeliveryError,
+  sendAiConfirmationEmail,
+} from "@/lib/ai-confirmation-email";
 import { subscriptionsEnabled } from "@/lib/feature-flags";
 import {
   checkSubscriptionRateLimit,
@@ -120,11 +123,11 @@ export async function POST(req: Request) {
   if (decision.confirmation_required) {
     try {
       await sendAiConfirmationEmail(body.email, rawToken);
-    } catch {
-      // Preserve account-state privacy: retain the pending token for a later
-      // rate-limited request, record no provider/input detail, and return the
-      // same public response as every other subscriber state.
-      console.error("[ai/subscribe] confirmation email delivery failed");
+    } catch (error) {
+      const kind = error instanceof ConfirmationEmailDeliveryError
+        ? error.kind
+        : "unknown";
+      console.error(`[ai/subscribe] confirmation email delivery failed (${kind})`);
     }
   }
 

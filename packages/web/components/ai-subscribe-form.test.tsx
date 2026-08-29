@@ -24,7 +24,7 @@ describe("AI subscription form", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  it("opens a five-second hold verification dialog before subscription", () => {
+  it("opens a two-second hold verification dialog before subscription", () => {
     render(<AiSubscribeForm subscriptionsEnabled />);
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "reader@example.com" },
@@ -33,8 +33,8 @@ describe("AI subscription form", () => {
     fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
 
     expect(screen.getByRole("dialog", { name: "人机验证" })).toBeInTheDocument();
-    expect(screen.getByText("请长按进度条 5 秒进行人机验证。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "长按进度条 5 秒" })).toBeInTheDocument();
+    expect(screen.getByText("请长按进度条 2 秒进行人机验证。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "长按进度条 2 秒" })).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -73,7 +73,7 @@ describe("AI subscription form", () => {
     fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
 
     const close = screen.getByRole("button", { name: "关闭验证" });
-    const progress = screen.getByRole("button", { name: "长按进度条 5 秒" });
+    const progress = screen.getByRole("button", { name: "长按进度条 2 秒" });
     fireEvent.keyDown(close, { key: "Tab" });
     expect(progress).toHaveFocus();
     fireEvent.keyDown(progress, { key: "Tab" });
@@ -82,7 +82,7 @@ describe("AI subscription form", () => {
     expect(progress).toHaveFocus();
   });
 
-  it("automatically submits after a five-second verification hold", async () => {
+  it("automatically submits after a two-second verification hold", async () => {
     vi.useFakeTimers();
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ ok: true, message: "check_email" }), {
@@ -96,10 +96,10 @@ describe("AI subscription form", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
 
-    const button = screen.getByRole("button", { name: "长按进度条 5 秒" });
+    const button = screen.getByRole("button", { name: "长按进度条 2 秒" });
     fireEvent.pointerDown(button, { button: 0 });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_999);
+      await vi.advanceTimersByTimeAsync(1_999);
     });
     expect(fetch).not.toHaveBeenCalled();
 
@@ -114,7 +114,7 @@ describe("AI subscription form", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
-    expect(await screen.findByText("请查收确认邮件")).toBeInTheDocument();
+    expect(await screen.findByText("订阅请求已收到")).toBeInTheDocument();
   });
 
   it("cancels a verification hold when the reader releases early", async () => {
@@ -125,17 +125,49 @@ describe("AI subscription form", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
 
-    const progress = screen.getByRole("button", { name: "长按进度条 5 秒" });
+    const progress = screen.getByRole("button", { name: "长按进度条 2 秒" });
     fireEvent.pointerDown(progress, { button: 0 });
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(2_000);
+      await vi.advanceTimersByTimeAsync(1_000);
     });
     fireEvent.pointerUp(progress);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(2_000);
     });
 
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("prevents the browser context menu from interrupting a touch verification hold", () => {
+    render(<AiSubscribeForm subscriptionsEnabled />);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "reader@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
+
+    const progress = screen.getByRole("button", { name: "长按进度条 2 秒" });
+    expect(fireEvent.contextMenu(progress)).toBe(false);
+  });
+
+  it("captures a touch pointer so a moving finger keeps the verification hold active", () => {
+    render(<AiSubscribeForm subscriptionsEnabled />);
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "reader@example.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
+
+    const progress = screen.getByRole("button", { name: "长按进度条 2 秒" });
+    const capture = vi.fn();
+    Object.defineProperty(progress, "setPointerCapture", { value: capture });
+    const pointerDown = new Event("pointerdown", { bubbles: true, cancelable: true });
+    Object.defineProperties(pointerDown, {
+      button: { value: 0 },
+      pointerId: { value: 7 },
+      pointerType: { value: "touch" },
+    });
+    fireEvent(progress, pointerDown);
+
+    expect(capture).toHaveBeenCalledWith(7);
   });
 
   it("does not render a Cloudflare verification widget", () => {
@@ -158,13 +190,14 @@ describe("AI subscription form", () => {
       target: { value: "reader@example.com" },
     });
     fireEvent.click(screen.getByRole("button", { name: "免费订阅" }));
-    fireEvent.pointerDown(screen.getByRole("button", { name: "长按进度条 5 秒" }));
+    fireEvent.pointerDown(screen.getByRole("button", { name: "长按进度条 2 秒" }));
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(2_000);
     });
     vi.useRealTimers();
     expect(await screen.findByText("rate_limited")).toBeInTheDocument();
-    expect(screen.queryByText("请查收确认邮件")).not.toBeInTheDocument();
+    expect(screen.queryByText("订阅请求已收到")).not.toBeInTheDocument();
   });
+
 });
