@@ -47,7 +47,10 @@ class AiSettings(BaseSettings):
         default="", validation_alias=AliasChoices("qwen_api_key", "dashscope_api_key")
     )
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    qwen_vl_model: str = "qwen3.7-plus"
+    qwen_vl_model: str = Field(
+        default="qwen3.7-plus",
+        validation_alias=AliasChoices("qwen_model", "qwen_vl_model"),
+    )
 
 
 @lru_cache
@@ -116,7 +119,7 @@ AI_MASTERS_PICK_FIRE5 = 3         # 后5条选几条
 AI_RESEARCH_SUMMARY_CHARS = 200   # AI研究 单篇内容
 AI_ENGINEERING_POINT_CHARS = 150  # AI工程 每条核心要点
 AGENT_TOOL_SUMMARY_CHARS = 150    # Agent工具 每个工具介绍
-AGENT_TOOLS_PICK = 2              # 3 个工具选几个
+AGENT_TOOLS_PICK = 3              # 过滤后展示 3 个工具
 # 头图横幅裁剪（宽:高），源图多是长截图 → 裁成 banner；越大越矮
 TODAY_AI_BANNER_ASPECT = 3.0
 # 头图上传前缩到的最大宽度（研究图/工程图可能很大，缩小省邮件体积）
@@ -158,6 +161,13 @@ def qwen_vl_model() -> str:
 
 def image_bucket() -> str:
     return ai_settings().ai_image_bucket
+
+
+def email_send_enabled() -> bool:
+    """Global kill switch; sending stays disabled unless explicitly enabled."""
+    return os.environ.get("AI_EMAIL_SEND_ENABLED", "false").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
 
 
 # ── 抓取行为 ──────────────────────────────────────────────────────────

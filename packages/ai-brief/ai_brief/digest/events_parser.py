@@ -16,7 +16,7 @@ from selectolax.parser import HTMLParser, Node
 from ai_brief.digest.models import EventItem
 
 _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
-_SOURCE_RE = re.compile(r"来源[:：]\s*([^|｜]+)")
+_SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
 
 
 def _clean(text: str) -> str:
@@ -41,6 +41,54 @@ def _read_link(meta: Node | None) -> str:
         if href.startswith("http"):
             return href
     return ""
+
+
+def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse the current upstream blocks: label div, h2, summary p, link p."""
+    items: list[EventItem] = []
+    for h2 in tree.css("h2"):
+        block = h2.parent
+        if block is None or block.tag != "div":
+            continue
+        raw_title = _clean(h2.text())
+        match = _TITLE_NUM_RE.match(raw_title)
+        if match:
+            index, headline = int(match.group(1)), match.group(2).strip()
+        else:
+            index, headline = len(items) + 1, raw_title
+
+        label_node = next(
+            (node for node in block.css("div") if node.css_first("h2") is None),
+            None,
+        )
+        label_text = _clean(label_node.text()) if label_node else ""
+        source_match = _SOURCE_RE.search(label_text)
+        source = source_match.group(1).strip() if source_match else ""
+        label_text = re.sub(r"\s*[·•]\s*来源\s*[:：]?\s*.+$", "", label_text)
+        category, value_tag = _split_label(label_text)
+
+        body_parts = [
+            _clean(p.text()) for p in block.css("p") if not p.css_first("a")
+        ]
+        url = ""
+        for anchor in block.css("a"):
+            href = (anchor.attributes.get("href") or "").strip()
+            if href.startswith("https://"):
+                url = href
+                break
+        if headline and url:
+            items.append(
+                EventItem(
+                    index=index,
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=" ".join(part for part in body_parts if part),
+                    image_note=source,
+                )
+            )
+    return items
 
 
 def parse_events_digest(html: str) -> list[EventItem]:
@@ -84,4 +132,4 @@ def parse_events_digest(html: str) -> list[EventItem]:
                 image_note=source,  # 新格式无头图说明，借该字段留档来源名
             )
         )
-    return items
+    return items or _parse_current_markup(tree)

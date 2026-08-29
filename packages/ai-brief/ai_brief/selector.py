@@ -6,7 +6,9 @@ summarizer 使用。
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Any, TypedDict, cast
 
 from nev_pipeline.deepseek_client import extract_json_with_retry
 from nev_shared.logger import get_logger
@@ -51,9 +53,14 @@ SYSTEM_PROMPT = """你是 AIVIZENS 的 AI 行业主编，为对 AI 感兴趣的�
 只输出 JSON，不要解释。所有编号必须是给定列表中的整数。"""
 
 
+class ThemeSelection(TypedDict):
+    pick: str | None
+    backups: list[str]
+
+
 @dataclass
 class SelectionResult:
-    themes: dict[str, dict]              # key -> {"pick": id|None, "backups": [id]}
+    themes: dict[str, ThemeSelection]
     top2_overall: list[str]             # article ids
     tool_candidates: list[str]
     quick_hits: list[str]
@@ -64,9 +71,10 @@ class SelectionResult:
 
     def featured_ids(self) -> list[str]:
         """按主题固定顺序返回已选中的 article id（跳过 null）。"""
-        out = []
+        out: list[str] = []
         for key in config.THEME_ORDER:
-            pick = self.themes.get(key, {}).get("pick")
+            theme = self.themes.get(key)
+            pick = theme["pick"] if theme else None
             if pick:
                 out.append(pick)
         return out
@@ -74,10 +82,13 @@ class SelectionResult:
     def all_referenced_ids(self) -> set[str]:
         ids: set[str] = set(self.top2_overall) | set(self.tool_candidates) | set(self.quick_hits)
         for key in config.THEME_ORDER:
-            t = self.themes.get(key, {})
-            if t.get("pick"):
-                ids.add(t["pick"])
-            ids.update(t.get("backups", []))
+            theme = self.themes.get(key)
+            if theme is None:
+                continue
+            pick = theme["pick"]
+            if pick:
+                ids.add(pick)
+            ids.update(theme["backups"])
         return ids
 
 
@@ -93,14 +104,14 @@ def _build_user_prompt(candidates: list[Candidate]) -> str:
     return "今日候选新闻：\n" + "\n".join(lines)
 
 
-def _idx_to_id(idx, candidates: list[Candidate]) -> str | None:  # noqa: ANN001
+def _idx_to_id(idx: object, candidates: list[Candidate]) -> str | None:
     if not isinstance(idx, int) or idx < 0 or idx >= len(candidates):
         return None
     return candidates[idx].id
 
 
-def _map_list(raw, candidates: list[Candidate]) -> list[str]:  # noqa: ANN001
-    out = []
+def _map_list(raw: Sequence[object] | None, candidates: list[Candidate]) -> list[str]:
+    out: list[str] = []
     for x in raw or []:
         cid = _idx_to_id(x, candidates)
         if cid and cid not in out:
@@ -126,9 +137,10 @@ async def select(candidates: list[Candidate]) -> SelectionResult | None:
         log.error("ai_selector.deepseek_failed")
         return None
 
-    themes: dict[str, dict] = {}
+    themes: dict[str, ThemeSelection] = {}
     for key in config.THEME_ORDER:
         t = (raw.get("themes") or {}).get(key) or {}
+        t = cast(dict[str, Any], t)
         themes[key] = {
             "pick": _idx_to_id(t.get("pick"), cands),
             "backups": _map_list(t.get("backups"), cands),

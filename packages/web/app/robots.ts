@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
-import { siteBaseUrl } from "@/lib/briefs";
+
+import { siteBaseUrl } from "@/lib/site-url";
 
 export default function robots(): MetadataRoute.Robots {
   const base = siteBaseUrl();
@@ -7,8 +8,16 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/nev", "/nev/d/"],
-        disallow: ["/api/", "/manage", "/unsubscribe"],
+        allow: ["/", "/daily/"],
+        disallow: [
+          "/confirm",
+          "/unsubscribe",
+          "/rate",
+          "/api",
+          "/preview",
+          "/manage",
+          "/subscribed",
+        ],
       },
     ],
     sitemap: `${base}/sitemap.xml`,

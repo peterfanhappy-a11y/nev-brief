@@ -8,11 +8,11 @@ from pathlib import Path
 
 import psycopg
 import yaml
+from nev_shared.config import get_settings
+from nev_shared.logger import configure_logging, get_logger
 
 from nev_crawler.runner import crawl_sources
 from nev_crawler.storage import insert_articles_raw
-from nev_shared.config import get_settings
-from nev_shared.logger import configure_logging, get_logger
 
 log = get_logger("crawler.cli")
 
@@ -48,7 +48,12 @@ def _load_sources(conn: psycopg.Connection, type_filter: str) -> list[dict]:
         where += " AND category IN ('official','association','oem')"
 
     with conn.cursor() as cur:
-        cur.execute(f"SELECT id, name, type, url, locale, category, enabled FROM sources WHERE {where}")
+        # ``where`` is assembled exclusively from fixed literals above.
+        query = (
+            "SELECT id, name, type, url, locale, category, enabled "  # noqa: S608
+            f"FROM sources WHERE {where}"
+        )
+        cur.execute(query)
         cols = [c.name for c in cur.description]
         rows = cur.fetchall()
     extras = _load_extra_from_yaml()
@@ -87,8 +92,17 @@ async def _async_main(args: argparse.Namespace) -> int:
                 total_inserted += inserted
                 conn.commit()
 
-        log.info("crawl_done", ok=ok, total=len(reports), articles=total_articles, inserted=total_inserted)
-        print(f"OK {ok}/{len(reports)} sources, {total_articles} fetched, {total_inserted} inserted to DB.")
+        log.info(
+            "crawl_done",
+            ok=ok,
+            total=len(reports),
+            articles=total_articles,
+            inserted=total_inserted,
+        )
+        print(
+            f"OK {ok}/{len(reports)} sources, {total_articles} fetched, "
+            f"{total_inserted} inserted to DB."
+        )
         return 0 if ok > 0 else 1
     finally:
         conn.close()

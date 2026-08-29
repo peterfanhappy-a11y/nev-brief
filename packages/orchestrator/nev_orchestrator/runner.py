@@ -105,7 +105,8 @@ def _run_step(step: Step, dry_run: bool) -> tuple[bool, str, str]:
     log.info("step.start", name=step.name, cmd=" ".join(step.cmd))
     started = time.time()
     try:
-        proc = subprocess.run(
+        # Commands come from the fixed Step table above, never from user input.
+        proc = subprocess.run(  # noqa: S603
             step.cmd,
             capture_output=True,
             text=True,

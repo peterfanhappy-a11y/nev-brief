@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
+from nev_shared.logger import get_logger
+
 from nev_crawler.adapters.api import APIAdapter
 from nev_crawler.adapters.base import Adapter, FetchResult
 from nev_crawler.adapters.html import HTMLAdapter
@@ -14,7 +16,6 @@ from nev_crawler.adapters.rss import RSSAdapter
 from nev_crawler.adapters.rsshub import RSSHubAdapter
 from nev_crawler.rate_limiter import DomainRateLimiter
 from nev_crawler.robots import RobotsChecker
-from nev_shared.logger import get_logger
 
 log = get_logger("runner")
 

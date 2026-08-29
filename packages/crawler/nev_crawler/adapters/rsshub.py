@@ -14,7 +14,7 @@ from nev_crawler.adapters.rss import RSSAdapter
 class RSSHubAdapter(RSSAdapter):
     type_name = "rsshub"
 
-    def __init__(self, base_url: str | None = None):
+    def __init__(self, base_url: str | None = None) -> None:
         self.base_url = (base_url or os.environ.get("RSSHUB_BASE_URL", "http://localhost:1200")).rstrip("/")
 
     async def fetch(self, source: dict[str, Any]) -> FetchResult:

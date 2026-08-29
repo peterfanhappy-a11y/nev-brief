@@ -4,7 +4,11 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from python.enums import (
-    ArticleStatus, Locale, SourceCategory, SourceType, Topic,
+    ArticleStatus,
+    Locale,
+    SourceCategory,
+    SourceType,
+    Topic,
 )
 
 

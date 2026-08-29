@@ -1,11 +1,15 @@
-.PHONY: help install dev down test lint format clean
+.PHONY: help install dev down test-unit test-web test-integration lint typecheck verify format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
 	@echo "make dev       # 启动本地 docker-compose (Postgres + RSSHub)"
 	@echo "make down      # 停止 docker-compose"
-	@echo "make test      # 跑所有 Python 测试"
-	@echo "make lint      # ruff + mypy + eslint"
+	@echo "make test-unit        # 跑默认 Python 单元测试"
+	@echo "make test-web         # 跑 Web Vitest 单元测试"
+	@echo "make test-integration # 跑 Python 集成测试"
+	@echo "make lint      # ruff + web eslint"
+	@echo "make typecheck # scoped mypy + web TypeScript"
+	@echo "make verify    # unit tests + lint + typecheck + web production build"
 	@echo "make format    # ruff format"
 	@echo "make clean     # 清理缓存"
 
@@ -21,16 +25,25 @@ dev:
 down:
 	cd infra && docker compose down
 
-test:
-	uv run pytest packages/ -v
+test-unit:
+	uv run pytest -c pyproject.toml packages tests -q
+
+test-web:
+	npm --workspace @nev/web run test
 
 test-integration:
-	uv run pytest tests/integration/ -v -m integration
+	uv run pytest -c pyproject.toml packages tests -m integration -q
 
 lint:
 	uv run ruff check packages/
-	uv run mypy packages/
-	npm run lint --if-present
+	npm --workspace @nev/web run lint
+
+typecheck:
+	uv run mypy packages/ai-brief packages/shared
+	npm --workspace @nev/web run typecheck
+
+verify: test-unit test-web lint typecheck
+	npm --workspace @nev/web run build
 
 format:
 	uv run ruff format packages/

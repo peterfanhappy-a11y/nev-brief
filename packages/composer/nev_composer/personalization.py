@@ -154,7 +154,8 @@ def select_diverse_top_n(
 
     def _brand_cap_violated(cand: dict[str, Any]) -> bool:
         """Any brand in the candidate already at the per-brief cap."""
-        for b in (cand.get("brands") or []):
+        # Keep the explicit loop for straightforward debugging of selection state.
+        for b in cand.get("brands") or []:  # noqa: SIM110
             if brand_count.get(b, 0) >= _BRAND_CAP_PER_BRIEF:
                 return True
         return False

@@ -1,41 +1,44 @@
-"""Composer — 把 ai_daily_briefs 文档渲染成每订阅者一封的 HTML/text，写 ai_deliveries。
+"""Composer — render frozen approved content into insert-only deliveries.
 
-评分链接需在渲染前知道 delivery_id：重跑时复用已有 id（已发邮件里的链接仍有效），
-首次用 uuid4。渲染顺序 = 定 id → 渲染 → upsert。psycopg 由调用方 commit。
+Delivery creation is reachable only from ``runner.release_approved``. Existing
+rows are never rewritten, so sent/failed payloads and rating links stay frozen.
 """
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Any, cast
 from uuid import uuid4
 
 import jinja2
 import psycopg
 from nev_shared.logger import get_logger
 
-from ai_brief import config
+from ai_brief import config, storage
 from ai_brief.schema import AiBriefContent
-from ai_brief import storage
 
 log = get_logger("ai_brief.composer")
 
 _WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
 
 
-def _theme_color(theme) -> str:  # noqa: ANN001
-    key = theme.value if hasattr(theme, "value") else str(theme)
+def _theme_color(theme: object) -> str:
+    key = cast(str, theme.value if hasattr(theme, "value") else str(theme))
     return config.THEME_META.get(key, {}).get("color", "#4F46E5")
 
 
-def _theme_label(theme) -> str:  # noqa: ANN001
+def _theme_label(theme: object) -> str:
     """渲染时从 config 实时取标签，而非用 brief 里存的旧值（改标签立即生效）。"""
-    key = theme.value if hasattr(theme, "value") else str(theme)
+    key = cast(str, theme.value if hasattr(theme, "value") else str(theme))
     return config.THEME_META.get(key, {}).get("label", key)
 
 
 def _make_env(autoescape: bool) -> jinja2.Environment:
     env = jinja2.Environment(
         loader=jinja2.FileSystemLoader(str(config.TEMPLATES_DIR)),
-        autoescape=jinja2.select_autoescape(["html", "j2"]) if autoescape else False,
+        # Text-email templates intentionally render without HTML escaping.
+        autoescape=(  # noqa: S701
+            jinja2.select_autoescape(["html", "j2"]) if autoescape else False
+        ),
         trim_blocks=True,
         lstrip_blocks=True,
     )
@@ -62,7 +65,7 @@ def greeting_name(email: str) -> str:
     return token[:1].upper() + token[1:].lower()
 
 
-def _base_ctx(brief: AiBriefContent, brief_date: date) -> dict:
+def _base_ctx(brief: AiBriefContent, brief_date: date) -> dict[str, Any]:
     return {
         "brief": brief,
         "date_human": _date_human(brief_date),
@@ -97,8 +100,10 @@ def render(
 def render_preview(brief: AiBriefContent, brief_date: date) -> str:
     """预览用 HTML（假 delivery_id / token），不落库。"""
     html, _ = render(
-        brief, brief_date,
-        delivery_id="preview-0000", unsubscribe_token="preview-token",
+        brief,
+        brief_date,
+        delivery_id="preview-0000",
+        unsubscribe_token="preview-token",  # noqa: S106 - inert preview placeholder
     )
     return html
 
@@ -108,25 +113,31 @@ def compose_for_date(
     brief_date: date,
     *,
     only_email: str | None = None,
-) -> dict:
-    """为当日简报的所有 active 订阅者生成投递记录。返回统计。不 commit。"""
-    raw = storage.fetch_brief(conn, brief_date)
-    if raw is None:
-        log.error("ai_composer.no_brief", brief_date=str(brief_date))
-        return {"composed": 0, "reason": "no_brief"}
-    brief = AiBriefContent.model_validate(raw)
+) -> dict[str, Any]:
+    """Reject the retired pre-approval delivery-creation entry point."""
+    del conn, brief_date, only_email
+    raise RuntimeError("delivery creation requires runner.release_approved")
+
+
+def compose_frozen_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+    content: dict[str, Any],
+    *,
+    only_email: str | None = None,
+) -> dict[str, Any]:
+    """Render locked, frozen content and insert only missing delivery rows."""
+    brief = AiBriefContent.model_validate(content)
 
     subs = storage.fetch_active_subscribers(conn, only_email=only_email)
     composed = 0
     for sub in subs:
-        did = storage.get_existing_delivery_id(
-            conn, subscriber_id=sub.id, brief_date=brief_date
-        ) or str(uuid4())
+        did = str(uuid4())
         html, text = render(
             brief, brief_date,
             delivery_id=did, unsubscribe_token=sub.unsubscribe_token, email=sub.email,
         )
-        storage.upsert_delivery(
+        inserted = storage.insert_delivery_if_missing(
             conn,
             delivery_id=did,
             subscriber_id=sub.id,
@@ -135,7 +146,7 @@ def compose_for_date(
             content_html=html,
             content_text=text,
         )
-        composed += 1
+        composed += int(inserted)
     log.info("ai_composer.done", brief_date=str(brief_date), composed=composed)
     return {"composed": composed, "subject": brief.subject}
 

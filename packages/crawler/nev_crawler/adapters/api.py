@@ -5,10 +5,11 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from nev_crawler.adapters.base import Adapter, FetchResult
-from nev_crawler.http_client import make_client
 from nev_shared.logger import get_logger
 from python.content import ArticleRaw
+
+from nev_crawler.adapters.base import Adapter, FetchResult
+from nev_crawler.http_client import make_client
 
 log = get_logger("api")
 

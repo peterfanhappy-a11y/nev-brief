@@ -1,8 +1,12 @@
 import Header from "@/components/header";
 import Footer from "@/components/footer";
 import AiSubscribeForm from "@/components/ai-subscribe-form";
-import LatestPostsGrid from "@/components/latest-posts-grid";
+import LatestBriefsGrid from "@/components/latest-briefs-grid";
 import { BrandIcon } from "@/components/brand-icon";
+import { listPublishedBriefs, type AiBriefSummary } from "@/lib/ai-briefs";
+import { subscriptionsEnabled } from "@/lib/feature-flags";
+
+export const dynamic = "force-dynamic";
 
 const COMPANIES: { slug: string; name: string }[] = [
   { slug: "bytedance", name: "字节跳动" },
@@ -15,7 +19,18 @@ const COMPANIES: { slug: string; name: string }[] = [
 
 const LOGO_HEIGHT = 36;
 
-export default function AiTrendsHome() {
+export default async function AiTrendsHome() {
+  const signupEnabled = subscriptionsEnabled();
+  let briefs: AiBriefSummary[] = [];
+  let briefsUnavailable = false;
+
+  try {
+    briefs = await listPublishedBriefs(6);
+  } catch {
+    briefsUnavailable = true;
+    console.error("[homepage] published briefs unavailable");
+  }
+
   return (
     <main className="min-h-screen bg-white">
       <Header />
@@ -33,14 +48,17 @@ export default function AiTrendsHome() {
             获取最新 AI 资讯，了解为什么重要，学习如何应用到工作中。
           </p>
 
-          <AiSubscribeForm variant="hero" />
+          <AiSubscribeForm
+            variant="hero"
+            subscriptionsEnabled={signupEnabled}
+          />
 
           {/* Trust bar */}
           <div className="mt-16">
             <p className="text-sm text-gray-500 mb-4">
               已有 <span className="font-semibold text-gray-900">100,000+</span> 读者，来自这些公司：
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6 opacity-80 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+            <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-6">
               {COMPANIES.map((c) => (
                 <div
                   key={c.slug}
@@ -56,7 +74,7 @@ export default function AiTrendsHome() {
         </div>
       </section>
 
-      <LatestPostsGrid />
+      <LatestBriefsGrid briefs={briefs} unavailable={briefsUnavailable} />
 
       <Footer />
     </main>

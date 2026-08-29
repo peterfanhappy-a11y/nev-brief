@@ -6,7 +6,6 @@ from datetime import date
 from typing import Any
 
 import psycopg
-
 from nev_pipeline.entity_dict import canonicalize_brand
 
 # Canonical → Chinese display name for the sales card (most common NEV brands).

@@ -9,10 +9,239 @@ claim_pending_deliveries 用 FOR UPDATE SKIP LOCKED（同 nev_delivery.storage�
 from __future__ import annotations
 
 import json
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
+from typing import Any, Literal
+from uuid import UUID
 
 import psycopg
+
+from ai_brief.schema import (
+    QUALITY_ISSUE_CODES,
+    QUALITY_METRIC_KEYS,
+    quality_path_is_allowed,
+)
+from ai_brief.schema import (
+    BriefStatus as BriefStatus,
+)
+
+DigestRunStatus = Literal["running", "blocked", "awaiting_approval", "failed", "completed"]
+BriefGenerationClaim = Literal["started", "conflict"]
+_DIGEST_METADATA_FIELDS = (
+    "kind",
+    "message_id",
+    "subject",
+    "received_at",
+    "requested_date",
+    "matched_date",
+    "used_fallback",
+)
+_ATTACHMENT_METADATA_FIELDS = ("filename", "content_type", "size_bytes")
+_ALLOWED_ERROR_CODES = frozenset(
+    {
+        "brief_generation_failed",
+        "digest_fetch_failed",
+        "digest_parse_failed",
+        "pipeline_failed",
+        "quality_gate_failed",
+        "source_timeout",
+        "storage_write_failed",
+    }
+)
+
+
+class DigestRunAlreadyFinishedError(RuntimeError):
+    """Raised when a terminal digest run is completed a second time."""
+
+
+class WorkflowTransitionError(RuntimeError):
+    """Raised when a locked workflow transition cannot preserve its invariant."""
+
+
+def _safe_digest_run_payloads(
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+) -> tuple[dict[str, dict[str, Any] | None], dict[str, int]]:
+    safe_sources: dict[str, dict[str, Any] | None] = {}
+    parse_counts: dict[str, int] = {}
+    for source, metadata in digest_sources.items():
+        if metadata is None:
+            safe_sources[source] = None
+            continue
+
+        safe_metadata = {
+            field: metadata[field]
+            for field in _DIGEST_METADATA_FIELDS
+            if field in metadata
+        }
+        attachments = metadata.get("attachments")
+        if isinstance(attachments, (list, tuple)):
+            safe_metadata["attachments"] = [
+                {
+                    field: attachment[field]
+                    for field in _ATTACHMENT_METADATA_FIELDS
+                    if field in attachment
+                }
+                for attachment in attachments
+                if isinstance(attachment, Mapping)
+            ]
+        safe_sources[source] = safe_metadata
+
+        parse_count = metadata.get("parse_count")
+        if isinstance(parse_count, int) and not isinstance(parse_count, bool) and parse_count >= 0:
+            parse_counts[source] = parse_count
+    return safe_sources, parse_counts
+
+
+def _safe_error_summary(error_summary: str | None) -> str | None:
+    if error_summary is None:
+        return None
+    candidate = error_summary.strip()
+    if not candidate:
+        return None
+    if candidate in _ALLOWED_ERROR_CODES:
+        return candidate
+    return "digest run failed"
+
+
+def _safe_metric_value(value: object) -> int | float | bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    return None
+
+
+def _safe_quality_issue(issue: Mapping[str, Any]) -> dict[str, object] | None:
+    code = issue.get("code")
+    if not isinstance(code, str) or code not in QUALITY_ISSUE_CODES:
+        return None
+    safe_issue: dict[str, object] = {"code": code}
+    path = issue.get("path")
+    if path is None:
+        safe_issue["path"] = None
+    elif isinstance(path, str) and quality_path_is_allowed(path):
+        safe_issue["path"] = path
+    return safe_issue
+
+
+def _safe_quality_report(quality_report: Mapping[str, Any] | None) -> dict[str, object] | None:
+    if quality_report is None:
+        return None
+
+    safe_report: dict[str, object] = {}
+    passed = quality_report.get("passed")
+    if isinstance(passed, bool):
+        safe_report["passed"] = passed
+
+    for field in ("blockers", "warnings"):
+        issues = quality_report.get(field)
+        if isinstance(issues, (list, tuple)):
+            safe_issues = (
+                _safe_quality_issue(issue)
+                for issue in issues
+                if isinstance(issue, Mapping)
+            )
+            safe_report[field] = [issue for issue in safe_issues if issue is not None]
+
+    metrics = quality_report.get("metrics")
+    if isinstance(metrics, Mapping):
+        safe_metrics: dict[str, int | float | bool] = {}
+        for key, value in metrics.items():
+            safe_value = _safe_metric_value(value)
+            if (
+                isinstance(key, str)
+                and key in QUALITY_METRIC_KEYS
+                and safe_value is not None
+            ):
+                safe_metrics[key] = safe_value
+        safe_report["metrics"] = safe_metrics
+    return safe_report
+
+
+def start_digest_run(
+    conn: psycopg.Connection,
+    brief_date: date,
+    source_adapter: str,
+) -> UUID:
+    """Create exactly one durable identity for a digest pipeline invocation."""
+    sql = """
+        INSERT INTO ai_digest_runs (brief_date, source_adapter, status, started_at)
+        VALUES (%s, %s, %s, statement_timestamp())
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, source_adapter, "running"))
+        row = cur.fetchone()
+    if row is None:  # pragma: no cover - PostgreSQL RETURNING guarantees a row
+        raise RuntimeError("digest run insert returned no id")
+    run_id = row[0]
+    return run_id if isinstance(run_id, UUID) else UUID(str(run_id))
+
+
+def finish_digest_run(
+    conn: psycopg.Connection,
+    run_id: UUID,
+    *,
+    status: DigestRunStatus,
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+    quality_report: Mapping[str, Any] | None,
+    stage: str | None,
+    error_summary: str | None,
+) -> None:
+    """Finish a running invocation once, persisting only operational metadata."""
+    if status == "running":
+        raise ValueError("finished digest run requires a terminal status")
+    if status == "failed" and (stage is None or not stage.strip()):
+        raise ValueError("failed digest run requires a non-empty stage")
+    safe_sources, parse_counts = _safe_digest_run_payloads(digest_sources)
+    safe_quality_report = _safe_quality_report(quality_report)
+    failed_stage = stage.strip() if stage and status in ("blocked", "failed") else None
+    sql = """
+        WITH finish_clock AS MATERIALIZED (
+            SELECT statement_timestamp() AS finished_at
+        )
+        UPDATE ai_digest_runs AS run
+        SET status = %s,
+            digest_sources = %s::jsonb,
+            parse_counts = %s::jsonb,
+            quality_report = %s::jsonb,
+            failed_stage = %s,
+            error_summary = %s,
+            finished_at = finish_clock.finished_at,
+            duration_ms = GREATEST(
+                0,
+                ROUND(
+                    EXTRACT(EPOCH FROM (finish_clock.finished_at - run.started_at)) * 1000
+                )::bigint
+            ),
+            updated_at = finish_clock.finished_at
+        FROM finish_clock
+        WHERE run.id = %s
+          AND run.status = 'running'
+        RETURNING run.id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                status,
+                json.dumps(safe_sources, ensure_ascii=False),
+                json.dumps(parse_counts, ensure_ascii=False),
+                json.dumps(safe_quality_report, ensure_ascii=False)
+                if safe_quality_report is not None
+                else None,
+                failed_stage,
+                _safe_error_summary(error_summary),
+                run_id,
+            ),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise DigestRunAlreadyFinishedError(f"digest run is missing or already finished: {run_id}")
 
 
 # ── ai_articles ───────────────────────────────────────────────────────
@@ -92,14 +321,224 @@ def fetch_article_content(conn: psycopg.Connection, article_id: str) -> str | No
 
 
 # ── ai_daily_briefs ───────────────────────────────────────────────────
+BriefWriteResult = Literal["written", "conflict"]
+
+
+@dataclass(frozen=True)
+class WorkflowBrief:
+    status: BriefStatus
+    content: dict[str, Any]
+    quality_report: dict[str, Any] | None
+    source_run_id: UUID | None
+
+
+def claim_brief_generation(
+    conn: psycopg.Connection,
+    brief_date: date,
+    run_id: UUID,
+) -> BriefGenerationClaim:
+    """Claim a mutable daily row for one run; active generating is not stealable."""
+    sql = """
+        INSERT INTO ai_daily_briefs (
+            brief_date, content, status, source_run_id, generated_at
+        )
+        VALUES (%s, '{}'::jsonb, 'generating', %s, statement_timestamp())
+        ON CONFLICT (brief_date) DO UPDATE
+        SET status = 'generating',
+            source_run_id = EXCLUDED.source_run_id,
+            failure_reason = NULL,
+            updated_at = statement_timestamp()
+        WHERE ai_daily_briefs.status IN ('blocked', 'awaiting_approval')
+        RETURNING status;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, run_id))
+        row = cur.fetchone()
+    return "started" if row is not None else "conflict"
+
+
+def save_generated_brief(
+    conn: psycopg.Connection,
+    *,
+    brief_date: date,
+    content: dict[str, Any],
+    model: str | None,
+    digest_sources: Mapping[str, Mapping[str, Any] | None],
+    quality_report: Mapping[str, Any],
+    source_run_id: UUID,
+    status: Literal["blocked", "awaiting_approval"],
+) -> None:
+    """Finalize generated content only while the claimed row remains mutable."""
+    safe_sources, _parse_counts = _safe_digest_run_payloads(digest_sources)
+    safe_report = _safe_quality_report(quality_report)
+    if safe_report is None or safe_report.get("passed") is not (status == "awaiting_approval"):
+        raise ValueError("workflow status must match the stored quality report")
+    sql = """
+        UPDATE ai_daily_briefs
+        SET content = %s::jsonb,
+            model = %s,
+            status = %s,
+            quality_report = %s::jsonb,
+            digest_sources = %s::jsonb,
+            generated_at = statement_timestamp(),
+            failure_reason = %s,
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'generating'
+          AND source_run_id = %s
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                json.dumps(content, ensure_ascii=False),
+                model,
+                status,
+                json.dumps(safe_report, ensure_ascii=False),
+                json.dumps(safe_sources, ensure_ascii=False),
+                "quality_gate_failed" if status == "blocked" else None,
+                brief_date,
+                source_run_id,
+            ),
+        )
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("generating brief disappeared before finalization")
+
+
+def mark_brief_generation_failed(
+    conn: psycopg.Connection,
+    brief_date: date,
+    run_id: UUID,
+) -> bool:
+    """Move a claimed row to blocked without changing its last complete content."""
+    sql = """
+        UPDATE ai_daily_briefs
+        SET status = 'blocked',
+            failure_reason = 'brief_generation_failed',
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'generating'
+          AND source_run_id = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, run_id))
+        return cur.rowcount == 1
+
+
+def _lock_workflow_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    sql = """
+        SELECT status, content, quality_report, source_run_id
+        FROM ai_daily_briefs
+        WHERE brief_date = %s
+        FOR UPDATE;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date,))
+        row = cur.fetchone()
+    if row is None:
+        return None
+    source_run_id = row[3]
+    return WorkflowBrief(
+        status=row[0],
+        content=row[1],
+        quality_report=row[2],
+        source_run_id=(
+            source_run_id
+            if source_run_id is None or isinstance(source_run_id, UUID)
+            else UUID(str(source_run_id))
+        ),
+    )
+
+
+def lock_brief_for_approval(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    """Lock the daily row through the approval decision."""
+    return _lock_workflow_brief(conn, brief_date)
+
+
+def approve_locked_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+    *,
+    approved_by: str,
+) -> None:
+    """Approve only an awaiting row whose stored report contains boolean true."""
+    sql = """
+        UPDATE ai_daily_briefs
+        SET status = 'approved',
+            approved_at = statement_timestamp(),
+            approved_by = %s,
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'awaiting_approval'
+          AND jsonb_typeof(quality_report -> 'passed') = 'boolean'
+          AND quality_report -> 'passed' = 'true'::jsonb
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (approved_by, brief_date))
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("brief is no longer eligible for approval")
+
+
+def lock_brief_for_release(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> WorkflowBrief | None:
+    """Lock the frozen daily row through delivery creation and publication."""
+    return _lock_workflow_brief(conn, brief_date)
+
+
+def publish_locked_brief_and_complete_run(
+    conn: psycopg.Connection,
+    brief_date: date,
+    *,
+    source_run_id: UUID | None,
+) -> None:
+    """Publish an approved row only when its awaiting run can complete with it."""
+    if source_run_id is None:
+        raise WorkflowTransitionError("approved brief has no linked digest run")
+    sql = """
+        WITH completed_run AS (
+            UPDATE ai_digest_runs
+            SET status = 'completed',
+                updated_at = statement_timestamp()
+            WHERE id = %s
+              AND status = 'awaiting_approval'
+            RETURNING id
+        )
+        UPDATE ai_daily_briefs
+        SET status = 'published',
+            published_at = statement_timestamp(),
+            updated_at = statement_timestamp()
+        WHERE brief_date = %s
+          AND status = 'approved'
+          AND source_run_id = (SELECT id FROM completed_run)
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (source_run_id, brief_date))
+        row = cur.fetchone()
+    if row is None:
+        raise WorkflowTransitionError("brief publication or linked run completion failed")
+
+
 def upsert_daily_brief(
     conn: psycopg.Connection,
     *,
     brief_date: date,
-    content: dict,
+    content: dict[str, Any],
     model: str | None,
-) -> None:
-    """写入/更新当日简报文档。brief_date UNIQUE → 重跑覆盖。"""
+) -> BriefWriteResult:
+    """Write a draft unless the date is already approved or published."""
     sql = """
         INSERT INTO ai_daily_briefs (brief_date, content, model, generated_at)
         VALUES (%s, %s, %s, NOW())
@@ -107,20 +546,69 @@ def upsert_daily_brief(
         SET content = EXCLUDED.content,
             model = EXCLUDED.model,
             generated_at = NOW(),
-            updated_at = NOW();
+            updated_at = NOW()
+        WHERE ai_daily_briefs.status IN (%s, %s, %s)
+        RETURNING status;
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (brief_date, json.dumps(content, ensure_ascii=False), model))
+        cur.execute(
+            sql,
+            (
+                brief_date,
+                json.dumps(content, ensure_ascii=False),
+                model,
+                "generating",
+                "blocked",
+                "awaiting_approval",
+            ),
+        )
+        row = cur.fetchone()
+    return "written" if row is not None else "conflict"
 
 
-def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict | None:
+def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict[str, Any] | None:
     with conn.cursor() as cur:
         cur.execute("SELECT content FROM ai_daily_briefs WHERE brief_date = %s;", (brief_date,))
         row = cur.fetchone()
     return row[0] if row else None
 
 
-def fetch_previous_brief(conn: psycopg.Connection, before: date) -> dict | None:
+def fetch_public_brief(
+    conn: psycopg.Connection,
+    brief_date: date,
+) -> dict[str, Any] | None:
+    """Return content only when the requested brief has been published."""
+    sql = """
+        SELECT content
+        FROM ai_daily_briefs
+        WHERE brief_date = %s
+          AND status = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (brief_date, "published"))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def list_public_briefs(
+    conn: psycopg.Connection,
+    limit: int,
+) -> list[dict[str, Any]]:
+    """Return published brief content from newest publication to oldest."""
+    sql = """
+        SELECT content
+        FROM ai_daily_briefs
+        WHERE status = %s
+        ORDER BY published_at DESC, brief_date DESC
+        LIMIT %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, ("published", limit))
+        rows = cur.fetchall()
+    return [row[0] for row in rows]
+
+
+def fetch_previous_brief(conn: psycopg.Connection, before: date) -> dict[str, Any] | None:
     """最近一期（< before）的简报，用于「昨日最热」。跳过的日期不会导致空白。"""
     sql = """
         SELECT content FROM ai_daily_briefs
@@ -146,13 +634,14 @@ def fetch_active_subscribers(
     conn: psycopg.Connection,
     only_email: str | None = None,
 ) -> list[ActiveSubscriber]:
+    # The only interpolated fragment is a fixed literal selected by code.
     sql = """
         SELECT id::text, email, unsubscribe_token::text
         FROM ai_subscribers
         WHERE status = 'active'
         {email_filter}
         ORDER BY created_at;
-    """.format(email_filter="AND email = %s" if only_email else "")
+    """.format(email_filter="AND email = %s" if only_email else "")  # noqa: S608
     params = (only_email,) if only_email else ()
     with conn.cursor() as cur:
         cur.execute(sql, params)
@@ -161,7 +650,7 @@ def fetch_active_subscribers(
 
 
 # ── ai_deliveries ─────────────────────────────────────────────────────
-def upsert_delivery(
+def insert_delivery_if_missing(
     conn: psycopg.Connection,
     *,
     delivery_id: str,
@@ -170,26 +659,22 @@ def upsert_delivery(
     subject: str,
     content_html: str,
     content_text: str,
-) -> None:
-    """插入/更新一封投递。delivery_id 由调用方生成（评分链接需在渲染前知道 id）。
-    UNIQUE(subscriber_id, brief_date) → 重跑用现有 id 覆盖内容、重置为 pending。"""
+) -> bool:
+    """Insert one pending delivery without ever rewriting an existing row."""
     sql = """
         INSERT INTO ai_deliveries
             (id, subscriber_id, brief_date, subject, content_html, content_text, status)
         VALUES (%s, %s, %s, %s, %s, %s, 'pending')
-        ON CONFLICT (subscriber_id, brief_date) DO UPDATE
-        SET subject = EXCLUDED.subject,
-            content_html = EXCLUDED.content_html,
-            content_text = EXCLUDED.content_text,
-            status = 'pending',
-            error = NULL,
-            updated_at = NOW();
+        ON CONFLICT (subscriber_id, brief_date) DO NOTHING
+        RETURNING id;
     """
     with conn.cursor() as cur:
         cur.execute(
             sql,
             (delivery_id, subscriber_id, brief_date, subject, content_html, content_text),
         )
+        row = cur.fetchone()
+    return row is not None
 
 
 def get_existing_delivery_id(
@@ -223,15 +708,30 @@ class PendingAiDelivery:
 def claim_pending_deliveries(
     conn: psycopg.Connection,
     limit: int = 50,
+    brief_date: date | None = None,
 ) -> list[PendingAiDelivery]:
     """原子领取至多 limit 封 pending 投递，标记 sending 并返回内容。"""
     sql = """
-        WITH claimed AS (
+        WITH suppressed AS (
+            UPDATE ai_deliveries d
+            SET status = 'failed',
+                error = 'subscriber inactive before claim',
+                updated_at = NOW()
+            FROM ai_subscribers s
+            WHERE d.subscriber_id = s.id
+              AND d.status = 'pending'
+              AND s.status <> 'active'
+              AND (%s::date IS NULL OR d.brief_date = %s::date)
+        ),
+        claimed AS (
             SELECT d.id
             FROM ai_deliveries d
+            JOIN ai_subscribers s ON s.id = d.subscriber_id
             WHERE d.status = 'pending'
+              AND s.status = 'active'
+              AND (%s::date IS NULL OR d.brief_date = %s::date)
             ORDER BY d.created_at
-            FOR UPDATE SKIP LOCKED
+            FOR UPDATE OF d, s SKIP LOCKED
             LIMIT %s
         )
         UPDATE ai_deliveries d
@@ -249,7 +749,7 @@ def claim_pending_deliveries(
             (SELECT unsubscribe_token::text FROM ai_subscribers WHERE id = d.subscriber_id);
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (limit,))
+        cur.execute(sql, (brief_date, brief_date, brief_date, brief_date, limit))
         rows = cur.fetchall()
     return [
         PendingAiDelivery(
@@ -258,6 +758,56 @@ def claim_pending_deliveries(
         )
         for r in rows
     ]
+
+
+def retry_transient_deliveries(
+    conn: psycopg.Connection,
+    *,
+    brief_date: date | None = None,
+    max_retries: int = 3,
+) -> int:
+    """Requeue only explicitly transient failures below the retry ceiling."""
+    sql = """
+        UPDATE ai_deliveries
+        SET status = 'pending', updated_at = statement_timestamp()
+        WHERE status = 'failed'
+          AND retry_count < %s
+          AND error LIKE 'transient:%'
+          AND (%s IS NULL OR brief_date = %s)
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (max_retries, brief_date, brief_date))
+        return len(cur.fetchall())
+
+
+def lock_active_subscriber(
+    conn: psycopg.Connection,
+    *,
+    subscriber_id: str,
+) -> bool:
+    """Lock the subscriber through the transport call and confirm they remain active."""
+    sql = """
+        SELECT status
+        FROM ai_subscribers
+        WHERE id = %s
+        FOR UPDATE;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (subscriber_id,))
+        row = cur.fetchone()
+        return row is not None and row[0] == "active"
+def mark_suppressed(conn: psycopg.Connection, *, delivery_id: str) -> None:
+    """Terminally suppress a claimed delivery whose subscriber is no longer active."""
+    sql = """
+        UPDATE ai_deliveries
+        SET status = 'failed',
+            error = 'subscriber inactive before send',
+            updated_at = NOW()
+        WHERE id = %s;
+    """
+    with conn.cursor() as cur:
+        cur.execute(sql, (delivery_id,))
 
 
 def mark_sent(conn: psycopg.Connection, *, delivery_id: str, resend_email_id: str) -> None:
@@ -274,16 +824,6 @@ def mark_failed(conn: psycopg.Connection, *, delivery_id: str, error: str) -> No
     sql = """
         UPDATE ai_deliveries
         SET status = 'failed', error = %s, retry_count = retry_count + 1, updated_at = NOW()
-        WHERE id = %s;
-    """
-    with conn.cursor() as cur:
-        cur.execute(sql, (error[:500], delivery_id))
-
-
-def reset_to_pending(conn: psycopg.Connection, *, delivery_id: str, error: str) -> None:
-    sql = """
-        UPDATE ai_deliveries
-        SET status = 'pending', error = %s, retry_count = retry_count + 1, updated_at = NOW()
         WHERE id = %s;
     """
     with conn.cursor() as cur:

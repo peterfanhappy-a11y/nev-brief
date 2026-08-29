@@ -11,7 +11,7 @@ score = 100 * (authority*0.3 + coverage*0.3 + freshness*0.2 + entity_heat*0.2)
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from nev_pipeline.entity_dict import load_entity_dict
 
@@ -26,7 +26,7 @@ def importance_score(
     published_at: datetime | None,
     now: datetime | None = None,
 ) -> float:
-    now = now or datetime.now(tz=timezone.utc)
+    now = now or datetime.now(tz=UTC)
     d = load_entity_dict()
 
     auth = min(authority, 10) / 10

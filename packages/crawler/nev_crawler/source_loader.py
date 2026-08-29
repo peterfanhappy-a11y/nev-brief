@@ -9,10 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
-
 from nev_shared.db import get_supabase_client
 from nev_shared.logger import get_logger
+from pydantic import BaseModel, Field
 
 log = get_logger("source_loader")
 

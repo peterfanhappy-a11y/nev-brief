@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
 from nev_delivery.storage import (
-    PendingDelivery,
     claim_pending_deliveries,
     mark_failed,
     mark_sent,

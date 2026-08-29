@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any, cast
 
 import httpx
 from nev_shared.config import get_settings
@@ -89,7 +90,7 @@ async def extract_json_with_retry(
     model: str = "deepseek-chat",
     max_tokens: int = 400,
     temperature: float = 0.0,
-) -> dict | None:
+) -> dict[str, Any] | None:
     """Call DeepSeek with JSON mode. Returns parsed dict, or None on any failure.
 
     Failure modes that return None:
@@ -102,7 +103,7 @@ async def extract_json_with_retry(
         log.warning("deepseek_call_failed", error=str(exc))
         return None
     try:
-        return json.loads(raw)
+        return cast(dict[str, Any], json.loads(raw))
     except json.JSONDecodeError as exc:
         log.warning("deepseek_json_parse_failed", error=str(exc), raw_preview=raw[:200])
         return None

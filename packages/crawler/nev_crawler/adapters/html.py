@@ -8,12 +8,12 @@ from typing import Any
 from urllib.parse import urljoin
 from uuid import UUID
 
+from nev_shared.logger import get_logger
+from python.content import ArticleRaw
 from selectolax.parser import HTMLParser
 
 from nev_crawler.adapters.base import Adapter, FetchResult
 from nev_crawler.http_client import make_client
-from nev_shared.logger import get_logger
-from python.content import ArticleRaw
 
 log = get_logger("html")
 
