@@ -23,6 +23,10 @@ def _current_events_html() -> str:
     return (FIXTURES / "events_digest_2026-08-16.html").read_text(encoding="utf-8")
 
 
+def _h3_events_html() -> str:
+    return (FIXTURES / "events_digest_h3_markup.html").read_text(encoding="utf-8")
+
+
 def _current_research_html() -> str:
     return (FIXTURES / "research_digest_2026-08-16.html").read_text(encoding="utf-8")
 
@@ -63,6 +67,18 @@ def test_events_parses_current_email_markup() -> None:
     assert "benchmark" in items[0].body
     assert items[0].url == "https://example.com/events/open-model"
     assert [item.index for item in items] == [1, 2, 3]
+
+
+def test_events_parses_h3_email_markup() -> None:
+    items = parse_events_digest(_h3_events_html())
+
+    assert [item.index for item in items] == [1, 2, 3]
+    assert items[0].headline == "Claude Cowork 内置浏览器上线"
+    assert items[0].url == "https://example.com/events/cowork"
+    assert items[0].category == "海外大模型公司"
+    assert items[0].image_note == "Example News"
+    assert "自主浏览网页" in items[0].body
+    assert items[2].value_tag == "最吸引眼球"
 
 
 def test_research_parses_current_email_markup() -> None:

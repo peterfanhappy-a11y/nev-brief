@@ -46,9 +46,13 @@ def _read_link(meta: Node | None) -> str:
 def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
     """Parse the current upstream blocks: label div, h2, summary p, link p."""
     items: list[EventItem] = []
-    for h2 in tree.css("h2"):
+    for h2 in tree.css("h2, h3"):
         block = h2.parent
         if block is None or block.tag != "div":
+            continue
+        if h2.tag == "h3" and block.css_first("h2") is not None:
+            continue
+        if _SOURCE_RE.search(_clean(block.text())) is None:
             continue
         raw_title = _clean(h2.text())
         match = _TITLE_NUM_RE.match(raw_title)
@@ -73,7 +77,7 @@ def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
         url = ""
         for anchor in block.css("a"):
             href = (anchor.attributes.get("href") or "").strip()
-            if href.startswith("https://"):
+            if "阅读原文" in _clean(anchor.text()) and href.startswith("https://"):
                 url = href
                 break
         if headline and url:
