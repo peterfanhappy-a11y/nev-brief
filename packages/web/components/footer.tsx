@@ -35,6 +35,8 @@ export default function Footer() {
           <div className="text-xs text-gray-400 pt-4 border-t border-gray-200 w-full max-w-md">
             © 2026 AIVIZENS ·{" "}
             <Link href="/nev" className="hover:text-gray-700">NEV 早报</Link>
+            {" · "}
+            <Link href="/unsubscribe" className="hover:text-gray-700">退订订阅</Link>
           </div>
         </div>
       </div>

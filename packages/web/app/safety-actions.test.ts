@@ -14,11 +14,15 @@ const mocks = vi.hoisted(() => ({
   selectEq: vi.fn(),
   writeEq: vi.fn(),
   maybeSingle: vi.fn(),
+  sendUnsubscribe: vi.fn(),
   redirect: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase", () => ({
   getSupabaseAdmin: mocks.getSupabaseAdmin,
+}));
+vi.mock("@/lib/ai-welcome-email", () => ({
+  sendAiUnsubscribeEmail: mocks.sendUnsubscribe,
 }));
 vi.mock("next/navigation", () => ({
   redirect: mocks.redirect,
@@ -28,7 +32,7 @@ import { GET as legacyRatingGet } from "./api/ai/rate/route";
 import { POST as oneClickUnsubscribe } from "./api/unsubscribe/route";
 import RatePage from "./rate/page";
 import { recordRatingAction } from "./rate/actions";
-import { unsubscribeAction } from "./unsubscribe/actions";
+import { requestUnsubscribeAction, unsubscribeAction } from "./unsubscribe/actions";
 import UnsubscribePage from "./unsubscribe/page";
 
 function form(fields: Record<string, string>): FormData {
@@ -93,6 +97,18 @@ describe("scanner-safe GET entry points", () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "确认退订" })).toBeInTheDocument();
     expect(mocks.select).toHaveBeenCalledWith("status");
+  });
+
+  it("renders a no-token unsubscribe request form without a database call", async () => {
+    renderServerActionPage(
+      await UnsubscribePage({
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(screen.getByRole("textbox", { name: "订阅邮箱" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "发送退订链接" })).toBeInTheDocument();
+    expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
   });
 
   it("routes an unsubscribed reader through normal double opt-in", async () => {
@@ -186,6 +202,38 @@ describe("explicit mutation actions", () => {
     expect(consoleError).toHaveBeenCalledWith("[unsubscribe] update failed");
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(TOKEN);
     consoleError.mockRestore();
+  });
+
+  it("sends an unsubscribe link only for a matching subscriber", async () => {
+    mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
+    mocks.maybeSingle.mockResolvedValue({
+      data: {
+        email: "reader@example.com",
+        status: "active",
+        unsubscribe_token: TOKEN,
+      },
+      error: null,
+    });
+    mocks.sendUnsubscribe.mockResolvedValue(undefined);
+
+    await expect(
+      requestUnsubscribeAction(form({ email: "Reader@Example.com" })),
+    ).rejects.toThrow("REDIRECT:/unsubscribe?status=requested");
+
+    expect(mocks.select).toHaveBeenCalledWith("email,status,unsubscribe_token");
+    expect(mocks.selectEq).toHaveBeenCalledWith("email", "reader@example.com");
+    expect(mocks.sendUnsubscribe).toHaveBeenCalledWith("reader@example.com", TOKEN);
+  });
+
+  it("keeps an unknown unsubscribe email private", async () => {
+    mocks.selectEq.mockReturnValue({ maybeSingle: mocks.maybeSingle });
+    mocks.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      requestUnsubscribeAction(form({ email: "unknown@example.com" })),
+    ).rejects.toThrow("REDIRECT:/unsubscribe?status=requested");
+
+    expect(mocks.sendUnsubscribe).not.toHaveBeenCalled();
   });
 
   it.each([1, 2, 3])("upserts the allowed rating score %i", async (score) => {

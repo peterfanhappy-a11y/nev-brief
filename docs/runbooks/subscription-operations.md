@@ -3,8 +3,8 @@
 ## Production boundary
 
 Production remains Vercel (Next.js) → Supabase (PostgreSQL, REST, and RPC) →
-Resend, with Cloudflare Turnstile verified by the Next.js server. The local
-PostgREST and fake Resend services are acceptance-test infrastructure only.
+Resend, durable server-side rate limiting, and a five-second hold-to-submit
+interaction. The local PostgREST and fake Resend services are acceptance-test infrastructure only.
 They are not deployed and they do not introduce an alternate production data
 path.
 
@@ -69,24 +69,19 @@ Do not attempt to reverse a hash. To correlate a reported request, use the
 approved application-side HMAC tooling with the production secret still in its
 secret manager; never copy that secret into SQL or a shell history.
 
-## Turnstile outage
+## Hold-to-submit and configuration
 
-Turnstile is fail-closed. When Siteverify times out, returns a non-success
-response, or production verification configuration is absent, no database
-preparation or email send should occur.
+The public form does not load Cloudflare Turnstile. A reader must continuously
+hold the subscription button for five seconds before the browser sends a
+request. This is a friction control, not a security boundary: the durable
+server-side limiter and double opt-in remain mandatory.
 
-1. Confirm the impact in Cloudflare status/analytics and Vercel logs. Expected
-   application events are generic verification failures; they must not contain
-   widget tokens or subscriber details.
-2. Confirm `TURNSTILE_SECRET_KEY` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` are
-   present in the intended Vercel environment without printing their values.
-3. Do not enable `TURNSTILE_TEST_BYPASS` in production and do not deploy
-   Cloudflare's documented dummy keys. The bypass is accepted only when
-   `NODE_ENV=test`; browser acceptance renders Cloudflare's official dummy
-   widget key in its isolated process and uses that guarded server-side bypass
-   so CI does not depend on the public Siteverify network.
-4. For a prolonged outage, disable the public form as described below. Reopen
-   it only after a server-side verification check succeeds.
+1. Confirm `SUBSCRIPTION_HASH_SECRET` exists in the intended Vercel environment
+   without printing its value. Its absence produces `server_configuration` and
+   intentionally prevents subscription preparation.
+2. If the form needs immediate containment, disable it as described below.
+3. Do not replace the limiter with browser-only checks or a direct database
+   insert path.
 
 ## Disable or restore the public form
 
@@ -94,10 +89,9 @@ To stop new subscription attempts without deleting any subscriber data:
 
 1. Set `SUBSCRIPTIONS_ENABLED=false` in the production Vercel environment and
    deploy that configuration.
-2. Verify the home page displays `订阅暂未开放` with no form or Turnstile
-   widget.
+2. Verify the home page displays `订阅暂未开放` with no form.
 3. Verify `POST /api/ai/subscribe` returns HTTP 503 with
-   `subscriptions_disabled` before verification, rate limiting, database, or
+   `subscriptions_disabled` before rate limiting, database, or
    Resend access.
 4. Leave `ai_subscribers`, `ai_subscription_attempts`, confirmations,
    deliveries, and ratings intact. The switch controls entry only.

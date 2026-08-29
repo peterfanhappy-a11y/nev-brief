@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { unsubscribeAction } from "./actions";
+import { requestUnsubscribeAction, unsubscribeAction } from "./actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +57,42 @@ export default async function UnsubscribePage({
         <h1 className="text-xl font-semibold mb-2">暂时无法退订</h1>
         <p className="text-gray-600 text-sm mb-6">请稍后重试此链接。</p>
         <Link href="/" className="text-indigo-600 text-sm">返回 AIVIZENS</Link>
+      </Card>
+    );
+  }
+
+  if (status === "requested") {
+    return (
+      <Card>
+        <h1 className="text-xl font-semibold mb-2">请查收退订邮件</h1>
+        <p className="text-gray-600 text-sm mb-6">
+          如果该邮箱当前订阅了 AIVIZENS，我们已发送安全退订链接。
+        </p>
+        <Link href="/" className="text-indigo-600 text-sm">返回 AIVIZENS</Link>
+      </Card>
+    );
+  }
+
+  if (!token) {
+    return (
+      <Card>
+        <h1 className="text-2xl font-semibold mb-2">退订 AIVIZENS</h1>
+        <p className="text-gray-600 text-sm mb-6">
+          输入订阅邮箱，我们会发送一封安全退订邮件。
+        </p>
+        <form action={requestUnsubscribeAction} className="space-y-3">
+          <label className="block text-left text-sm font-medium text-gray-700" htmlFor="email">
+            订阅邮箱
+          </label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            required
+            className="w-full rounded-md border border-gray-300 px-3 py-2"
+          />
+          <Button type="submit" className="w-full">发送退订链接</Button>
+        </form>
       </Card>
     );
   }

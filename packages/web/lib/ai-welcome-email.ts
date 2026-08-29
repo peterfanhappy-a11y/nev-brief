@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Resend } from "resend";
 
 const MAX_SEND_ATTEMPTS = 2;
@@ -79,4 +80,39 @@ export async function sendAiWelcomeEmail(
   }
 
   throw new Error(DELIVERY_ERROR);
+}
+
+export async function sendAiUnsubscribeEmail(
+  to: string,
+  unsubscribeToken: string,
+): Promise<void> {
+  const apiKey = requiredEmailEnvironment("RESEND_API_KEY", "test-resend-key");
+  const baseUrl = requiredEmailEnvironment("WEB_BASE_URL", "http://localhost:3002");
+  const fromEmail = requiredEmailEnvironment(
+    "RESEND_FROM_EMAIL",
+    "test-sender@aivizens.invalid",
+  );
+  const unsubscribeUrl = `${baseUrl}/unsubscribe?token=${unsubscribeToken}&product=ai`;
+  const idempotencyKey = `ai-unsubscribe:${createHash("sha256")
+    .update(unsubscribeToken)
+    .digest("hex")}`;
+  const message = {
+    from: `AIVIZENS 趋势 <${fromEmail}>`,
+    to,
+    subject: "确认退订 AIVIZENS · AI 趋势",
+    html: `<p>请点击以下链接确认退订 AIVIZENS · AI 趋势：</p><p><a href="${unsubscribeUrl}">确认退订</a></p>`,
+    text: `请打开以下链接确认退订 AIVIZENS · AI 趋势：\n${unsubscribeUrl}`,
+  };
+  const resend = new Resend(apiKey);
+
+  for (let attempt = 0; attempt < MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await resend.emails.send(message, { idempotencyKey });
+      if (result.error === null && result.data) return;
+    } catch {
+      // Provider details may contain recipient data, so callers receive no raw error.
+    }
+  }
+
+  throw new Error("AI unsubscribe email delivery failed");
 }

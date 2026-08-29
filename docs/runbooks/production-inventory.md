@@ -30,12 +30,12 @@ Values live only in the relevant provider secret store, Vercel Production enviro
 | --- | --- | --- |
 | Supabase/Postgres | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` | API access and direct database access. |
 | DeepSeek | `DEEPSEEK_API_KEY`, `DEEPSEEK_BASE_URL`, `DEEPSEEK_MODEL`, `DEEPSEEK_MODEL_AI` | Model authentication, endpoint, and model selection. |
-| Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_VL_MODEL` | Image-selection model access and configuration. |
+| Qwen | `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL` | Image-selection model access and configuration. |
 | Resend | `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `RESEND_FROM_NAME`, `RESEND_FROM_EMAIL_AI`, `RESEND_FROM_NAME_AI` | Email API access and approved sender identity. |
 | Gmail IMAP | `AI_DIGEST_SENDER`, `AI_GMAIL_IMAP_HOST`, `AI_GMAIL_IMAP_USER`, `AI_GMAIL_IMAP_PASSWORD`, `AI_IMAP_PROXY` | Digest mailbox selection and network access. |
 | AI assets/delivery | `AI_IMAGE_BUCKET`, `AI_EMAIL_SEND_ENABLED` | Image storage and the explicit Resend send kill switch. Delivery idempotency is fixed as `aivizens-{brief_date}-{subscriber_id}`. |
 | Web | `WEB_BASE_URL`, `NEXT_PUBLIC_WEB_BASE_URL` | Server-side and browser-visible canonical web origins. |
-| Turnstile | `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Server verification and browser widget keys. |
+| Subscription abuse limit | `SUBSCRIPTION_HASH_SECRET` | Server-only HMAC key for the AI subscription rate limiter. |
 | Monitoring/admin | `FEISHU_WEBHOOK_URL`, `SENTRY_DSN`, `HEALTHCHECKS_PING_URL`, `ADMIN_TOKEN` | Alerts, error reporting, health pings, and admin authentication. |
 | Runtime behavior | `CRAWL_MAX_QPS_PER_DOMAIN`, `LOG_LEVEL`, `RSSHUB_BASE_URL` | Crawl rate, logging level, and RSSHub endpoint. |
 | Proxy fallback | `HTTPS_PROXY`, `HTTP_PROXY` | Optional IMAP proxy fallback when `AI_IMAP_PROXY` is unset; managed by the host environment rather than checked-in examples. |

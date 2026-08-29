@@ -23,6 +23,25 @@ afterEach(() => {
 });
 
 describe("AI welcome email", () => {
+  it("sends a secure unsubscribe link", async () => {
+    vi.stubEnv("RESEND_API_KEY", "production-resend-key");
+    const { sendAiUnsubscribeEmail } = await import("./ai-welcome-email");
+
+    await sendAiUnsubscribeEmail(
+      "reader@example.com",
+      "11111111-1111-4111-8111-111111111111",
+    );
+
+    const [message] = resendMocks.send.mock.calls[0];
+    expect(message.subject).toContain("退订");
+    expect(message.html).toContain(
+      "https://aivizens.test/unsubscribe?token=11111111-1111-4111-8111-111111111111&product=ai",
+    );
+    expect(message.text).toContain(
+      "https://aivizens.test/unsubscribe?token=11111111-1111-4111-8111-111111111111&product=ai",
+    );
+  });
+
   it("uses the confirmation token hash as a stable idempotency key", async () => {
     vi.stubEnv("RESEND_API_KEY", "production-resend-key");
     const { sendAiWelcomeEmail } = await import("./ai-welcome-email");

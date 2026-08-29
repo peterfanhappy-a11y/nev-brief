@@ -8,7 +8,6 @@ import {
 } from "@/lib/rate-limit";
 import { createConfirmationToken } from "@/lib/subscription-token";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import { verifyTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -23,7 +22,6 @@ const Utm = z
 const Body = z
   .object({
     email: z.string().email().toLowerCase().trim().max(254),
-    turnstileToken: z.string().min(1).max(2048),
     utm: Utm.optional(),
   })
   .strict();
@@ -56,23 +54,6 @@ export async function POST(req: Request) {
   }
 
   const ip = getClientIp(req);
-  let turnstileOk: boolean;
-  try {
-    turnstileOk = await verifyTurnstile(body.turnstileToken, ip);
-  } catch {
-    console.error("[ai/subscribe] Turnstile verification unavailable");
-    return NextResponse.json(
-      { error: "verification_unavailable" },
-      { status: 503 },
-    );
-  }
-  if (!turnstileOk) {
-    return NextResponse.json(
-      { error: "verification_failed" },
-      { status: 400 },
-    );
-  }
-
   let ipHash: string;
   let emailHash: string;
   try {

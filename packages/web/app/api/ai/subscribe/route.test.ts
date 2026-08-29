@@ -6,7 +6,6 @@ const IP_HASH = "a".repeat(64);
 const EMAIL_HASH = "b".repeat(64);
 
 const mocks = vi.hoisted(() => ({
-  verifyTurnstile: vi.fn(),
   hashLimiterKey: vi.fn(),
   checkRateLimit: vi.fn(),
   createToken: vi.fn(),
@@ -15,9 +14,6 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
 }));
 
-vi.mock("@/lib/turnstile", () => ({
-  verifyTurnstile: mocks.verifyTurnstile,
-}));
 vi.mock("@/lib/rate-limit", () => ({
   hashSubscriptionRateLimitKey: mocks.hashLimiterKey,
   checkSubscriptionRateLimit: mocks.checkRateLimit,
@@ -39,7 +35,6 @@ const SUCCESS = { ok: true, message: "check_email" };
 function request(
   body: unknown = {
     email: "Reader@Example.com",
-    turnstileToken: "turnstile-response",
     utm: { source: "launch", medium: "email", campaign: "phase-1" },
   },
 ): Request {
@@ -62,7 +57,6 @@ describe("POST /api/ai/subscribe", () => {
 
   beforeEach(() => {
     vi.stubEnv("SUBSCRIPTIONS_ENABLED", "true");
-    mocks.verifyTurnstile.mockResolvedValue(true);
     mocks.hashLimiterKey.mockImplementation((value: string) =>
       value === "203.0.113.8" ? IP_HASH : EMAIL_HASH,
     );
@@ -97,40 +91,28 @@ describe("POST /api/ai/subscribe", () => {
       error: "subscriptions_disabled",
     });
     expect(json).not.toHaveBeenCalled();
-    expect(mocks.verifyTurnstile).not.toHaveBeenCalled();
     expect(mocks.checkRateLimit).not.toHaveBeenCalled();
     expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
     expect(mocks.sendConfirmation).not.toHaveBeenCalled();
   });
 
   it.each([
-    [{ turnstileToken: "token" }],
-    [{ email: "not-an-email", turnstileToken: "token" }],
-    [{ email: "reader@example.com", turnstileToken: "" }],
-    [{ email: "reader@example.com", turnstileToken: "token", utm: "bad" }],
-  ])("rejects an invalid body before verification (%j)", async (body) => {
+    [{}],
+    [{ email: "not-an-email" }],
+    [{ email: "reader@example.com", utm: "bad" }],
+  ])("rejects an invalid body before rate limiting (%j)", async (body) => {
     const response = await POST(request(body));
 
     expect(response.status).toBe(400);
     await expect(responseBody(response)).resolves.toEqual({ error: "invalid_body" });
-    expect(mocks.verifyTurnstile).not.toHaveBeenCalled();
+    expect(mocks.checkRateLimit).not.toHaveBeenCalled();
   });
 
-  it("rejects an invalid Turnstile response before rate limiting or database access", async () => {
-    mocks.verifyTurnstile.mockResolvedValue(false);
-
+  it("uses the durable limiter without a browser captcha", async () => {
     const response = await POST(request());
 
-    expect(response.status).toBe(400);
-    await expect(responseBody(response)).resolves.toEqual({
-      error: "verification_failed",
-    });
-    expect(mocks.verifyTurnstile).toHaveBeenCalledWith(
-      "turnstile-response",
-      "203.0.113.8",
-    );
-    expect(mocks.checkRateLimit).not.toHaveBeenCalled();
-    expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
+    expect(response.status).toBe(202);
+    expect(mocks.checkRateLimit).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -182,9 +164,6 @@ describe("POST /api/ai/subscribe", () => {
     expect(text).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TOKEN);
 
-    expect(mocks.verifyTurnstile.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.hashLimiterKey.mock.invocationCallOrder[0],
-    );
     expect(mocks.checkRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.createToken.mock.invocationCallOrder[0],
     );
