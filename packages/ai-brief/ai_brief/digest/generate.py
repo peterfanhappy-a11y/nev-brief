@@ -26,7 +26,7 @@ from ai_brief.digest.engineering_parser import parse_engineering_digest
 from ai_brief.digest.events_parser import parse_events_digest
 from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
-from ai_brief.digest.models import AgentTool
+from ai_brief.digest.models import AgentTool, EventItem
 from ai_brief.digest.research_parser import parse_research_digest
 from ai_brief.schema import DigestSection, DigestStory, Theme
 
@@ -179,6 +179,46 @@ def _attachments_by_index(digest: DigestEnvelope) -> dict[int, Attachment]:
     return out
 
 
+def _today_ai_image_candidates(
+    items: list[EventItem],
+    attachments: list[Attachment],
+) -> list[tuple[int, bytes, str, str]]:
+    """Prefer indexed source images; use source order for descriptive filenames."""
+    by_idx: dict[int, Attachment] = {}
+    for attachment in attachments:
+        index = _filename_index(attachment.filename)
+        if index is not None:
+            by_idx[index] = attachment
+
+    candidates: list[tuple[int, bytes, str, str]] = []
+    for item in items:
+        indexed_attachment = by_idx.get(item.index)
+        if (
+            indexed_attachment is None
+            or "svg" in (indexed_attachment.content_type or "").lower()
+        ):
+            continue
+        band, content_type = _find_hero_band(
+            indexed_attachment.data, config.TODAY_AI_BANNER_ASPECT
+        )
+        candidates.append((item.index, band, content_type, item.headline))
+    if candidates:
+        return candidates
+
+    unindexed = [
+        attachment
+        for attachment in attachments
+        if _filename_index(attachment.filename) is None
+        and "svg" not in (attachment.content_type or "").lower()
+    ]
+    for item, attachment in zip(items, unindexed, strict=False):
+        band, content_type = _find_hero_band(
+            attachment.data, config.TODAY_AI_BANNER_ASPECT
+        )
+        candidates.append((item.index, band, content_type, item.headline))
+    return candidates
+
+
 def _pick_and_upload(
     candidates: list[tuple[int, bytes, str, str]],  # (index, image_bytes, content_type, caption)
     *,
@@ -224,14 +264,7 @@ async def _build_today_ai(
     result = outcome.value
 
     # 源图多是整页长截图 → 先从每张里裁出最像配图的 hero 横幅带，再让 Qwen 在这些干净带里选
-    by_idx = _attachments_by_index(digest)
-    candidates: list[tuple[int, bytes, str, str]] = []
-    for it in items:
-        att = by_idx.get(it.index)
-        if att is None or "svg" in (att.content_type or "").lower():
-            continue  # SVG 无法 PIL 裁带 → 跳过，避免污染候选
-        band, ctype = _find_hero_band(att.data, config.TODAY_AI_BANNER_ASPECT)
-        candidates.append((it.index, band, ctype, it.headline))
+    candidates = _today_ai_image_candidates(items, _image_attachments(digest))
     header_url, alt, qwen_complete = _pick_and_upload(
         candidates, mode="today_ai", brief_date=brief_date, module="today-ai"
     )
