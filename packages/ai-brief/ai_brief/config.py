@@ -47,7 +47,10 @@ class AiSettings(BaseSettings):
         default="", validation_alias=AliasChoices("qwen_api_key", "dashscope_api_key")
     )
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    qwen_vl_model: str = "qwen3.7-plus"
+    qwen_vl_model: str = Field(
+        default="qwen3.7-plus",
+        validation_alias=AliasChoices("qwen_model", "qwen_vl_model"),
+    )
 
 
 @lru_cache

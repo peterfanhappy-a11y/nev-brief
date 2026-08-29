@@ -4,6 +4,8 @@ from __future__ import annotations
 import io
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from ai_brief import config
 from ai_brief.digest import condenser, image_judge
 from ai_brief.digest.condenser import _rebalance, build_engineering_stories
 from ai_brief.digest.generate import (
@@ -307,6 +309,18 @@ def test_qwen_missing_credentials_reports_incomplete_fallback_to_first() -> None
 
     assert result.index == 0
     assert result.complete is False
+
+
+def test_qwen_model_environment_variable_overrides_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("QWEN_MODEL", "qwen-vision-from-env")
+    monkeypatch.setenv("QWEN_BASE_URL", "https://qwen.example/v1")
+
+    settings = config.AiSettings()
+
+    assert settings.qwen_vl_model == "qwen-vision-from-env"
+    assert settings.qwen_base_url == "https://qwen.example/v1"
 
 
 def test_qwen_request_failure_reports_incomplete_fallback_to_first() -> None:
