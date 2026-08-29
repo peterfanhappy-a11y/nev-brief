@@ -151,6 +151,25 @@ def _image_attachments(digest: DigestEnvelope) -> list[Attachment]:
     ]
 
 
+def _is_usable_header_image(data: bytes, content_type: str) -> bool:
+    """Reject broken, transparent, or visually blank attachments before upload."""
+    if not data or not content_type.startswith("image/"):
+        return False
+    try:
+        from PIL import Image, ImageStat
+
+        image = Image.open(io.BytesIO(data)).convert("RGBA")
+        if image.getchannel("A").getextrema()[1] == 0:
+            return False
+        image.thumbnail((200, 200))
+        rgb = image.convert("RGB")
+        stats = ImageStat.Stat(rgb)
+        return not (min(stats.mean) >= 245 and max(stats.var) < 4)
+    except Exception as e:  # noqa: BLE001
+        log.warning("ai_digest.header_image_invalid", err=str(e)[:120])
+        return False
+
+
 def _attachments_by_index(digest: DigestEnvelope) -> dict[int, Attachment]:
     out: dict[int, Attachment] = {}
     for a in _image_attachments(digest):
@@ -168,6 +187,11 @@ def _pick_and_upload(
     module: str,
 ) -> tuple[str | None, str, bool]:
     """Qwen 从已备好的候选图里选 1 张 → 上传 → (public_url, alt)。图已按模块处理好，直接传。"""
+    candidates = [
+        candidate
+        for candidate in candidates
+        if _is_usable_header_image(candidate[1], candidate[2])
+    ]
     if not candidates:
         return None, "", False
     images = [(data, ctype) for _, data, ctype, _ in candidates]

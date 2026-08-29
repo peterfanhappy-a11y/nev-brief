@@ -288,15 +288,32 @@ async def condense_research(paper: ResearchPaper) -> ModelOutcome[DigestStory] |
 
 # ── AI工程：课程要点(主题) + 核心要点(内容)，无需 LLM，直接映射 + 收句 ──
 
+_ENGINEERING_FIELD_ALIASES = {"行动": "启示"}
+
+
+def _engineering_story_parts(subtitle: str, body: str) -> tuple[str, str]:
+    """Normalize source labels into ``字段：短总结`` plus clean body text."""
+    clean_body = (body or "").lstrip("：: \t\r\n")
+    label, separator, takeaway = (subtitle or "").strip().partition("：")
+    if not separator:
+        label, separator, takeaway = (subtitle or "").strip().partition(":")
+    label = _ENGINEERING_FIELD_ALIASES.get(label.strip(), label.strip())
+    takeaway = takeaway.strip()
+    if not takeaway:
+        takeaway = _clip_sentence(clean_body, 30).rstrip(_SENT_END).strip()
+    headline = f"{label}：{takeaway}" if takeaway else f"{label}："
+    return headline[:80], clean_body
+
 
 def build_engineering_stories(lecture: EngineeringLecture) -> tuple[str, list[DigestStory]]:
     """返回 (subtitle=课程要点, stories=核心要点各一条)。无链接。"""
     stories: list[DigestStory] = []
     for cp in lecture.core_points:
+        headline, body = _engineering_story_parts(cp.subtitle, cp.body)
         stories.append(
             DigestStory(
-                headline=cp.subtitle[:80],
-                summary=_clip_sentence(cp.body, config.AI_ENGINEERING_POINT_CHARS),
+                headline=headline,
+                summary=_clip_sentence(body, config.AI_ENGINEERING_POINT_CHARS),
                 url="",
                 label="",
             )
