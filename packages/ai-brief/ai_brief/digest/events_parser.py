@@ -17,7 +17,8 @@ from ai_brief.digest.models import EventItem
 
 _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
 _SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
-_HTTPS_URL_RE = re.compile(r"https://[^\s<]+")
+_SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
+_SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
 
 
 def _clean(text: str) -> str:
@@ -127,20 +128,23 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
         while node is not None and node.tag != "h2":
             if node.tag == "p":
                 text = _clean(node.text())
+                source_url_match = _SOURCE_URL_RE.search(text)
                 source_match = _SOURCE_RE.search(text)
-                if source_match is not None:
+                if source_url_match is not None:
+                    source = source_url_match.group(1).strip()
+                    url = source_url_match.group(2)
+                elif source_match is not None:
                     source = source_match.group(1).strip()
+                elif (source_prefix := _SOURCE_PREFIX_RE.search(text)) is not None:
+                    source = source_prefix.group(1).strip()
+                    for anchor in node.css("a"):
+                        href = (anchor.attributes.get("href") or "").strip()
+                        if href.startswith("https://"):
+                            url = href
+                            break
                 else:
-                    plain_url = _HTTPS_URL_RE.search(text)
-                    if plain_url is not None:
-                        url = plain_url.group(0)
-                    elif not node.css_first("a") and text:
+                    if text:
                         body_parts.append(text)
-            for anchor in node.css("a"):
-                href = (anchor.attributes.get("href") or "").strip()
-                if href.startswith("https://"):
-                    url = href
-                    break
             if url:
                 break
             node = next_element(node)
