@@ -86,15 +86,17 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     <main>
       <h2>海外大模型公司 · 最有价值</h2>
       <div>
-      <div>
+        <div></div>
         <h2>Anthropic lets Claude train Claude</h2>
         <p>模型团队用 <a href="https://example.com/background">背景材料</a>
         说明新的训练流程降低研究成本。</p>
         <p>TechCrunch · https://example.com/events/claude-trains-claude</p>
       </div>
-      <h2>Nvidia expands its AI advantage beyond GPUs</h2>
-      <p>面向更广泛用户的新工具上线。</p>
-      <p>QbitAI · https://example.com/events/nvidia</p>
+      <div>
+        <div></div>
+        <h2>Nvidia expands its AI advantage beyond GPUs</h2>
+        <p>面向更广泛用户的新工具上线。</p>
+        <p>QbitAI · https://example.com/events/nvidia</p>
       </div>
       <h2>延伸阅读</h2>
       <p>这不是今日 AI 新闻。</p>
@@ -120,6 +122,27 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     assert items[1].category == "海外大模型公司"
     assert items[1].value_tag == "最有价值"
     assert items[1].url == "https://example.com/events/nvidia"
+
+
+def test_events_flat_h2_parser_does_not_treat_extension_as_second_story() -> None:
+    html = """
+    <main>
+      <h2>海外大模型公司 · 最有价值</h2>
+      <div>
+        <div></div>
+        <h2>第一条真实新闻</h2>
+        <p>新闻摘要。</p>
+        <p>TechCrunch · https://example.com/events/real</p>
+      </div>
+      <h2>延伸阅读</h2>
+      <p>不应成为今日 AI 新闻。</p>
+      <p>Example News · https://example.com/events/related</p>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.headline for item in items] == ["第一条真实新闻"]
 
 
 def test_research_parses_current_email_markup() -> None:

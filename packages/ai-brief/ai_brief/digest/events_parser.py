@@ -118,42 +118,31 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
 
     def is_flat_story_wrapper(node: Node) -> bool:
         children = direct_children(node)
-        if [child.tag for child in children] != ["div", "h2", "p", "p"]:
-            return False
-        return [child.tag for child in direct_children(children[0])] == ["h2", "p", "p"]
+        return [child.tag for child in children] == ["div", "h2", "p", "p"]
 
     items: list[EventItem] = []
-    category = ""
-    value_tag = ""
-    stories_remaining = 0
-    for h2 in tree.css("h2"):
-        raw_title = _clean(h2.text())
-        next_node = next_element(h2)
-        candidate_category, candidate_value_tag = _split_label(raw_title)
-        is_direct_story = next_node is not None and next_node.tag == "h2"
-        is_story_wrapper = (
-            next_node is not None
-            and next_node.tag == "div"
-            and is_flat_story_wrapper(next_node)
-        )
+    for label in tree.css("h2"):
+        category, value_tag = _split_label(_clean(label.text()))
+        first_card = next_element(label)
         if (
-            candidate_value_tag in _FLAT_VALUE_TAGS
-            and (is_direct_story or is_story_wrapper)
+            value_tag not in _FLAT_VALUE_TAGS
+            or first_card is None
+            or first_card.tag != "div"
+            or not is_flat_story_wrapper(first_card)
         ):
-            category, value_tag = candidate_category, candidate_value_tag
-            stories_remaining = 2
             continue
-        if stories_remaining == 0:
-            continue
-        stories_remaining -= 1
 
-        body_parts: list[str] = []
-        source = ""
-        url = ""
-        node = next_node
-        while node is not None and node.tag != "h2":
-            if node.tag == "p":
-                text = _clean(node.text())
+        card: Node | None = first_card
+        for _ in range(2):
+            if card is None or card.tag != "div" or not is_flat_story_wrapper(card):
+                break
+            children = direct_children(card)
+            title_node = children[1]
+            body_parts: list[str] = []
+            source = ""
+            url = ""
+            for paragraph in children[2:]:
+                text = _clean(paragraph.text())
                 source_url_match = _SOURCE_URL_RE.search(text)
                 source_match = _SOURCE_RE.search(text)
                 if source_url_match is not None:
@@ -163,33 +152,31 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
                     source = source_match.group(1).strip()
                 elif (source_prefix := _SOURCE_PREFIX_RE.search(text)) is not None:
                     source = source_prefix.group(1).strip()
-                    for anchor in node.css("a"):
+                    for anchor in paragraph.css("a"):
                         href = (anchor.attributes.get("href") or "").strip()
                         if href.startswith("https://"):
                             url = href
                             break
-                else:
-                    if text:
-                        body_parts.append(text)
-            if url:
-                break
-            node = next_element(node)
+                elif text:
+                    body_parts.append(text)
 
-        match = _TITLE_NUM_RE.match(raw_title)
-        index = int(match.group(1)) if match else len(items) + 1
-        headline = match.group(2).strip() if match else raw_title
-        if category and headline and source and url:
-            items.append(
-                EventItem(
-                    index=index,
-                    category=category,
-                    value_tag=value_tag,
-                    headline=headline,
-                    url=url,
-                    body=" ".join(body_parts),
-                    image_note=source,
+            raw_title = _clean(title_node.text())
+            match = _TITLE_NUM_RE.match(raw_title)
+            index = int(match.group(1)) if match else len(items) + 1
+            headline = match.group(2).strip() if match else raw_title
+            if headline and source and url:
+                items.append(
+                    EventItem(
+                        index=index,
+                        category=category,
+                        value_tag=value_tag,
+                        headline=headline,
+                        url=url,
+                        body=" ".join(body_parts),
+                        image_note=source,
+                    )
                 )
-            )
+            card = next_element(card)
     return items
 
 
