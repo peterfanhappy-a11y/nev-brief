@@ -318,14 +318,14 @@ def fetch_latest(
     timeout: float = 30.0,
     within_hours: float | None = None,
 ) -> DigestEmail | None:
-    """Fetch one digest, retrying one transient IMAP connection loss."""
+    """Fetch one digest, retrying up to two transient IMAP connection losses."""
     host = host or config.imap_host()
     user = user or config.imap_user()
     password = password or config.imap_password()
     if not user or not password:
         raise RuntimeError("Gmail IMAP 凭据缺失：设 AI_GMAIL_IMAP_USER / AI_GMAIL_IMAP_PASSWORD")
 
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             return _fetch_latest_once(
                 sender,
@@ -339,7 +339,7 @@ def fetch_latest(
                 within_hours=within_hours,
             )
         except (imaplib.IMAP4.abort, OSError):
-            if attempt == 1:
+            if attempt == 2:
                 raise
             log.warning("ai_imap.retrying_connection", attempt=attempt + 1)
 

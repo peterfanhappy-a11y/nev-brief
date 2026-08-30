@@ -283,3 +283,39 @@ def test_fetch_latest_retries_one_imap_abort_then_returns_email() -> None:
 
     assert result is not None
     assert result.message_id == "<retry@gmail.test>"
+
+
+def test_fetch_latest_retries_transient_connection_failures_before_returning_email() -> None:
+    received_at = datetime.now(UTC) - timedelta(minutes=1)
+    fake = _FakeIMAP(
+        [
+            (
+                received_at,
+                _raw_email(
+                    subject="ai-events-digest-2026-08-04",
+                    message_id="<third-attempt@gmail.test>",
+                    date_header="Tue, 04 Aug 2026 08:00:00 +0000",
+                ),
+            )
+        ]
+    )
+
+    with patch.object(
+        imap_client,
+        "_connect",
+        side_effect=[
+            imap_client.imaplib.IMAP4.abort("socket error: EOF"),
+            OSError("TLS connection reset"),
+            fake,
+        ],
+    ):
+        result = fetch_latest(
+            "digest@example.test",
+            "ai-events-digest-",
+            "2026-08-04",
+            user="test-user",
+            password="test-password",  # noqa: S106 - isolated fake IMAP credential
+        )
+
+    assert result is not None
+    assert result.message_id == "<third-attempt@gmail.test>"
