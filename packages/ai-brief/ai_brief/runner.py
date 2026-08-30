@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, Literal
@@ -140,6 +141,35 @@ def _digest_metadata_only(
     }
 
 
+def _rollback_if_connected(conn: psycopg.Connection) -> bool:
+    try:
+        conn.rollback()
+    except Exception:  # noqa: BLE001 - connection may already be lost
+        return False
+    return True
+
+
+def _persist_generation_failure(
+    conn: psycopg.Connection,
+    brief_date: date,
+    run_id: UUID,
+    *,
+    digests: dict[DigestKind, DigestEnvelope | None],
+    stage: str,
+) -> None:
+    storage.mark_brief_generation_failed(conn, brief_date, run_id)
+    storage.finish_digest_run(
+        conn,
+        run_id,
+        status="failed",
+        digest_sources=_digest_metadata_only(digests),
+        quality_report=None,
+        stage=stage,
+        error_summary="brief_generation_failed",
+    )
+    conn.commit()
+
+
 async def generate_for_review(
     conn: psycopg.Connection,
     brief_date: date,
@@ -248,27 +278,47 @@ async def generate_for_review(
             exit_code=0 if report.passed else 1,
         )
     except Exception:  # noqa: BLE001 - convert pipeline faults into durable safe state
-        conn.rollback()
-        try:
-            storage.mark_brief_generation_failed(conn, brief_date, run_id)
-            storage.finish_digest_run(
-                conn,
-                run_id,
-                status="failed",
-                digest_sources=_digest_metadata_only(digests),
-                quality_report=None,
-                stage=stage,
-                error_summary="brief_generation_failed",
-            )
-            conn.commit()
-        except Exception:  # noqa: BLE001 - preserve rollback if failure recording fails
-            conn.rollback()
-            _alert(
-                AlertLevel.P1,
-                "AI 简报失败状态记录失败",
-                f"{date_str} stage={stage}",
-            )
-            raise
+        recorded = False
+        record_error: Exception | None = None
+        if _rollback_if_connected(conn):
+            try:
+                _persist_generation_failure(
+                    conn,
+                    brief_date,
+                    run_id,
+                    digests=digests,
+                    stage=stage,
+                )
+                recorded = True
+            except Exception as exc:  # noqa: BLE001 - retry once with a fresh connection
+                record_error = exc
+                _rollback_if_connected(conn)
+        if not recorded:
+            recovered: psycopg.Connection | None = None
+            try:
+                recovered = connect()
+                _persist_generation_failure(
+                    recovered,
+                    brief_date,
+                    run_id,
+                    digests=digests,
+                    stage=stage,
+                )
+            except Exception:  # noqa: BLE001 - alert failure state without raw details
+                if recovered is not None:
+                    _rollback_if_connected(recovered)
+                _alert(
+                    AlertLevel.P1,
+                    "AI 简报失败状态记录失败",
+                    f"{date_str} stage={stage}",
+                )
+                if record_error is not None:
+                    raise record_error from None
+                raise
+            finally:
+                if recovered is not None:
+                    with suppress(Exception):
+                        recovered.close()
         _alert(AlertLevel.P1, "AI 简报生成失败", f"{date_str} stage={stage}")
         return GenerationResult(date_str, "failed", run_id, exit_code=1)
 

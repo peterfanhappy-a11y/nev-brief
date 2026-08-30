@@ -267,6 +267,65 @@ async def test_generation_exception_records_safe_failed_run_without_partial_cont
     assert raw_secret not in persisted
 
 
+async def test_generation_reconnects_to_record_failure_after_database_connection_loss() -> None:
+    connection = _connection()
+    recovered = _connection()
+    adapter = _Adapter()
+    mark = MagicMock(side_effect=[psycopg.OperationalError("connection lost"), None])
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "mark_brief_generation_failed", mark),
+        patch.object(storage, "finish_digest_run") as finish,
+        patch.object(
+            runner,
+            "build_digest_modules",
+            AsyncMock(side_effect=RuntimeError("source failed")),
+        ),
+        patch.object(runner, "connect", return_value=recovered) as reconnect,
+        patch.object(runner, "_alert"),
+    ):
+        result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+
+    assert result.status == "failed"
+    assert mark.call_args_list == [
+        ((connection, BRIEF_DATE, RUN_ID), {}),
+        ((recovered, BRIEF_DATE, RUN_ID), {}),
+    ]
+    assert finish.call_args.args[:2] == (recovered, RUN_ID)
+    recovered.commit.assert_called_once_with()
+    reconnect.assert_called_once_with()
+    recovered.close.assert_called_once_with()
+
+
+async def test_generation_recovers_failure_state_when_original_rollback_is_lost() -> None:
+    connection = _connection()
+    connection.rollback.side_effect = psycopg.OperationalError("connection lost")
+    recovered = _connection()
+    adapter = _Adapter()
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "mark_brief_generation_failed") as mark,
+        patch.object(storage, "finish_digest_run"),
+        patch.object(
+            runner,
+            "build_digest_modules",
+            AsyncMock(side_effect=RuntimeError("source failed")),
+        ),
+        patch.object(runner, "connect", return_value=recovered) as reconnect,
+        patch.object(runner, "_alert"),
+    ):
+        result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+
+    assert result.status == "failed"
+    mark.assert_called_once_with(recovered, BRIEF_DATE, RUN_ID)
+    reconnect.assert_called_once_with()
+    recovered.close.assert_called_once_with()
+
+
 async def test_start_run_failure_rolls_back_and_alerts_without_raw_details() -> None:
     connection = _connection()
     raw_secret = "postgresql://user:password@db/private"  # noqa: S105
@@ -311,6 +370,7 @@ async def test_failed_run_recording_failure_alerts_before_reraising() -> None:
             "build_digest_modules",
             AsyncMock(side_effect=RuntimeError("model failed")),
         ),
+        patch.object(runner, "connect", side_effect=RuntimeError("recovery unavailable")),
         patch.object(runner, "_alert") as alert,
         pytest.raises(RuntimeError, match="failure recording"),
     ):

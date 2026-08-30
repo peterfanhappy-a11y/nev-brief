@@ -213,7 +213,7 @@ def _internaldate(response: bytes) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def fetch_latest(
+def _fetch_latest_once(
     sender: str,
     subject_prefix: str,
     date_str: str | None,
@@ -304,3 +304,43 @@ def fetch_latest(
         # Logout is best-effort during cleanup; the fetch result/error must win.
         with suppress(Exception):  # noqa: S110
             imap.logout()
+
+
+def fetch_latest(
+    sender: str,
+    subject_prefix: str,
+    date_str: str | None,
+    *,
+    host: str | None = None,
+    user: str | None = None,
+    password: str | None = None,
+    mailbox: str = "INBOX",
+    timeout: float = 30.0,
+    within_hours: float | None = None,
+) -> DigestEmail | None:
+    """Fetch one digest, retrying one transient IMAP connection loss."""
+    host = host or config.imap_host()
+    user = user or config.imap_user()
+    password = password or config.imap_password()
+    if not user or not password:
+        raise RuntimeError("Gmail IMAP 凭据缺失：设 AI_GMAIL_IMAP_USER / AI_GMAIL_IMAP_PASSWORD")
+
+    for attempt in range(2):
+        try:
+            return _fetch_latest_once(
+                sender,
+                subject_prefix,
+                date_str,
+                host=host,
+                user=user,
+                password=password,
+                mailbox=mailbox,
+                timeout=timeout,
+                within_hours=within_hours,
+            )
+        except (imaplib.IMAP4.abort, OSError):
+            if attempt == 1:
+                raise
+            log.warning("ai_imap.retrying_connection", attempt=attempt + 1)
+
+    raise AssertionError("unreachable")

@@ -22,6 +22,8 @@ grep -q '<integer>8</integer>' "$REL"
 grep -q '<integer>0</integer>' "$REL"
 grep -q 'ai-generate-.*\.log' "$GEN_RUN"
 grep -q 'ai-release-.*\.log' "$REL_RUN"
+grep -q 'source "$PROJECT_ROOT/.env"' "$GEN_RUN"
+grep -q 'source "$PROJECT_ROOT/.env"' "$REL_RUN"
 grep -q 'python -m ai_brief generate' "$GEN_RUN"
 grep -q 'python -m ai_brief release' "$REL_RUN"
 if grep -R -n -- 'python -m ai_brief daily' "$GEN_RUN" "$REL_RUN"; then
