@@ -6,8 +6,9 @@ GEN="$ROOT/ops/launchd/com.aivizens.ai-generate.plist"
 REL="$ROOT/ops/launchd/com.aivizens.ai-release.plist"
 GEN_RUN="$ROOT/ops/launchd/run-ai-generate.sh"
 REL_RUN="$ROOT/ops/launchd/run-ai-release.sh"
+INSTALL="$ROOT/ops/launchd/install-ai-daily.sh"
 
-for path in "$GEN" "$REL" "$GEN_RUN" "$REL_RUN"; do
+for path in "$GEN" "$REL" "$GEN_RUN" "$REL_RUN" "$INSTALL"; do
   [[ -f "$path" ]] || { echo "missing: $path" >&2; exit 1; }
 done
 
@@ -20,6 +21,7 @@ grep -q '<string>com.aivizens.ai-generate</string>' "$GEN"
 grep -q '<string>com.aivizens.ai-release</string>' "$REL"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Hour' "$REL")" == "8" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Minute' "$REL")" == "45" ]]
+grep -q 'generate 08:10 / release 08:45' "$INSTALL"
 grep -q 'ai-generate-.*\.log' "$GEN_RUN"
 grep -q 'ai-release-.*\.log' "$REL_RUN"
 grep -q 'source "$PROJECT_ROOT/.env"' "$GEN_RUN"
