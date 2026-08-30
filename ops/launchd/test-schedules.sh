@@ -15,11 +15,11 @@ plutil -lint "$GEN" >/dev/null
 plutil -lint "$REL" >/dev/null
 
 grep -q '<string>com.aivizens.ai-generate</string>' "$GEN"
-grep -q '<integer>6</integer>' "$GEN"
-grep -q '<integer>45</integer>' "$GEN"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Hour' "$GEN")" == "8" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Minute' "$GEN")" == "10" ]]
 grep -q '<string>com.aivizens.ai-release</string>' "$REL"
-grep -q '<integer>8</integer>' "$REL"
-grep -q '<integer>0</integer>' "$REL"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Hour' "$REL")" == "8" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Minute' "$REL")" == "45" ]]
 grep -q 'ai-generate-.*\.log' "$GEN_RUN"
 grep -q 'ai-release-.*\.log' "$REL_RUN"
 grep -q 'source "$PROJECT_ROOT/.env"' "$GEN_RUN"
