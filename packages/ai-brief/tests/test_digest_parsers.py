@@ -85,6 +85,7 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     html = """
     <main>
       <h2>海外大模型公司 · 最有价值</h2>
+      <div>
       <h2>Anthropic lets Claude train Claude</h2>
       <p>模型团队用 <a href="https://example.com/background">背景材料</a>
       说明新的训练流程降低研究成本。</p>
@@ -92,9 +93,17 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
       <h2>Nvidia expands its AI advantage beyond GPUs</h2>
       <p>面向更广泛用户的新工具上线。</p>
       <p>QbitAI · https://example.com/events/nvidia</p>
+      </div>
       <h2>延伸阅读</h2>
       <p>这不是今日 AI 新闻。</p>
       <p>Example News · https://example.com/events/related</p>
+      <h2>说明 · 附注</h2>
+      <div>
+        <h2>这不是事件一</h2>
+        <p>Example News · https://example.com/events/not-an-event-one</p>
+        <h2>这不是事件二</h2>
+        <p>Example News · https://example.com/events/not-an-event-two</p>
+      </div>
     </main>
     """
 

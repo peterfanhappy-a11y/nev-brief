@@ -19,6 +19,7 @@ _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
 _SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
 _SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
 _SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
+_FLAT_VALUE_TAGS = frozenset({"最有价值", "最吸引眼球"})
 
 
 def _clean(text: str) -> str:
@@ -106,6 +107,15 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
             sibling = sibling.next
         return sibling
 
+    def direct_h2_count(node: Node) -> int:
+        count = 0
+        child = node.child
+        while child is not None:
+            if child.tag == "h2":
+                count += 1
+            child = child.next
+        return count
+
     items: list[EventItem] = []
     category = ""
     value_tag = ""
@@ -113,8 +123,18 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
     for h2 in tree.css("h2"):
         raw_title = _clean(h2.text())
         next_node = next_element(h2)
-        if "·" in raw_title and next_node is not None and next_node.tag == "h2":
-            category, value_tag = _split_label(raw_title)
+        candidate_category, candidate_value_tag = _split_label(raw_title)
+        is_direct_story = next_node is not None and next_node.tag == "h2"
+        is_story_wrapper = (
+            next_node is not None
+            and next_node.tag == "div"
+            and direct_h2_count(next_node) == 2
+        )
+        if (
+            candidate_value_tag in _FLAT_VALUE_TAGS
+            and (is_direct_story or is_story_wrapper)
+        ):
+            category, value_tag = candidate_category, candidate_value_tag
             stories_remaining = 2
             continue
         if stories_remaining == 0:
