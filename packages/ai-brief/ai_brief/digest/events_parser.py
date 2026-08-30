@@ -107,14 +107,20 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
             sibling = sibling.next
         return sibling
 
-    def direct_h2_count(node: Node) -> int:
-        count = 0
+    def direct_children(node: Node) -> list[Node]:
+        children: list[Node] = []
         child = node.child
         while child is not None:
-            if child.tag == "h2":
-                count += 1
+            if not child.tag.startswith("-"):
+                children.append(child)
             child = child.next
-        return count
+        return children
+
+    def is_flat_story_wrapper(node: Node) -> bool:
+        children = direct_children(node)
+        if [child.tag for child in children] != ["div", "h2", "p", "p"]:
+            return False
+        return [child.tag for child in direct_children(children[0])] == ["h2", "p", "p"]
 
     items: list[EventItem] = []
     category = ""
@@ -128,7 +134,7 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
         is_story_wrapper = (
             next_node is not None
             and next_node.tag == "div"
-            and direct_h2_count(next_node) == 2
+            and is_flat_story_wrapper(next_node)
         )
         if (
             candidate_value_tag in _FLAT_VALUE_TAGS
