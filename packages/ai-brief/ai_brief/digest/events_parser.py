@@ -17,6 +17,7 @@ from ai_brief.digest.models import EventItem
 
 _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
 _SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
+_HTTPS_URL_RE = re.compile(r"https://[^\s<]+")
 
 
 def _clean(text: str) -> str:
@@ -95,6 +96,73 @@ def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
     return items
 
 
+def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse the flat current email: category h2, story h2, then metadata siblings."""
+
+    def next_element(node: Node) -> Node | None:
+        sibling = node.next
+        while sibling is not None and sibling.tag.startswith("-"):
+            sibling = sibling.next
+        return sibling
+
+    items: list[EventItem] = []
+    category = ""
+    value_tag = ""
+    stories_remaining = 0
+    for h2 in tree.css("h2"):
+        raw_title = _clean(h2.text())
+        next_node = next_element(h2)
+        if "·" in raw_title and next_node is not None and next_node.tag == "h2":
+            category, value_tag = _split_label(raw_title)
+            stories_remaining = 2
+            continue
+        if stories_remaining == 0:
+            continue
+        stories_remaining -= 1
+
+        body_parts: list[str] = []
+        source = ""
+        url = ""
+        node = next_node
+        while node is not None and node.tag != "h2":
+            if node.tag == "p":
+                text = _clean(node.text())
+                source_match = _SOURCE_RE.search(text)
+                if source_match is not None:
+                    source = source_match.group(1).strip()
+                else:
+                    plain_url = _HTTPS_URL_RE.search(text)
+                    if plain_url is not None:
+                        url = plain_url.group(0)
+                    elif not node.css_first("a") and text:
+                        body_parts.append(text)
+            for anchor in node.css("a"):
+                href = (anchor.attributes.get("href") or "").strip()
+                if href.startswith("https://"):
+                    url = href
+                    break
+            if url:
+                break
+            node = next_element(node)
+
+        match = _TITLE_NUM_RE.match(raw_title)
+        index = int(match.group(1)) if match else len(items) + 1
+        headline = match.group(2).strip() if match else raw_title
+        if category and headline and source and url:
+            items.append(
+                EventItem(
+                    index=index,
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=" ".join(body_parts),
+                    image_note=source,
+                )
+            )
+    return items
+
+
 def parse_events_digest(html: str) -> list[EventItem]:
     tree = HTMLParser(html or "")
     items: list[EventItem] = []
@@ -136,4 +204,4 @@ def parse_events_digest(html: str) -> list[EventItem]:
                 image_note=source,  # 新格式无头图说明，借该字段留档来源名
             )
         )
-    return items or _parse_current_markup(tree)
+    return items or _parse_current_markup(tree) or _parse_flat_h2_markup(tree)

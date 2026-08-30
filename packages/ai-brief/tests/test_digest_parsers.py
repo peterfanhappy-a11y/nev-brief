@@ -81,6 +81,38 @@ def test_events_parses_h3_email_markup() -> None:
     assert items[2].value_tag == "最吸引眼球"
 
 
+def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
+    html = """
+    <main>
+      <h2>海外大模型公司 · 最有价值</h2>
+      <h2>Anthropic lets Claude train Claude</h2>
+      <p>模型团队用新的训练流程降低研究成本。</p>
+      <p>来源：TechCrunch</p>
+      <p><a href="https://example.com/events/claude-trains-claude">https://example.com/events/claude-trains-claude</a></p>
+      <h2>Nvidia expands its AI advantage beyond GPUs</h2>
+      <p>面向更广泛用户的新工具上线。</p>
+      <p>来源：QbitAI</p>
+      <p>https://example.com/events/nvidia</p>
+      <h2>延伸阅读</h2>
+      <p>这不是今日 AI 新闻。</p>
+      <p>来源：Example News</p>
+      <p>https://example.com/events/related</p>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.index for item in items] == [1, 2]
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].image_note == "TechCrunch"
+    assert items[0].url == "https://example.com/events/claude-trains-claude"
+    assert "训练流程" in items[0].body
+    assert items[1].category == "海外大模型公司"
+    assert items[1].value_tag == "最有价值"
+    assert items[1].url == "https://example.com/events/nvidia"
+
+
 def test_research_parses_current_email_markup() -> None:
     papers = parse_research_digest(_current_research_html())
     assert len(papers) == 2
