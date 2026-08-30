@@ -42,6 +42,12 @@ printf '%s\n' "$*" >> "$TRACE_FILE"
 if [[ " ${*} " == *" python -m ai_brief generate "* && "${FAKE_GENERATE_STATUS:-0}" != "0" ]]; then
   exit "$FAKE_GENERATE_STATUS"
 fi
+if [[ " ${*} " == *" python -m ai_brief release "* && "${FAKE_RELEASE_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_RELEASE_STATUS"
+fi
+if [[ " ${*} " == *" python -m ai_brief deliver "* && "${FAKE_DELIVER_STATUS:-0}" != "0" ]]; then
+  exit "$FAKE_DELIVER_STATUS"
+fi
 exit 0
 FAKE_UV
 chmod +x "$TMP_DIR/bin/uv"
@@ -58,5 +64,28 @@ if grep -q 'python -m ai_brief approve --date' "$TMP_DIR/trace"; then
   echo 'approve ran after failed generate' >&2
   exit 1
 fi
+
+: > "$TMP_DIR/trace"
+TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
+  bash "$REL_RUN"
+grep -q 'python -m ai_brief release --date' "$TMP_DIR/trace"
+grep -q 'python -m ai_brief deliver --date' "$TMP_DIR/trace"
+: > "$TMP_DIR/trace"
+if TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
+  FAKE_RELEASE_STATUS=1 bash "$REL_RUN"; then
+  echo 'failed release unexpectedly succeeded' >&2
+  exit 1
+fi
+if grep -q 'python -m ai_brief deliver --date' "$TMP_DIR/trace"; then
+  echo 'deliver ran after failed release' >&2
+  exit 1
+fi
+: > "$TMP_DIR/trace"
+if TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
+  FAKE_DELIVER_STATUS=1 bash "$REL_RUN"; then
+  echo 'failed deliver unexpectedly succeeded' >&2
+  exit 1
+fi
+grep -q 'python -m ai_brief deliver --date' "$TMP_DIR/trace"
 
 echo 'launchd schedule contract ok'

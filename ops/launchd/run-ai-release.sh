@@ -16,8 +16,15 @@ UV_BIN="$(command -v uv 2>/dev/null || true)"
 cd "$PROJECT_ROOT"
 echo "[$(date -u +%FT%TZ)] release starting" | tee -a "$LOG_FILE"
 set +e
-TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief release --date "$(TZ=Asia/Shanghai date +%F)" 2>&1 | tee -a "$LOG_FILE"
+RUN_DATE="$(TZ=Asia/Shanghai date +%F)"
+TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief release --date "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE"
 code=${PIPESTATUS[0]}
+if [[ "$code" -eq 0 ]]; then
+    echo "[$(date -u +%FT%TZ)] deliver starting" | tee -a "$LOG_FILE"
+    TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief deliver --date "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE"
+    code=${PIPESTATUS[0]}
+    echo "[$(date -u +%FT%TZ)] deliver finished exit=$code" | tee -a "$LOG_FILE"
+fi
 set -e
 echo "[$(date -u +%FT%TZ)] release finished exit=$code" | tee -a "$LOG_FILE"
 exit "$code"
