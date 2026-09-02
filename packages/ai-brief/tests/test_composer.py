@@ -11,6 +11,7 @@ from ai_brief.schema import (
     DailyTip,
     DigestSection,
     DigestStory,
+    FeaturedItem,
     Theme,
     Tool,
     YesterdayTop,
@@ -22,6 +23,7 @@ def _today_ai() -> DigestSection:
         theme=Theme.MODEL_RESEARCH,
         header_image="https://img/today-ai.png",
         header_image_alt="Sonnet 5",
+        subtitle="今日 AI 副标题",
         stories=[
             DigestStory(
                 headline="Anthropic 发布 Claude Sonnet 5",
@@ -43,6 +45,7 @@ def _ai_masters() -> DigestSection:
     return DigestSection(
         theme=Theme.PRODUCT_TOOLS,
         header_image="https://img/masters.png",
+        subtitle="大神模块副标题",
         stories=[
             DigestStory(
                 headline="互联网广告商业模式已死",
@@ -111,6 +114,8 @@ def test_render_text_digest_sections() -> None:
     assert "《今日AI》" in text
     assert "Anthropic 发布 Claude Sonnet 5" in text
     assert "《AI大神》" in text
+    assert "今日 AI 副标题" not in text
+    assert "大神模块副标题" not in text
     assert "https://www.anthropic.com/news/claude-sonnet-5" in text
     assert "\n   原文：https://www.anthropic.com/news/claude-sonnet-5" in text
     assert "product=ai" in text
@@ -171,6 +176,17 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
             theme=Theme.AGENT_TOOLS,
             stories=[DigestStory(headline="工具标题", summary="工具摘要")],
         ),
+        featured=[
+            FeaturedItem(
+                theme=Theme.AI_ENGINEERING,
+                theme_label="AI工程",
+                headline="不应出现在邮件的工程内容",
+                details=["工程详情"],
+                significance="工程意义",
+                url="https://example.com/engineering-featured",
+                source_name="工程来源",
+            )
+        ],
     )
 
     html, text = render(
@@ -187,6 +203,8 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
     assert "AI工程" not in text
     assert "不应显示" not in html
     assert "不应显示" not in text
+    assert "不应出现在邮件的工程内容" not in html
+    assert "不应出现在邮件的工程内容" not in text
 
 
 def test_greeting_name_from_email() -> None:

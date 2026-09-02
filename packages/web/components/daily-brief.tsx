@@ -12,6 +12,12 @@ export function estimateChineseReadMinutes(text: string): number {
 
 type DigestSection = NonNullable<AiBriefContent["today_ai"]>;
 
+function visibleFeatured(content: AiBriefContent) {
+  return content.version === 2
+    ? content.featured.filter((item) => item.theme !== "ai_engineering")
+    : content.featured;
+}
+
 function issuePlainText(content: AiBriefContent): string {
   const parts = [
     content.subject,
@@ -33,7 +39,7 @@ function issuePlainText(content: AiBriefContent): string {
     }
   }
 
-  for (const item of content.featured) {
+  for (const item of visibleFeatured(content)) {
     parts.push(
       item.theme_label,
       item.headline,
@@ -150,6 +156,7 @@ function DigestBlock({
 export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const { content } = brief;
   const readMinutes = estimateBriefReadMinutes(content);
+  const featured = visibleFeatured(content);
   const digestSections: Array<{
     slotId: string;
     title: string;
@@ -213,11 +220,11 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
           ),
       )}
 
-      {content.featured.length > 0 && (
+      {featured.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">更多精选</h2>
           <div className="mt-6 space-y-8">
-            {content.featured.map((item, itemIndex) => (
+            {featured.map((item, itemIndex) => (
               <div key={`featured-${itemIndex}`}>
                 {item.og_image && (
                   // eslint-disable-next-line @next/next/no-img-element

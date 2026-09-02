@@ -206,6 +206,7 @@ function moduleLabels(content: AiBriefContent): string[] {
       ]).filter((label): label is string => Boolean(label));
 
   for (const item of content.featured) {
+    if (content.version === 2 && item.theme === "ai_engineering") continue;
     if (!labels.includes(item.theme_label)) labels.push(item.theme_label);
   }
 

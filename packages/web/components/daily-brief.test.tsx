@@ -155,7 +155,15 @@ const V2_BRIEF: AiPublishedBrief = {
         },
       ],
     },
-    featured: [],
+    featured: [
+      {
+        ...COMPLETE_BRIEF.content.featured[0],
+        theme: "ai_engineering",
+        theme_label: "AI工程",
+        headline: "不应出现在网页的工程内容",
+        article_id: "v2-engineering-featured",
+      },
+    ],
     tools: [],
     daily_tip: null,
     quick_hits: [],
@@ -243,6 +251,10 @@ describe("DailyBrief", () => {
     }
     expect(
       screen.queryByRole("heading", { name: "AI工程" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("AI工程")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "不应出现在网页的工程内容" }),
     ).not.toBeInTheDocument();
     for (let index = 1; index <= 5; index += 1) {
       expect(

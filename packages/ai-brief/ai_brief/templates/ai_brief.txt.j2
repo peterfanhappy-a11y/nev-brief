@@ -15,9 +15,9 @@ AIVIZENS 趋势 · {{ date_human }}
 {{ b }}
 {% endfor %}
 
-{% macro digest_section(section, title, legacy_raw_source=false) %}
+{% macro digest_section(section, title, legacy_raw_source=false, show_subtitle=false) %}
 {% if section %}
-《{{ title }}》{% if section.subtitle %} {{ section.subtitle }}{% endif %}
+《{{ title }}》{% if show_subtitle and section.subtitle %} {{ section.subtitle }}{% endif %}
 {% for s in section.stories %}
 {% if theme_label(section.theme) == 'AI工程' %}
 {% set field_label, field_separator, field_title = s.headline.partition('：') %}
@@ -37,9 +37,9 @@ AIVIZENS 趋势 · {{ date_human }}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 今日精选
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else ''), brief.version != 2) }}
-{{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else ''), brief.version != 2) }}
-{% for item in brief.featured %}
+{{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else ''), brief.version != 2, brief.version == 2) }}
+{{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else ''), brief.version != 2, brief.version == 2) }}
+{% for item in brief.featured if brief.version != 2 or item.theme != 'ai_engineering' %}
 【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}
 {% endfor %}  意义：{{ item.significance }}
@@ -49,9 +49,9 @@ AIVIZENS 趋势 · {{ date_human }}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 工具学习
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')) }}
-{% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '') }}{% endif %}
-{{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')) }}
+{{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else ''), false, true) }}
+{% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '', false, true) }}{% endif %}
+{{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else ''), false, true) }}
 {% if brief.tools %}
 [热门 AI 工具]
 {% for t in brief.tools %}  · {{ t.name }} — {{ t.one_liner }}（{{ t.url }}）
