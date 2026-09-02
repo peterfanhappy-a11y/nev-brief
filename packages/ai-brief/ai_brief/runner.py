@@ -339,6 +339,7 @@ def _build_brief_without_lookup(
         else ""
     )
     payload: dict[str, Any] = {
+        "version": 2,
         "brief_date": brief_date.isoformat(),
         "subject": subject[:44],
         "preheader": bundle.preheader[:60],
@@ -347,7 +348,7 @@ def _build_brief_without_lookup(
         "today_ai": bundle.today_ai,
         "ai_masters": bundle.ai_masters,
         "ai_research": bundle.ai_research,
-        "ai_engineering": bundle.ai_engineering,
+        "ai_engineering": None,
         "agent_tools": bundle.agent_tools,
         "featured": [],
         "yesterday_top": yesterday_top,

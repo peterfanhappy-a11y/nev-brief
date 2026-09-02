@@ -62,6 +62,16 @@ def _quality(*, passed: bool) -> QualityReport:
     )
 
 
+def test_new_generation_builds_a_four_module_v2_brief(monkeypatch: pytest.MonkeyPatch) -> None:
+    """New candidates must omit engineering while retained v1 reads stay untouched."""
+    monkeypatch.setattr(runner.config, "get_model", lambda: "test-model")
+
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, _bundle(), None)
+
+    assert brief.version == 2
+    assert brief.ai_engineering is None
+
+
 def _connection() -> MagicMock:
     connection = MagicMock()
     connection.commit.return_value = None

@@ -45,6 +45,7 @@ QUALITY_ISSUE_CODES = frozenset(
         "subject_blank",
         "summary_near_limit",
         "today_ai_story_count_below_minimum",
+        "today_ai_region_quota_invalid",
         "tool_module_count_below_minimum",
         "tool_module_missing",
         "url_not_https",
@@ -202,7 +203,7 @@ class Stage1Stats(BaseModel):
 class AiBriefContent(BaseModel):
     """完整简报文档。存 ai_daily_briefs.content。"""
 
-    version: int = SCHEMA_VERSION
+    version: Literal[1, 2] = SCHEMA_VERSION
     brief_date: str  # YYYY-MM-DD
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
