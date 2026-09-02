@@ -56,9 +56,9 @@ class TodayAIResult:
 
 
 _TODAY_AI_SYSTEM = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报，文风参考 The Rundown AI：专业、精炼、有洞见。
-给你今天 3 条最重要的 AI 新闻（已带标题与长正文）。请：
+给你今天 5 条最重要的 AI 新闻（已带标题与长正文）。请：
 1) 把每条正文压缩成 ≤150 字的精炼中文摘要，保留关键数字、结论与「为什么重要」，去掉冗余。公司/产品/模型名保留英文原名（Claude、GPT-5、OpenAI）。
-2) 基于这 3 条生成邮件的 subject / preheader / editorial / intro_bullets。
+2) 基于这 5 条生成邮件的 subject / preheader / editorial / intro_bullets。
 
 只输出严格 JSON：
 {
@@ -68,11 +68,11 @@ _TODAY_AI_SYSTEM = """你是 AIVIZENS 的 AI 行业主编，为中文读者写�
   "intro_bullets": ["每条一句话导读，emoji开头，≤20字（共3条，按给定顺序）"],
   "summaries": [ {"index": 1, "summary": "≤150字压缩摘要"} ]
 }
-summaries 必须含全部 3 条、index 用给定编号。只输出 JSON。"""
+summaries 必须含全部 5 条、index 用给定编号。只输出 JSON。"""
 
 
 def _today_ai_prompt(items: list[EventItem]) -> str:
-    parts = ["## 今天 3 条 AI 新闻"]
+    parts = ["## 今天 5 条 AI 新闻"]
     for it in items:
         parts.append(
             f"[index={it.index}] 分类={it.label}\n"
