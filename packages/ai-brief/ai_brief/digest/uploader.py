@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import time
 
 import httpx
 from nev_shared.config import get_settings
@@ -24,6 +25,12 @@ _EXT = {
 }
 
 
+def _is_transient_upload_error(error: Exception) -> bool:
+    if isinstance(error, httpx.TransportError):
+        return True
+    return isinstance(error, httpx.HTTPStatusError) and error.response.status_code >= 500
+
+
 def upload_image(
     data: bytes,
     content_type: str,
@@ -37,24 +44,30 @@ def upload_image(
     bucket = bucket or config.image_bucket()
     base = settings.supabase_url.rstrip("/")
     key = settings.supabase_service_role_key
-    try:
-        resp = httpx.post(
-            f"{base}/storage/v1/object/{bucket}/{path}",
-            headers={
-                "Authorization": f"Bearer {key}",
-                "apikey": key,
-                "Content-Type": content_type or "image/png",
-                "x-upsert": "true",
-                "cache-control": "3600",
-            },
-            content=data,
-            timeout=timeout,
-            trust_env=False,
-        )
-        resp.raise_for_status()
-    except Exception as e:  # noqa: BLE001
-        log.warning("ai_uploader.failed", path=path, err=str(e)[:200])
-        return None
+    for attempt in range(3):
+        try:
+            resp = httpx.post(
+                f"{base}/storage/v1/object/{bucket}/{path}",
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "apikey": key,
+                    "Content-Type": content_type or "image/png",
+                    "x-upsert": "true",
+                    "cache-control": "3600",
+                },
+                content=data,
+                timeout=timeout,
+                trust_env=False,
+            )
+            resp.raise_for_status()
+            break
+        except Exception as e:  # noqa: BLE001
+            if _is_transient_upload_error(e) and attempt < 2:
+                log.warning("ai_uploader.retrying", path=path, attempt=attempt + 1)
+                time.sleep(attempt + 1)
+                continue
+            log.warning("ai_uploader.failed", path=path, err=str(e)[:200])
+            return None
 
     public_url = f"{base}/storage/v1/object/public/{bucket}/{path}"
     log.info("ai_uploader.uploaded", path=path)

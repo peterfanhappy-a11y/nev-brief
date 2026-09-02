@@ -19,6 +19,9 @@ _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
 _SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
 _SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
 _SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
+_LINK_CARD_LABEL_RE = re.compile(
+    r"^(?P<label>.+?)\s+(?P<index>\d+)/\d+\s*[·•]\s*(?P<source>.+)$"
+)
 _FLAT_VALUE_TAGS = frozenset({"最有价值", "最吸引眼球"})
 
 
@@ -180,6 +183,53 @@ def _parse_flat_h2_markup(tree: HTMLParser) -> list[EventItem]:
     return items
 
 
+def _parse_link_card_h3_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse current h3 cards with a category/index/source label and direct link."""
+    items: list[EventItem] = []
+    for h3 in tree.css("h3"):
+        card = h3.parent
+        if card is None or card.tag != "div":
+            continue
+
+        children: list[Node] = []
+        child = card.child
+        while child is not None:
+            if not child.tag.startswith("-"):
+                children.append(child)
+            child = child.next
+        if [child.tag for child in children] != ["div", "h3", "p", "a"]:
+            continue
+
+        label_match = _LINK_CARD_LABEL_RE.match(_clean(children[0].text()))
+        if label_match is None:
+            continue
+        category, value_tag = _split_label(label_match.group("label"))
+        anchor = children[3]
+        url = (anchor.attributes.get("href") or "").strip()
+        if (
+            value_tag not in _FLAT_VALUE_TAGS
+            or "原文链接" not in _clean(anchor.text())
+            or not url.startswith("https://")
+        ):
+            continue
+
+        headline = _clean(h3.text())
+        body = _clean(children[2].text())
+        if headline and body:
+            items.append(
+                EventItem(
+                    index=int(label_match.group("index")),
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=body,
+                    image_note=label_match.group("source").strip(),
+                )
+            )
+    return items
+
+
 def parse_events_digest(html: str) -> list[EventItem]:
     tree = HTMLParser(html or "")
     items: list[EventItem] = []
@@ -221,4 +271,9 @@ def parse_events_digest(html: str) -> list[EventItem]:
                 image_note=source,  # 新格式无头图说明，借该字段留档来源名
             )
         )
-    return items or _parse_current_markup(tree) or _parse_flat_h2_markup(tree)
+    return (
+        items
+        or _parse_current_markup(tree)
+        or _parse_link_card_h3_markup(tree)
+        or _parse_flat_h2_markup(tree)
+    )

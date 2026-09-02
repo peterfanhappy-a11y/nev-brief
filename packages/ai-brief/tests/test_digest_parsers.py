@@ -81,6 +81,41 @@ def test_events_parses_h3_email_markup() -> None:
     assert items[2].value_tag == "最吸引眼球"
 
 
+def test_events_parses_link_card_h3_markup() -> None:
+    html = """
+    <main>
+      <div>
+        <div>海外大模型公司·最有价值 1/8 · TechCrunch</div>
+        <h3>OpenAI Astra 即将上线</h3>
+        <p>早期测试显示模型更擅长复杂 Agent 任务。</p>
+        <a href="https://example.com/events/astra">原文链接 →</a>
+      </div>
+      <div>
+        <div>海外·最吸引眼球 2/8 · VentureBeat</div>
+        <h3>模型多想一会能找回记忆</h3>
+        <p>延长推理时间显著提高事实召回率。</p>
+        <a href="https://example.com/events/memory">原文链接 →</a>
+      </div>
+      <div>
+        <div>海外·最吸引眼球 3/8 · Example News</div>
+        <h3>延伸阅读</h3>
+        <p>这不是新闻卡片。</p>
+        <a href="https://example.com/events/footer">查看详情</a>
+      </div>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.index for item in items] == [1, 2]
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].image_note == "TechCrunch"
+    assert items[0].url == "https://example.com/events/astra"
+    assert "复杂 Agent 任务" in items[0].body
+    assert items[1].value_tag == "最吸引眼球"
+
+
 def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     html = """
     <main>
