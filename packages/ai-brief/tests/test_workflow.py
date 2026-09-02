@@ -52,6 +52,53 @@ def _bundle() -> SimpleNamespace:
     )
 
 
+def _v2_bundle() -> SimpleNamespace:
+    def stories(prefix: str, count: int, *, labels: list[str] | None = None) -> list[DigestStory]:
+        return [
+            DigestStory(
+                headline=f"{prefix} {index}",
+                summary="Useful summary",
+                url=f"https://openai.com/{prefix.lower().replace(' ', '-')}-{index}",
+                label="" if labels is None else labels[index - 1],
+            )
+            for index in range(1, count + 1)
+        ]
+
+    return SimpleNamespace(
+        subject="A safe review candidate",
+        preheader="Five region-balanced updates",
+        editorial="A concise editorial for human review.",
+        intro_bullets=["One", "Two"],
+        today_ai=DigestSection(
+            theme=Theme.MODEL_RESEARCH,
+            header_image="https://img.test/x.jpg",
+            stories=stories(
+                "Today",
+                5,
+                labels=["海外新闻", "海外新闻", "海外新闻", "国内新闻", "国内新闻"],
+            ),
+        ),
+        ai_masters=DigestSection(
+            theme=Theme.PRODUCT_TOOLS,
+            header_image="https://img.test/x.jpg",
+            stories=stories("Masters", 3),
+        ),
+        ai_research=DigestSection(
+            theme=Theme.AI_RESEARCH,
+            header_image="https://img.test/x.jpg",
+            stories=stories("Research", 1),
+        ),
+        ai_engineering=None,
+        agent_tools=DigestSection(
+            theme=Theme.AGENT_TOOLS,
+            header_image=None,
+            stories=stories("Agents", 3),
+        ),
+        deepseek_complete=True,
+        qwen_complete=True,
+    )
+
+
 def _quality(*, passed: bool) -> QualityReport:
     blockers = () if passed else (QualityIssue("subject_blank", "unsafe detail", "subject"),)
     return QualityReport(
@@ -133,6 +180,43 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_not_called()
     else:
         alert.assert_called_once()
+
+
+async def test_v2_generation_stops_at_review_without_composing_or_delivering(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A balanced v2 candidate is stored for review only, never released or sent."""
+    connection = _connection()
+    adapter = _Adapter()
+    bundle = _v2_bundle()
+    monkeypatch.setattr(runner.config, "get_model", lambda: "test-model")
+
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "save_generated_brief") as save,
+        patch.object(storage, "finish_digest_run"),
+        patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
+        patch.object(runner, "validate_brief", return_value=_quality(passed=True)),
+        patch.object(composer, "compose_for_date") as compose,
+        patch("ai_brief.deliverer.send_pending") as deliver,
+    ):
+        result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+
+    saved_content = save.call_args.kwargs["content"]
+    assert result.status == "awaiting_approval"
+    assert result.exit_code == 0
+    assert saved_content["version"] == 2
+    assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
+        "海外新闻",
+        "海外新闻",
+        "海外新闻",
+        "国内新闻",
+        "国内新闻",
+    ]
+    compose.assert_not_called()
+    deliver.assert_not_called()
 
 
 async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> None:

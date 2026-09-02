@@ -12,7 +12,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION: Literal[1] = 1
 
 BriefStatus = Literal[
     "generating",
