@@ -18,12 +18,12 @@
 </td></tr>
 {% endmacro %}
 
-{% macro digest_section(section) %}
+{% macro digest_section(section, title) %}
 {% if section %}
 <tr><td style="padding:12px 0;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
     <tr><td style="padding:12px 18px 0;">
-      <span style="font-size:11px;font-weight:700;color:{{ theme_color(section.theme) }};letter-spacing:2px;">{{ theme_label(section.theme) }}</span>
+      <span style="font-size:11px;font-weight:700;color:{{ theme_color(section.theme) }};letter-spacing:2px;">{{ title }}</span>
     </td></tr>
     {% if section.header_image %}
     <tr><td style="padding:10px 0 4px;">
@@ -94,8 +94,8 @@
   <!-- 4. 今日精选：模块 1&2 digest 驱动（各一张卡=头图+多条 story）；
        模块 3&4 走 featured（内容生成待定义，暂空则省略）-->
   {{ section_header('今 日 精 选') }}
-  {{ digest_section(brief.today_ai) }}
-  {{ digest_section(brief.ai_masters) }}
+  {{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else '')) }}
+  {{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else '')) }}
   {% for item in brief.featured %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
@@ -130,11 +130,11 @@
 
   {{ divider() }}
 
-  <!-- ⑤ 工具学习：AI研究 / AI工程 / Agent工具（digest 驱动，同今日精选格式）-->
+  <!-- ⑤ 工具学习模块（digest 驱动，同今日精选格式）-->
   {{ section_header('工 具 学 习') }}
-  {{ digest_section(brief.ai_research) }}
-  {{ digest_section(brief.ai_engineering) }}
-  {{ digest_section(brief.agent_tools) }}
+  {{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')) }}
+  {% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '') }}{% endif %}
+  {{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')) }}
   {% if brief.tools %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">

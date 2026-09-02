@@ -130,6 +130,39 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
   },
 };
 
+const V2_BRIEF: AiPublishedBrief = {
+  ...COMPLETE_BRIEF,
+  content: {
+    ...COMPLETE_BRIEF.content,
+    version: 2,
+    today_ai: {
+      ...COMPLETE_BRIEF.content.today_ai!,
+      stories: Array.from({ length: 5 }, (_, index) => ({
+        headline: `今日 AI 第 ${index + 1} 条`,
+        summary: `第 ${index + 1} 条摘要`,
+        url: `https://example.com/today-${index + 1}`,
+        label: index < 3 ? "海外新闻" : "国内新闻",
+      })),
+    },
+    ai_engineering: {
+      ...COMPLETE_BRIEF.content.ai_engineering!,
+      stories: [
+        {
+          headline: "不应显示的工程内容",
+          summary: "v2 不渲染 AI工程。",
+          url: "",
+          label: "",
+        },
+      ],
+    },
+    featured: [],
+    tools: [],
+    daily_tip: null,
+    quick_hits: [],
+    yesterday_top: null,
+  },
+};
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -196,6 +229,28 @@ describe("estimateChineseReadMinutes", () => {
 });
 
 describe("DailyBrief", () => {
+  it("renders four numbered v2 modules and all five Today AI stories", () => {
+    vi.stubGlobal("React", React);
+    render(<DailyBrief brief={V2_BRIEF} />);
+
+    for (const title of [
+      "一、今日AI",
+      "二、AI大神",
+      "三、AI研究",
+      "四、Agent工具",
+    ]) {
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("heading", { name: "AI工程" }),
+    ).not.toBeInTheDocument();
+    for (let index = 1; index <= 5; index += 1) {
+      expect(
+        screen.getByRole("heading", { name: new RegExp(`今日 AI 第 ${index} 条`) }),
+      ).toBeInTheDocument();
+    }
+  });
+
   it("renders every current content module from the validated issue", () => {
     vi.stubGlobal("React", React);
     render(<DailyBrief brief={COMPLETE_BRIEF} />);

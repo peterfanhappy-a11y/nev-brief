@@ -115,7 +115,7 @@ const Stage1StatsSchema = z.object({
 });
 
 export const AiBriefContentSchema = z.object({
-  version: z.literal(1).default(1),
+  version: z.union([z.literal(1), z.literal(2)]).default(1),
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
@@ -190,13 +190,20 @@ function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
 }
 
 function moduleLabels(content: AiBriefContent): string[] {
-  const labels = [
-    content.today_ai && "今日AI",
-    content.ai_masters && "AI大神",
-    content.ai_research && "AI研究",
-    content.ai_engineering && "AI工程",
-    content.agent_tools && "Agent工具",
-  ].filter((label): label is string => Boolean(label));
+  const labels = (content.version === 2
+    ? [
+        content.today_ai && "今日AI",
+        content.ai_masters && "AI大神",
+        content.ai_research && "AI研究",
+        content.agent_tools && "Agent工具",
+      ]
+    : [
+        content.today_ai && "今日AI",
+        content.ai_masters && "AI大神",
+        content.ai_research && "AI研究",
+        content.ai_engineering && "AI工程",
+        content.agent_tools && "Agent工具",
+      ]).filter((label): label is string => Boolean(label));
 
   for (const item of content.featured) {
     if (!labels.includes(item.theme_label)) labels.push(item.theme_label);

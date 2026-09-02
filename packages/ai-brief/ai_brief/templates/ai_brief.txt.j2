@@ -15,20 +15,30 @@ AIVIZENS 趋势 · {{ date_human }}
 {{ b }}
 {% endfor %}
 
+{% macro digest_section(section, title, legacy_raw_source=false) %}
+{% if section %}
+《{{ title }}》{% if section.subtitle %} {{ section.subtitle }}{% endif %}
+{% for s in section.stories %}
+{% if theme_label(section.theme) == 'AI工程' %}
+{% set field_label, field_separator, field_title = s.headline.partition('：') %}
+{{ loop.index }}. {{ field_label }}：{% if field_separator %}{{ "\n" }}{{ field_title }}{% endif %}
+{% else %}
+{{ loop.index }}. {{ s.headline }}{% if s.label %} — {{ s.label }}{% endif %}
+{% endif %}
+
+   {{ s.summary }}
+{% if legacy_raw_source %}   原文：{{ s.url }}
+{% elif s.url %}   {{ section.cta_label or '原文' }}：{{ s.url }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
 ━━━━━━━━━━━━━━━━━━━━━━━━
 今日精选
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{% for section in [brief.today_ai, brief.ai_masters] %}
-{% if section %}
-《{{ theme_label(section.theme) }}》
-{% for s in section.stories %}
-{{ loop.index }}. {{ s.headline }}{% if s.label %} — {{ s.label }}{% endif %}
-
-   {{ s.summary }}
-   原文：{{ s.url }}
-{% endfor %}
-{% endif %}
-{% endfor %}
+{{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else ''), brief.version != 2) }}
+{{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else ''), brief.version != 2) }}
 {% for item in brief.featured %}
 【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}
@@ -39,24 +49,9 @@ AIVIZENS 趋势 · {{ date_human }}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 工具学习
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{% for section in [brief.ai_research, brief.ai_engineering, brief.agent_tools] %}
-{% if section %}
-《{{ theme_label(section.theme) }}》{% if section.subtitle %} {{ section.subtitle }}{% endif %}
-
-{% for s in section.stories %}
-{% if theme_label(section.theme) == 'AI工程' %}
-{% set field_label, field_separator, field_title = s.headline.partition('：') %}
-{{ loop.index }}. {{ field_label }}：{% if field_separator %}{{ "\n" }}{{ field_title }}{% endif %}
-{% else %}
-{{ loop.index }}. {{ s.headline }}{% if s.label %} — {{ s.label }}{% endif %}
-{% endif %}
-
-   {{ s.summary }}
-{% if s.url %}   {{ section.cta_label or '原文' }}：{{ s.url }}
-{% endif %}
-{% endfor %}
-{% endif %}
-{% endfor %}
+{{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')) }}
+{% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '') }}{% endif %}
+{{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')) }}
 {% if brief.tools %}
 [热门 AI 工具]
 {% for t in brief.tools %}  · {{ t.name }} — {{ t.one_liner }}（{{ t.url }}）

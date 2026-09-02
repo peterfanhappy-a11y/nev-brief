@@ -154,17 +154,24 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
     slotId: string;
     title: string;
     section: DigestSection | null;
-  }> = [
-    { slotId: "today-ai", title: "今日AI", section: content.today_ai },
-    { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
-    { slotId: "ai-research", title: "AI研究", section: content.ai_research },
-    {
-      slotId: "ai-engineering",
-      title: "AI工程",
-      section: content.ai_engineering,
-    },
-    { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
-  ];
+  }> = content.version === 2
+    ? [
+        { slotId: "today-ai", title: "一、今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "二、AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "三、AI研究", section: content.ai_research },
+        { slotId: "agent-tools", title: "四、Agent工具", section: content.agent_tools },
+      ]
+    : [
+        { slotId: "today-ai", title: "今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "AI研究", section: content.ai_research },
+        {
+          slotId: "ai-engineering",
+          title: "AI工程",
+          section: content.ai_engineering,
+        },
+        { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
+      ];
 
   return (
     <article className="rounded-2xl border border-gray-100 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-12">

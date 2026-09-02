@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import {
+  AiBriefContentSchema,
   getPublishedBrief,
   getPublishedNeighbors,
   isBriefDate,
@@ -133,6 +134,17 @@ describe("isBriefDate", () => {
   });
 });
 
+describe("AiBriefContentSchema", () => {
+  it("accepts both historical v1 and four-module v2 content", () => {
+    expect(AiBriefContentSchema.parse(content()).version).toBe(1);
+    expect(
+      AiBriefContentSchema.parse(
+        content({ version: 2, ai_engineering: null }),
+      ).version,
+    ).toBe(2);
+  });
+});
+
 describe("published brief queries", () => {
   beforeEach(() => {
     mocks.getSupabaseAdmin.mockReturnValue({ from: mocks.from });
@@ -190,6 +202,30 @@ describe("published brief queries", () => {
       ascending: false,
     });
     expect(query.limit).toHaveBeenCalledWith(6);
+  });
+
+  it("lists v2 summaries without the retired engineering module", async () => {
+    const query = new QueryBuilder({
+      data: [
+        row(
+          "2026-08-03",
+          "2026-08-03T00:00:00.000Z",
+          content({
+            version: 2,
+            ai_masters: section("product_tools"),
+            ai_research: section("ai_research"),
+            ai_engineering: section("ai_engineering"),
+            agent_tools: section("agent_tools"),
+          }),
+        ),
+      ],
+      error: null,
+    });
+    useQueries(query);
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { modules: ["今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
   });
 
   it("caps an explicit list limit at six and drops malformed whole rows", async () => {
