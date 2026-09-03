@@ -73,7 +73,7 @@ def test_select_today_ai_items_rejects_missing_domestic_quota() -> None:
 
 - [ ] **Step 2: Run the focused quota tests to verify they fail**
 
-Run: `uv run pytest packages/ai-brief/tests/test_digest_logic.py -q -p no:cacheprovider`  
+Run: `uv run pytest packages/ai-brief/tests/test_digest_logic.py -q -p no:cacheprovider`
 Expected: FAIL because `_select_today_ai_items` and the v2 quota behavior do not exist.
 
 - [ ] **Step 3: Implement minimal deterministic selection**
@@ -106,7 +106,7 @@ Update the Today AI prompt text from three supplied stories to five supplied sto
 
 - [ ] **Step 4: Run focused generator tests**
 
-Run: `uv run pytest packages/ai-brief/tests/test_digest_logic.py packages/ai-brief/tests/test_digest_input.py -q -p no:cacheprovider`  
+Run: `uv run pytest packages/ai-brief/tests/test_digest_logic.py packages/ai-brief/tests/test_digest_input.py -q -p no:cacheprovider`
 Expected: PASS, including quota ordering, label normalization, and no engineering section in a newly built bundle.
 
 - [ ] **Step 5: Commit the generator change**
@@ -152,7 +152,7 @@ def test_v1_keeps_legacy_today_ai_and_engineering_compatibility() -> None:
 
 - [ ] **Step 2: Run focused quality tests to verify they fail**
 
-Run: `uv run pytest packages/ai-brief/tests/test_quality.py packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`  
+Run: `uv run pytest packages/ai-brief/tests/test_quality.py packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`
 Expected: FAIL because the schema accepts only v1 and the quality gate has no v2 quota rule.
 
 - [ ] **Step 3: Implement version-aware validation**
@@ -177,7 +177,7 @@ For v2, require AI大神, AI研究, and Agent工具, and do not make the enginee
 
 - [ ] **Step 4: Run focused quality and workflow tests**
 
-Run: `uv run pytest packages/ai-brief/tests/test_quality.py packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`  
+Run: `uv run pytest packages/ai-brief/tests/test_quality.py packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`
 Expected: PASS, proving v2 blocks invalid ratios before release and v1 remains valid.
 
 - [ ] **Step 5: Commit the v2 contract and gate**
@@ -220,8 +220,8 @@ expect(screen.queryByRole("heading", { name: "AI工程" })).not.toBeInTheDocumen
 
 - [ ] **Step 2: Run focused renderer tests to verify they fail**
 
-Run: `pnpm --dir packages/web test -- daily-brief ai-briefs`  
-Run: `uv run pytest packages/ai-brief/tests/test_composer.py -q -p no:cacheprovider`  
+Run: `pnpm --dir packages/web test -- daily-brief ai-briefs`
+Run: `uv run pytest packages/ai-brief/tests/test_composer.py -q -p no:cacheprovider`
 Expected: FAIL because the TypeScript schema accepts only version 1 and templates derive titles only from theme labels.
 
 - [ ] **Step 3: Implement version-specific rendering**
@@ -245,8 +245,8 @@ In both Jinja templates, change the digest-section macro to receive a title para
 
 - [ ] **Step 4: Run focused renderer tests**
 
-Run: `pnpm --dir packages/web test -- daily-brief ai-briefs`  
-Run: `uv run pytest packages/ai-brief/tests/test_composer.py -q -p no:cacheprovider`  
+Run: `pnpm --dir packages/web test -- daily-brief ai-briefs`
+Run: `uv run pytest packages/ai-brief/tests/test_composer.py -q -p no:cacheprovider`
 Expected: PASS for both v1 compatibility and v2 four-module output.
 
 - [ ] **Step 5: Commit the renderer change**
@@ -302,7 +302,7 @@ assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
 ]
 ```
 
-Run: `uv run pytest packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`  
+Run: `uv run pytest packages/ai-brief/tests/test_workflow.py -q -p no:cacheprovider`
 Expected: PASS with no SMTP, Resend, or production release call.
 
 - [ ] **Step 3: Verify a quota-shortage date fails closed without delivery**
@@ -317,7 +317,7 @@ assert deliveries_for_date(connection, brief_date) == []
 
 - [ ] **Step 4: Review the diff and commit any direct test-only correction**
 
-Run: `git diff --check && git status --short`  
+Run: `git diff --check && git status --short`
 Expected: only files required by Tasks 1-3 and any direct test correction are present. Do not stage `ops/launchd/run-ai-generate.sh`, `ops/launchd/run-ai-release.sh`, or `ops/launchd/run-daily.sh`.
 
 - [ ] **Step 5: Request review before production publication**
@@ -329,4 +329,3 @@ Dispatch a code reviewer with the diff from the first implementation commit thro
 - **Spec coverage:** Task 1 implements five-item regional selection and normalized labels. Task 2 implements v2 persistence, removes future engineering requirements, and fail-closed quota validation. Task 3 preserves v1 and renders v2 identically across web and both email formats. Task 4 validates no-send behavior and production authorization boundaries.
 - **Placeholder scan:** The plan has no incomplete implementation markers, deferred implementation notes, or operator-supplied command arguments.
 - **Type consistency:** `_select_today_ai_items` consumes and returns `list[EventItem]`; `DigestBundle.today_ai` remains `DigestSection | None`; Python and Zod both accept content versions `1 | 2` with version 1 as the legacy default.
-

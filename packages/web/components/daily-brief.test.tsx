@@ -237,6 +237,53 @@ describe("estimateChineseReadMinutes", () => {
 });
 
 describe("DailyBrief", () => {
+  it("excludes hidden v2 engineering text from the displayed reading time", () => {
+    vi.stubGlobal("React", React);
+    const brief: AiPublishedBrief = {
+      ...V2_BRIEF,
+      content: {
+        ...V2_BRIEF.content,
+        subject: "",
+        editorial: "",
+        intro_bullets: [],
+        today_ai: {
+          ...V2_BRIEF.content.today_ai!,
+          subtitle: "",
+          stories: [
+            {
+              headline: "可见内容",
+              summary: "",
+              url: "",
+              label: "",
+            },
+          ],
+        },
+        ai_masters: null,
+        ai_research: null,
+        agent_tools: null,
+        ai_engineering: {
+          ...V2_BRIEF.content.ai_engineering!,
+          subtitle: "",
+          stories: [
+            {
+              headline: "隐".repeat(401),
+              summary: "",
+              url: "",
+              label: "",
+            },
+          ],
+        },
+      },
+    };
+
+    render(<DailyBrief brief={brief} />);
+
+    expect(screen.getByText(/\d+ 分钟阅读/)).toHaveTextContent("1 分钟阅读");
+    expect(
+      estimateBriefReadMinutes({ ...brief.content, version: 1 }),
+    ).toBe(2);
+  });
+
   it("renders four numbered v2 modules and all five Today AI stories", () => {
     vi.stubGlobal("React", React);
     render(<DailyBrief brief={V2_BRIEF} />);

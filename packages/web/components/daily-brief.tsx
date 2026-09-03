@@ -11,6 +11,32 @@ export function estimateChineseReadMinutes(text: string): number {
 }
 
 type DigestSection = NonNullable<AiBriefContent["today_ai"]>;
+type DigestSectionEntry = {
+  slotId: string;
+  title: string;
+  section: DigestSection | null;
+};
+
+function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
+  return content.version === 2
+    ? [
+        { slotId: "today-ai", title: "一、今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "二、AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "三、AI研究", section: content.ai_research },
+        { slotId: "agent-tools", title: "四、Agent工具", section: content.agent_tools },
+      ]
+    : [
+        { slotId: "today-ai", title: "今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "AI研究", section: content.ai_research },
+        {
+          slotId: "ai-engineering",
+          title: "AI工程",
+          section: content.ai_engineering,
+        },
+        { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
+      ];
+}
 
 function visibleFeatured(content: AiBriefContent) {
   return content.version === 2
@@ -25,13 +51,7 @@ function issuePlainText(content: AiBriefContent): string {
     ...content.intro_bullets,
   ];
 
-  for (const section of [
-    content.today_ai,
-    content.ai_masters,
-    content.ai_research,
-    content.ai_engineering,
-    content.agent_tools,
-  ]) {
+  for (const { section } of visibleDigestSections(content)) {
     if (!section) continue;
     parts.push(section.subtitle);
     for (const story of section.stories) {
@@ -157,28 +177,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const { content } = brief;
   const readMinutes = estimateBriefReadMinutes(content);
   const featured = visibleFeatured(content);
-  const digestSections: Array<{
-    slotId: string;
-    title: string;
-    section: DigestSection | null;
-  }> = content.version === 2
-    ? [
-        { slotId: "today-ai", title: "一、今日AI", section: content.today_ai },
-        { slotId: "ai-masters", title: "二、AI大神", section: content.ai_masters },
-        { slotId: "ai-research", title: "三、AI研究", section: content.ai_research },
-        { slotId: "agent-tools", title: "四、Agent工具", section: content.agent_tools },
-      ]
-    : [
-        { slotId: "today-ai", title: "今日AI", section: content.today_ai },
-        { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
-        { slotId: "ai-research", title: "AI研究", section: content.ai_research },
-        {
-          slotId: "ai-engineering",
-          title: "AI工程",
-          section: content.ai_engineering,
-        },
-        { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
-      ];
+  const digestSections = visibleDigestSections(content);
 
   return (
     <article className="rounded-2xl border border-gray-100 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-12">
