@@ -208,6 +208,8 @@ async def test_v2_generation_stops_at_review_without_composing_or_delivering(
     assert result.status == "awaiting_approval"
     assert result.exit_code == 0
     assert saved_content["version"] == 2
+    assert saved_content["ai_engineering"] is None
+    assert saved_content["featured"] == []
     assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
         "海外新闻",
         "海外新闻",

@@ -28,6 +28,12 @@ def _minimal_featured() -> FeaturedItem:
     )
 
 
+def _engineering_featured() -> FeaturedItem:
+    return _minimal_featured().model_copy(
+        update={"theme": Theme.AI_ENGINEERING, "theme_label": "AI工程"},
+    )
+
+
 def test_minimal_valid_brief() -> None:
     brief = AiBriefContent(
         brief_date="2026-07-02",
@@ -70,6 +76,32 @@ def test_featured_allows_empty() -> None:
     )
     assert brief.featured == []
     assert brief.today_ai is None and brief.ai_masters is None
+
+
+def test_v2_purges_engineering_featured_content() -> None:
+    brief = AiBriefContent(
+        version=2,
+        brief_date="2026-07-02",
+        subject="主题",
+        preheader="另外：x",
+        intro_bullets=["a"],
+        featured=[_engineering_featured()],
+    )
+
+    assert brief.featured == []
+
+
+def test_v1_keeps_engineering_featured_content() -> None:
+    brief = AiBriefContent(
+        version=1,
+        brief_date="2026-07-02",
+        subject="主题",
+        preheader="另外：x",
+        intro_bullets=["a"],
+        featured=[_engineering_featured()],
+    )
+
+    assert brief.featured[0].theme == Theme.AI_ENGINEERING
 
 
 def test_featured_max_four() -> None:

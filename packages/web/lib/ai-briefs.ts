@@ -137,6 +137,24 @@ export const AiBriefContentSchema = z.object({
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
   ),
+}).superRefine((content, context) => {
+  if (content.version !== 2) return;
+  if (content.ai_engineering) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v2 content cannot include AI engineering",
+      path: ["ai_engineering"],
+    });
+  }
+  content.featured.forEach((item, index) => {
+    if (item.theme === "ai_engineering") {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "v2 content cannot include AI engineering featured items",
+        path: ["featured", index, "theme"],
+      });
+    }
+  });
 });
 
 export type AiBriefContent = z.infer<typeof AiBriefContentSchema>;

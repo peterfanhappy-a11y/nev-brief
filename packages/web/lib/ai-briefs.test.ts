@@ -143,6 +143,30 @@ describe("AiBriefContentSchema", () => {
       ).version,
     ).toBe(2);
   });
+
+  it("rejects v2 content that still contains engineering data", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        ai_engineering: section("ai_engineering"),
+        featured: [
+          {
+            theme: "ai_engineering",
+            theme_label: "AI工程",
+            headline: "不应持久化的工程内容",
+            details: ["工程详情"],
+            significance: "工程意义",
+            url: "https://example.com/engineering-featured",
+            source_name: "工程来源",
+            og_image: null,
+            article_id: "engineering-featured",
+          },
+        ],
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
 });
 
 describe("published brief queries", () => {
@@ -214,21 +238,7 @@ describe("published brief queries", () => {
             version: 2,
             ai_masters: section("product_tools"),
             ai_research: section("ai_research"),
-            ai_engineering: section("ai_engineering"),
             agent_tools: section("agent_tools"),
-            featured: [
-              {
-                theme: "ai_engineering",
-                theme_label: "AI工程",
-                headline: "不应出现在摘要的工程内容",
-                details: ["工程详情"],
-                significance: "工程意义",
-                url: "https://example.com/engineering-featured",
-                source_name: "工程来源",
-                og_image: null,
-                article_id: "engineering-featured",
-              },
-            ],
           }),
         ),
       ],

@@ -144,26 +144,8 @@ const V2_BRIEF: AiPublishedBrief = {
         label: index < 3 ? "海外新闻" : "国内新闻",
       })),
     },
-    ai_engineering: {
-      ...COMPLETE_BRIEF.content.ai_engineering!,
-      stories: [
-        {
-          headline: "不应显示的工程内容",
-          summary: "v2 不渲染 AI工程。",
-          url: "",
-          label: "",
-        },
-      ],
-    },
-    featured: [
-      {
-        ...COMPLETE_BRIEF.content.featured[0],
-        theme: "ai_engineering",
-        theme_label: "AI工程",
-        headline: "不应出现在网页的工程内容",
-        article_id: "v2-engineering-featured",
-      },
-    ],
+    ai_engineering: null,
+    featured: [],
     tools: [],
     daily_tip: null,
     quick_hits: [],
@@ -237,7 +219,7 @@ describe("estimateChineseReadMinutes", () => {
 });
 
 describe("DailyBrief", () => {
-  it("excludes hidden v2 engineering text from the displayed reading time", () => {
+  it("uses the stored v2 four-module content for displayed reading time", () => {
     vi.stubGlobal("React", React);
     const brief: AiPublishedBrief = {
       ...V2_BRIEF,
@@ -261,27 +243,12 @@ describe("DailyBrief", () => {
         ai_masters: null,
         ai_research: null,
         agent_tools: null,
-        ai_engineering: {
-          ...V2_BRIEF.content.ai_engineering!,
-          subtitle: "",
-          stories: [
-            {
-              headline: "隐".repeat(401),
-              summary: "",
-              url: "",
-              label: "",
-            },
-          ],
-        },
       },
     };
 
     render(<DailyBrief brief={brief} />);
 
     expect(screen.getByText(/\d+ 分钟阅读/)).toHaveTextContent("1 分钟阅读");
-    expect(
-      estimateBriefReadMinutes({ ...brief.content, version: 1 }),
-    ).toBe(2);
   });
 
   it("renders four numbered v2 modules and all five Today AI stories", () => {
@@ -298,10 +265,6 @@ describe("DailyBrief", () => {
     }
     expect(
       screen.queryByRole("heading", { name: "AI工程" }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("AI工程")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "不应出现在网页的工程内容" }),
     ).not.toBeInTheDocument();
     for (let index = 1; index <= 5; index += 1) {
       expect(

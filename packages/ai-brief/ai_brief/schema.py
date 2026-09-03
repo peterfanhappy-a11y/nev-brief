@@ -10,7 +10,7 @@ import re
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 SCHEMA_VERSION: Literal[1] = 1
 
@@ -224,3 +224,12 @@ class AiBriefContent(BaseModel):
     yesterday_top: YesterdayTop | None = None
     model: str | None = None
     stage1_stats: Stage1Stats | None = None
+
+    @model_validator(mode="after")
+    def remove_v2_engineering_content(self) -> AiBriefContent:
+        if self.version == 2:
+            self.ai_engineering = None
+            self.featured = [
+                item for item in self.featured if item.theme != Theme.AI_ENGINEERING
+            ]
+        return self

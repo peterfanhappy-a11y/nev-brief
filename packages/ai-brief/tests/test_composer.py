@@ -199,6 +199,8 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
     for title in ("一、今日AI", "二、AI大神", "三、AI研究", "四、Agent工具"):
         assert title in html
         assert f"《{title}》" in text
+    assert brief.ai_engineering is None
+    assert brief.featured == []
     assert "AI工程" not in html
     assert "AI工程" not in text
     assert "不应显示" not in html
