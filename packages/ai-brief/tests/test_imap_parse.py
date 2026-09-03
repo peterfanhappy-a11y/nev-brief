@@ -1,12 +1,13 @@
 """imap_client.parse_message —— MIME 解析纯函数测试（不触网）。"""
 from __future__ import annotations
 
+import imaplib
 from datetime import UTC, datetime, timedelta, timezone
 from email.message import EmailMessage
 from unittest.mock import patch
 
+import ai_brief.digest.imap_client as imap_client
 import pytest
-from ai_brief.digest import imap_client
 from ai_brief.digest.imap_client import fetch_latest, parse_message
 
 
@@ -271,7 +272,7 @@ def test_fetch_latest_retries_one_imap_abort_then_returns_email() -> None:
     with patch.object(
         imap_client,
         "_connect",
-        side_effect=[imap_client.imaplib.IMAP4.abort("socket error: EOF"), fake],
+        side_effect=[imaplib.IMAP4.abort("socket error: EOF"), fake],
     ):
         result = fetch_latest(
             "digest@example.test",
@@ -304,7 +305,7 @@ def test_fetch_latest_retries_transient_connection_failures_before_returning_ema
         imap_client,
         "_connect",
         side_effect=[
-            imap_client.imaplib.IMAP4.abort("socket error: EOF"),
+            imaplib.IMAP4.abort("socket error: EOF"),
             OSError("TLS connection reset"),
             fake,
         ],

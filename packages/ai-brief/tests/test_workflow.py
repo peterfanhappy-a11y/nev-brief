@@ -9,9 +9,13 @@ from typing import Any, Literal, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
+import ai_brief.composer as composer
+import ai_brief.config as config
+import ai_brief.runner as runner
+import ai_brief.storage as storage
 import psycopg
 import pytest
-from ai_brief import composer, runner, storage
+from ai_brief.digest.generate import DigestBundle
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
 from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, Theme
@@ -36,8 +40,8 @@ def _section(theme: Theme, *, header_image: str | None = "https://img.test/x.jpg
     )
 
 
-def _bundle() -> SimpleNamespace:
-    return SimpleNamespace(
+def _bundle() -> DigestBundle:
+    return DigestBundle(
         subject="A safe review candidate",
         preheader="Three important updates",
         editorial="A concise editorial for human review.",
@@ -52,7 +56,7 @@ def _bundle() -> SimpleNamespace:
     )
 
 
-def _v2_bundle() -> SimpleNamespace:
+def _v2_bundle() -> DigestBundle:
     def stories(prefix: str, count: int, *, labels: list[str] | None = None) -> list[DigestStory]:
         return [
             DigestStory(
@@ -64,7 +68,7 @@ def _v2_bundle() -> SimpleNamespace:
             for index in range(1, count + 1)
         ]
 
-    return SimpleNamespace(
+    return DigestBundle(
         subject="A safe review candidate",
         preheader="Five region-balanced updates",
         editorial="A concise editorial for human review.",
@@ -111,7 +115,7 @@ def _quality(*, passed: bool) -> QualityReport:
 
 def test_new_generation_builds_a_four_module_v2_brief(monkeypatch: pytest.MonkeyPatch) -> None:
     """New candidates must omit engineering while retained v1 reads stay untouched."""
-    monkeypatch.setattr(runner.config, "get_model", lambda: "test-model")
+    monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     brief = runner._build_brief_without_lookup(BRIEF_DATE, _bundle(), None)
 
@@ -189,7 +193,7 @@ async def test_v2_generation_stops_at_review_without_composing_or_delivering(
     connection = _connection()
     adapter = _Adapter()
     bundle = _v2_bundle()
-    monkeypatch.setattr(runner.config, "get_model", lambda: "test-model")
+    monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),

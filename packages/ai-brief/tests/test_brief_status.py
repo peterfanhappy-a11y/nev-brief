@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 
+import ai_brief.storage as storage
 import pytest
-from ai_brief import storage
 from ai_brief.schema import AiBriefContent
 
 
@@ -142,7 +143,7 @@ def test_upsert_daily_brief_normalizes_v2_content_before_storage() -> None:
     )
 
     _sql, params = cursor.execute.call_args.args
-    stored = storage.json.loads(params[1])
+    stored = json.loads(params[1])
     assert stored["ai_engineering"] is None
     assert stored["featured"] == []
     assert stored["tools"] == []
@@ -162,7 +163,7 @@ def test_upsert_daily_brief_normalizes_v2_content_before_storage() -> None:
     )
 
     _sql, params = cursor.execute.call_args.args
-    stored = storage.json.loads(params[0])
+    stored = json.loads(params[0])
     assert stored["ai_engineering"] is None
     assert stored["featured"] == []
     assert stored["tools"] == []
