@@ -96,7 +96,7 @@
   {{ section_header('今 日 精 选') }}
   {{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else '')) }}
   {{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else '')) }}
-  {% for item in brief.featured if brief.version != 2 or item.theme != 'ai_engineering' %}
+  {% for item in brief.featured if brief.version != 2 %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
       <!-- 分类标签 kicker -->

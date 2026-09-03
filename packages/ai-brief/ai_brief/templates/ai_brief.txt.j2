@@ -39,7 +39,7 @@ AIVIZENS 趋势 · {{ date_human }}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else ''), brief.version != 2, brief.version == 2) }}
 {{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else ''), brief.version != 2, brief.version == 2) }}
-{% for item in brief.featured if brief.version != 2 or item.theme != 'ai_engineering' %}
+{% for item in brief.featured if brief.version != 2 %}
 【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}
 {% endfor %}  意义：{{ item.significance }}

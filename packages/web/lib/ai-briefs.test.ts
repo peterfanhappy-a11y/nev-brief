@@ -167,6 +167,29 @@ describe("AiBriefContentSchema", () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  it("rejects v2 content that contains non-engineering featured items", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        featured: [
+          {
+            theme: "model_research",
+            theme_label: "模型研究",
+            headline: "不应持久化的精选内容",
+            details: ["精选详情"],
+            significance: "精选意义",
+            url: "https://example.com/featured",
+            source_name: "精选来源",
+            og_image: null,
+            article_id: "featured",
+          },
+        ],
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
 });
 
 describe("published brief queries", () => {

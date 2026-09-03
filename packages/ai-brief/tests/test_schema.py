@@ -78,30 +78,33 @@ def test_featured_allows_empty() -> None:
     assert brief.today_ai is None and brief.ai_masters is None
 
 
-def test_v2_purges_engineering_featured_content() -> None:
+def test_v2_purges_all_featured_content() -> None:
     brief = AiBriefContent(
         version=2,
         brief_date="2026-07-02",
         subject="主题",
         preheader="另外：x",
         intro_bullets=["a"],
-        featured=[_engineering_featured()],
+        featured=[_minimal_featured(), _engineering_featured()],
     )
 
     assert brief.featured == []
 
 
-def test_v1_keeps_engineering_featured_content() -> None:
+def test_v1_keeps_featured_content() -> None:
     brief = AiBriefContent(
         version=1,
         brief_date="2026-07-02",
         subject="主题",
         preheader="另外：x",
         intro_bullets=["a"],
-        featured=[_engineering_featured()],
+        featured=[_minimal_featured(), _engineering_featured()],
     )
 
-    assert brief.featured[0].theme == Theme.AI_ENGINEERING
+    assert [item.theme for item in brief.featured] == [
+        Theme.MODEL_RESEARCH,
+        Theme.AI_ENGINEERING,
+    ]
 
 
 def test_featured_max_four() -> None:

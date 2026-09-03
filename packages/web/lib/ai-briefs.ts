@@ -146,15 +146,13 @@ export const AiBriefContentSchema = z.object({
       path: ["ai_engineering"],
     });
   }
-  content.featured.forEach((item, index) => {
-    if (item.theme === "ai_engineering") {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "v2 content cannot include AI engineering featured items",
-        path: ["featured", index, "theme"],
-      });
-    }
-  });
+  if (content.featured.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v2 content cannot include featured items",
+      path: ["featured"],
+    });
+  }
 });
 
 export type AiBriefContent = z.infer<typeof AiBriefContentSchema>;
@@ -223,9 +221,10 @@ function moduleLabels(content: AiBriefContent): string[] {
         content.agent_tools && "Agent工具",
       ]).filter((label): label is string => Boolean(label));
 
-  for (const item of content.featured) {
-    if (content.version === 2 && item.theme === "ai_engineering") continue;
-    if (!labels.includes(item.theme_label)) labels.push(item.theme_label);
+  if (content.version !== 2) {
+    for (const item of content.featured) {
+      if (!labels.includes(item.theme_label)) labels.push(item.theme_label);
+    }
   }
 
   return labels;

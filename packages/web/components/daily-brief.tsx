@@ -39,9 +39,7 @@ function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
 }
 
 function visibleFeatured(content: AiBriefContent) {
-  return content.version === 2
-    ? content.featured.filter((item) => item.theme !== "ai_engineering")
-    : content.featured;
+  return content.version === 2 ? [] : content.featured;
 }
 
 function issuePlainText(content: AiBriefContent): string {

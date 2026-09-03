@@ -229,7 +229,5 @@ class AiBriefContent(BaseModel):
     def remove_v2_engineering_content(self) -> AiBriefContent:
         if self.version == 2:
             self.ai_engineering = None
-            self.featured = [
-                item for item in self.featured if item.theme != Theme.AI_ENGINEERING
-            ]
+            self.featured = []
         return self

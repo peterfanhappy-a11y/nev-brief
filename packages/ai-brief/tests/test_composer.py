@@ -178,13 +178,13 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
         ),
         featured=[
             FeaturedItem(
-                theme=Theme.AI_ENGINEERING,
-                theme_label="AI工程",
-                headline="不应出现在邮件的工程内容",
-                details=["工程详情"],
-                significance="工程意义",
-                url="https://example.com/engineering-featured",
-                source_name="工程来源",
+                theme=Theme.MODEL_RESEARCH,
+                theme_label="模型研究",
+                headline="不应出现在邮件的精选内容",
+                details=["精选详情"],
+                significance="精选意义",
+                url="https://example.com/featured",
+                source_name="精选来源",
             )
         ],
     )
@@ -205,8 +205,8 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
     assert "AI工程" not in text
     assert "不应显示" not in html
     assert "不应显示" not in text
-    assert "不应出现在邮件的工程内容" not in html
-    assert "不应出现在邮件的工程内容" not in text
+    assert "不应出现在邮件的精选内容" not in html
+    assert "不应出现在邮件的精选内容" not in text
 
 
 def test_greeting_name_from_email() -> None:
