@@ -66,12 +66,14 @@ function issuePlainText(content: AiBriefContent): string {
       item.source_name,
     );
   }
-  for (const tool of content.tools) parts.push(tool.name, tool.one_liner);
-  if (content.daily_tip) {
-    parts.push(content.daily_tip.title, content.daily_tip.body);
+  if (content.version !== 2) {
+    for (const tool of content.tools) parts.push(tool.name, tool.one_liner);
+    if (content.daily_tip) {
+      parts.push(content.daily_tip.title, content.daily_tip.body);
+    }
+    for (const hit of content.quick_hits) parts.push(hit.text);
+    if (content.yesterday_top) parts.push(content.yesterday_top.headline);
   }
-  for (const hit of content.quick_hits) parts.push(hit.text);
-  if (content.yesterday_top) parts.push(content.yesterday_top.headline);
 
   return parts.join("");
 }
@@ -257,7 +259,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.tools.length > 0 && (
+      {content.version !== 2 && content.tools.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">AI工具</h2>
           <ul className="mt-5 space-y-4">
@@ -273,7 +275,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.daily_tip && (
+      {content.version !== 2 && content.daily_tip && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">每日技巧</h2>
           <div className="mt-5 rounded-xl bg-amber-50 p-5">
@@ -283,7 +285,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.quick_hits.length > 0 && (
+      {content.version !== 2 && content.quick_hits.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">快讯</h2>
           <ul className="mt-5 space-y-3">
@@ -300,7 +302,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.yesterday_top && (
+      {content.version !== 2 && content.yesterday_top && (
         <section className="border-t border-gray-100 pt-10">
           <h2 className="text-2xl font-bold text-gray-900">昨日焦点</h2>
           <p className="mt-4 font-medium">

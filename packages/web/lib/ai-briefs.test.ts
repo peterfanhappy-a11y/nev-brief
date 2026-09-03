@@ -190,6 +190,29 @@ describe("AiBriefContentSchema", () => {
 
     expect(parsed.success).toBe(false);
   });
+
+  it("rejects v2 content that contains legacy auxiliary sections", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        tools: [
+          {
+            name: "旧工具",
+            one_liner: "旧工具说明",
+            url: "https://example.com/tool",
+          },
+        ],
+        daily_tip: { title: "旧技巧", body: "旧技巧说明" },
+        quick_hits: [{ text: "旧快讯", url: "https://example.com/hit" }],
+        yesterday_top: {
+          headline: "昨日焦点",
+          url: "https://example.com/yesterday",
+        },
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
 });
 
 describe("published brief queries", () => {

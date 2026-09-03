@@ -146,10 +146,12 @@ const V2_BRIEF: AiPublishedBrief = {
     },
     ai_engineering: null,
     featured: [],
-    tools: [],
-    daily_tip: null,
-    quick_hits: [],
-    yesterday_top: null,
+    tools: [
+      { name: "不应显示的旧工具", one_liner: "旧工具说明", url: "https://example.com/tool" },
+    ],
+    daily_tip: { title: "不应显示的旧技巧", body: "旧技巧说明" },
+    quick_hits: [{ text: "不应显示的旧快讯", url: "https://example.com/hit" }],
+    yesterday_top: { headline: "不应显示的昨日焦点", url: "https://example.com/yesterday" },
   },
 };
 
@@ -266,6 +268,14 @@ describe("DailyBrief", () => {
     expect(
       screen.queryByRole("heading", { name: "AI工程" }),
     ).not.toBeInTheDocument();
+    for (const legacyText of [
+      "不应显示的旧工具",
+      "不应显示的旧技巧",
+      "不应显示的旧快讯",
+      "不应显示的昨日焦点",
+    ]) {
+      expect(screen.queryByText(legacyText)).not.toBeInTheDocument();
+    }
     for (let index = 1; index <= 5; index += 1) {
       expect(
         screen.getByRole("heading", { name: new RegExp(`今日 AI 第 ${index} 条`) }),

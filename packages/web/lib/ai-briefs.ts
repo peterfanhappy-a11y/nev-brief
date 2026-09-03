@@ -153,6 +153,18 @@ export const AiBriefContentSchema = z.object({
       path: ["featured"],
     });
   }
+  if (
+    content.tools.length > 0 ||
+    content.daily_tip ||
+    content.quick_hits.length > 0 ||
+    content.yesterday_top
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v2 content cannot include legacy auxiliary sections",
+      path: ["tools"],
+    });
+  }
 });
 
 export type AiBriefContent = z.infer<typeof AiBriefContentSchema>;

@@ -52,16 +52,16 @@ AIVIZENS 趋势 · {{ date_human }}
 {{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else ''), false, true) }}
 {% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '', false, true) }}{% endif %}
 {{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else ''), false, true) }}
-{% if brief.tools %}
+{% if brief.version != 2 and brief.tools %}
 [热门 AI 工具]
 {% for t in brief.tools %}  · {{ t.name }} — {{ t.one_liner }}（{{ t.url }}）
 {% endfor %}
 {% endif %}
-{% if brief.daily_tip %}
+{% if brief.version != 2 and brief.daily_tip %}
 [热门 AI 课堂]
   {{ brief.daily_tip.title }}{{ brief.daily_tip.body }}
 {% endif %}
-{% if brief.yesterday_top %}
+{% if brief.version != 2 and brief.yesterday_top %}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 如果您错过了：{{ brief.yesterday_top.headline }}
 {{ brief.yesterday_top.url }}

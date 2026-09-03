@@ -230,4 +230,8 @@ class AiBriefContent(BaseModel):
         if self.version == 2:
             self.ai_engineering = None
             self.featured = []
+            self.tools = []
+            self.daily_tip = None
+            self.quick_hits = []
+            self.yesterday_top = None
         return self

@@ -135,7 +135,7 @@
   {{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')) }}
   {% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '') }}{% endif %}
   {{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')) }}
-  {% if brief.tools %}
+  {% if brief.version != 2 and brief.tools %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
     <tr><td style="padding:16px 20px;">
@@ -148,7 +148,7 @@
     </td></tr></table>
   </td></tr>
   {% endif %}
-  {% if brief.daily_tip %}
+  {% if brief.version != 2 and brief.daily_tip %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
     <tr><td style="padding:16px 20px;">
@@ -161,7 +161,7 @@
   {% endif %}
 
   <!-- ⑥ 昨日最热 -->
-  {% if brief.yesterday_top %}
+  {% if brief.version != 2 and brief.yesterday_top %}
   {{ divider() }}
   <tr><td style="padding:18px 28px;">
     <span style="font-size:13px;font-weight:700;color:#6b7280;">如果您错过了：</span>

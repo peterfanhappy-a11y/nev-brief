@@ -12,6 +12,7 @@ from ai_brief.schema import (
     DigestSection,
     DigestStory,
     FeaturedItem,
+    QuickHit,
     Theme,
     Tool,
     YesterdayTop,
@@ -176,6 +177,10 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
             theme=Theme.AGENT_TOOLS,
             stories=[DigestStory(headline="工具标题", summary="工具摘要")],
         ),
+        tools=[Tool(name="不应显示的旧工具", one_liner="旧工具说明", url="https://example.com/tool")],
+        daily_tip=DailyTip(title="不应显示的旧技巧", body="旧技巧说明"),
+        quick_hits=[QuickHit(text="不应显示的旧快讯", url="https://example.com/hit")],
+        yesterday_top=YesterdayTop(headline="不应显示的昨日焦点", url="https://example.com/yesterday"),
         featured=[
             FeaturedItem(
                 theme=Theme.MODEL_RESEARCH,
@@ -201,12 +206,24 @@ def test_render_v2_uses_numbered_sections_without_engineering() -> None:
         assert f"《{title}》" in text
     assert brief.ai_engineering is None
     assert brief.featured == []
+    assert brief.tools == []
+    assert brief.daily_tip is None
+    assert brief.quick_hits == []
+    assert brief.yesterday_top is None
     assert "AI工程" not in html
     assert "AI工程" not in text
     assert "不应显示" not in html
     assert "不应显示" not in text
     assert "不应出现在邮件的精选内容" not in html
     assert "不应出现在邮件的精选内容" not in text
+    for legacy_text in (
+        "不应显示的旧工具",
+        "不应显示的旧技巧",
+        "不应显示的旧快讯",
+        "不应显示的昨日焦点",
+    ):
+        assert legacy_text not in html
+        assert legacy_text not in text
 
 
 def test_greeting_name_from_email() -> None:
