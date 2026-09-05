@@ -80,8 +80,19 @@ test("published archive renders complete content and public metadata", async ({
     "今日AI Fixture 新闻",
     "AI大神 Fixture 新闻",
     "AI研究 Fixture 新闻",
-    "AI工程 Fixture 新闻",
     "Agent工具 Fixture 新闻",
+  ]) {
+    await expect(
+      page.getByRole("heading", { name: `1. ${text}`, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole("heading", {
+      name: "1. AI工程 Fixture 新闻：",
+      exact: true,
+    }),
+  ).toBeVisible();
+  for (const text of [
     "Legacy 精选 Fixture",
     "Fixture AI Tool",
     "Fixture 每日技巧",
