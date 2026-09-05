@@ -3,6 +3,14 @@ import { getSupabaseAdmin } from "./supabase";
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 
+function redactTestDiagnostic(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted]")
+    .replace(/\b[a-f0-9]{64}\b/gi, "[redacted]")
+    .replace(/\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted]");
+}
+
 interface RateLimitRpcRow {
   allowed: boolean;
   retry_after_seconds: number;
@@ -38,14 +46,32 @@ export async function checkSubscriptionRateLimit(
     throw new Error("Subscription rate limiting requires a valid timestamp");
   }
 
-  const { data, error } = await getSupabaseAdmin().rpc(
-    "check_ai_subscription_rate_limit",
-    {
+  let result: Awaited<ReturnType<ReturnType<typeof getSupabaseAdmin>["rpc"]>>;
+  try {
+    result = await getSupabaseAdmin().rpc("check_ai_subscription_rate_limit", {
       ip_hash: input.ipHash,
       email_hash: input.emailHash,
       now_at: input.now.toISOString(),
-    },
-  );
+    });
+  } catch (error) {
+    if (process.env.AIVIZENS_DISPOSABLE_STACK === "true") {
+      const cause = error instanceof Error ? error.cause : null;
+      console.error("[test rate-limit RPC exception]", {
+        name: error instanceof Error ? error.name : typeof error,
+        message: redactTestDiagnostic(error instanceof Error ? error.message : null),
+        causeCode:
+          typeof cause === "object" && cause && "code" in cause
+            ? redactTestDiagnostic(cause.code)
+            : null,
+        causeMessage:
+          typeof cause === "object" && cause && "message" in cause
+            ? redactTestDiagnostic(cause.message)
+            : null,
+      });
+    }
+    throw new Error("Subscription rate-limit storage failed");
+  }
+  const { data, error } = result;
 
   const row = Array.isArray(data) ? (data[0] as RateLimitRpcRow | undefined) : undefined;
   if (
@@ -55,6 +81,15 @@ export async function checkSubscriptionRateLimit(
     !Number.isInteger(row.retry_after_seconds) ||
     row.retry_after_seconds < 0
   ) {
+    if (process.env.AIVIZENS_DISPOSABLE_STACK === "true") {
+      console.error("[test rate-limit RPC failure]", {
+        hasError: Boolean(error),
+        errorCode: typeof error === "object" && error && "code" in error ? error.code : null,
+        errorMessage: typeof error === "object" && error && "message" in error ? error.message : null,
+        dataKind: data === null ? "null" : Array.isArray(data) ? "array" : typeof data,
+        rowCount: Array.isArray(data) ? data.length : null,
+      });
+    }
     throw new Error("Subscription rate-limit storage failed");
   }
 

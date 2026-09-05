@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import UUID
 
+import ai_brief.storage as storage
 import pytest
-from ai_brief import storage
+from ai_brief.schema import AiBriefContent
 
 
 def _connection(
@@ -97,3 +100,73 @@ def test_upsert_daily_brief_reports_conflict_for_protected_status(
     assert cursor.fetchone.call_count == 1
     _sql, params = cursor.execute.call_args.args
     assert protected_status not in params[-3:]
+
+
+def test_upsert_daily_brief_normalizes_v2_content_before_storage() -> None:
+    connection, cursor = _connection(fetchone=("generating",))
+    content = AiBriefContent(
+        version=2,
+        brief_date="2026-08-03",
+        subject="主题",
+        preheader="另外：x",
+        intro_bullets=["a"],
+    ).model_dump(mode="json")
+    content.update(
+        {
+            "ai_engineering": {
+                "theme": "ai_engineering",
+                "stories": [{"headline": "工程", "summary": "摘要"}],
+            },
+            "featured": [
+                {
+                    "theme": "model_research",
+                    "theme_label": "模型研究",
+                    "headline": "精选",
+                    "details": ["详情"],
+                    "significance": "意义",
+                    "url": "https://example.com/featured",
+                    "source_name": "来源",
+                }
+            ],
+            "tools": [{"name": "旧工具", "one_liner": "旧工具说明", "url": "https://example.com/tool"}],
+            "daily_tip": {"title": "旧技巧", "body": "旧技巧说明"},
+            "quick_hits": [{"text": "旧快讯", "url": "https://example.com/hit"}],
+            "yesterday_top": {"headline": "昨日焦点", "url": "https://example.com/yesterday"},
+        }
+    )
+
+    storage.upsert_daily_brief(
+        connection,
+        brief_date=date(2026, 8, 3),
+        content=content,
+        model="test-model",
+    )
+
+    _sql, params = cursor.execute.call_args.args
+    stored = json.loads(params[1])
+    assert stored["ai_engineering"] is None
+    assert stored["featured"] == []
+    assert stored["tools"] == []
+    assert stored["daily_tip"] is None
+    assert stored["quick_hits"] == []
+    assert stored["yesterday_top"] is None
+
+    storage.save_generated_brief(
+        connection,
+        brief_date=date(2026, 8, 3),
+        content=content,
+        model="test-model",
+        digest_sources={},
+        quality_report={"passed": True, "blockers": [], "warnings": [], "metrics": {}},
+        source_run_id=UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690"),
+        status="awaiting_approval",
+    )
+
+    _sql, params = cursor.execute.call_args.args
+    stored = json.loads(params[0])
+    assert stored["ai_engineering"] is None
+    assert stored["featured"] == []
+    assert stored["tools"] == []
+    assert stored["daily_tip"] is None
+    assert stored["quick_hits"] == []
+    assert stored["yesterday_top"] is None

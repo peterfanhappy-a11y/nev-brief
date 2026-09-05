@@ -11,6 +11,36 @@ export function estimateChineseReadMinutes(text: string): number {
 }
 
 type DigestSection = NonNullable<AiBriefContent["today_ai"]>;
+type DigestSectionEntry = {
+  slotId: string;
+  title: string;
+  section: DigestSection | null;
+};
+
+function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
+  return content.version === 2
+    ? [
+        { slotId: "today-ai", title: "一、今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "二、AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "三、AI研究", section: content.ai_research },
+        { slotId: "agent-tools", title: "四、Agent工具", section: content.agent_tools },
+      ]
+    : [
+        { slotId: "today-ai", title: "今日AI", section: content.today_ai },
+        { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
+        { slotId: "ai-research", title: "AI研究", section: content.ai_research },
+        {
+          slotId: "ai-engineering",
+          title: "AI工程",
+          section: content.ai_engineering,
+        },
+        { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
+      ];
+}
+
+function visibleFeatured(content: AiBriefContent) {
+  return content.version === 2 ? [] : content.featured;
+}
 
 function issuePlainText(content: AiBriefContent): string {
   const parts = [
@@ -19,13 +49,7 @@ function issuePlainText(content: AiBriefContent): string {
     ...content.intro_bullets,
   ];
 
-  for (const section of [
-    content.today_ai,
-    content.ai_masters,
-    content.ai_research,
-    content.ai_engineering,
-    content.agent_tools,
-  ]) {
+  for (const { section } of visibleDigestSections(content)) {
     if (!section) continue;
     parts.push(section.subtitle);
     for (const story of section.stories) {
@@ -33,7 +57,7 @@ function issuePlainText(content: AiBriefContent): string {
     }
   }
 
-  for (const item of content.featured) {
+  for (const item of visibleFeatured(content)) {
     parts.push(
       item.theme_label,
       item.headline,
@@ -42,12 +66,14 @@ function issuePlainText(content: AiBriefContent): string {
       item.source_name,
     );
   }
-  for (const tool of content.tools) parts.push(tool.name, tool.one_liner);
-  if (content.daily_tip) {
-    parts.push(content.daily_tip.title, content.daily_tip.body);
+  if (content.version !== 2) {
+    for (const tool of content.tools) parts.push(tool.name, tool.one_liner);
+    if (content.daily_tip) {
+      parts.push(content.daily_tip.title, content.daily_tip.body);
+    }
+    for (const hit of content.quick_hits) parts.push(hit.text);
+    if (content.yesterday_top) parts.push(content.yesterday_top.headline);
   }
-  for (const hit of content.quick_hits) parts.push(hit.text);
-  if (content.yesterday_top) parts.push(content.yesterday_top.headline);
 
   return parts.join("");
 }
@@ -150,21 +176,8 @@ function DigestBlock({
 export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const { content } = brief;
   const readMinutes = estimateBriefReadMinutes(content);
-  const digestSections: Array<{
-    slotId: string;
-    title: string;
-    section: DigestSection | null;
-  }> = [
-    { slotId: "today-ai", title: "今日AI", section: content.today_ai },
-    { slotId: "ai-masters", title: "AI大神", section: content.ai_masters },
-    { slotId: "ai-research", title: "AI研究", section: content.ai_research },
-    {
-      slotId: "ai-engineering",
-      title: "AI工程",
-      section: content.ai_engineering,
-    },
-    { slotId: "agent-tools", title: "Agent工具", section: content.agent_tools },
-  ];
+  const featured = visibleFeatured(content);
+  const digestSections = visibleDigestSections(content);
 
   return (
     <article className="rounded-2xl border border-gray-100 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-12">
@@ -206,11 +219,11 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
           ),
       )}
 
-      {content.featured.length > 0 && (
+      {featured.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">更多精选</h2>
           <div className="mt-6 space-y-8">
-            {content.featured.map((item, itemIndex) => (
+            {featured.map((item, itemIndex) => (
               <div key={`featured-${itemIndex}`}>
                 {item.og_image && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -246,7 +259,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.tools.length > 0 && (
+      {content.version !== 2 && content.tools.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">AI工具</h2>
           <ul className="mt-5 space-y-4">
@@ -262,7 +275,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.daily_tip && (
+      {content.version !== 2 && content.daily_tip && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">每日技巧</h2>
           <div className="mt-5 rounded-xl bg-amber-50 p-5">
@@ -272,7 +285,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.quick_hits.length > 0 && (
+      {content.version !== 2 && content.quick_hits.length > 0 && (
         <section className="border-t border-gray-100 py-10">
           <h2 className="text-2xl font-bold text-gray-900">快讯</h2>
           <ul className="mt-5 space-y-3">
@@ -289,7 +302,7 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         </section>
       )}
 
-      {content.yesterday_top && (
+      {content.version !== 2 && content.yesterday_top && (
         <section className="border-t border-gray-100 pt-10">
           <h2 className="text-2xl font-bold text-gray-900">昨日焦点</h2>
           <p className="mt-4 font-medium">

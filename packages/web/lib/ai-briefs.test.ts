@@ -11,6 +11,7 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 import {
+  AiBriefContentSchema,
   getPublishedBrief,
   getPublishedNeighbors,
   isBriefDate,
@@ -133,6 +134,87 @@ describe("isBriefDate", () => {
   });
 });
 
+describe("AiBriefContentSchema", () => {
+  it("accepts both historical v1 and four-module v2 content", () => {
+    expect(AiBriefContentSchema.parse(content()).version).toBe(1);
+    expect(
+      AiBriefContentSchema.parse(
+        content({ version: 2, ai_engineering: null }),
+      ).version,
+    ).toBe(2);
+  });
+
+  it("rejects v2 content that still contains engineering data", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        ai_engineering: section("ai_engineering"),
+        featured: [
+          {
+            theme: "ai_engineering",
+            theme_label: "AI工程",
+            headline: "不应持久化的工程内容",
+            details: ["工程详情"],
+            significance: "工程意义",
+            url: "https://example.com/engineering-featured",
+            source_name: "工程来源",
+            og_image: null,
+            article_id: "engineering-featured",
+          },
+        ],
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects v2 content that contains non-engineering featured items", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        featured: [
+          {
+            theme: "model_research",
+            theme_label: "模型研究",
+            headline: "不应持久化的精选内容",
+            details: ["精选详情"],
+            significance: "精选意义",
+            url: "https://example.com/featured",
+            source_name: "精选来源",
+            og_image: null,
+            article_id: "featured",
+          },
+        ],
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it("rejects v2 content that contains legacy auxiliary sections", () => {
+    const parsed = AiBriefContentSchema.safeParse(
+      content({
+        version: 2,
+        tools: [
+          {
+            name: "旧工具",
+            one_liner: "旧工具说明",
+            url: "https://example.com/tool",
+          },
+        ],
+        daily_tip: { title: "旧技巧", body: "旧技巧说明" },
+        quick_hits: [{ text: "旧快讯", url: "https://example.com/hit" }],
+        yesterday_top: {
+          headline: "昨日焦点",
+          url: "https://example.com/yesterday",
+        },
+      }),
+    );
+
+    expect(parsed.success).toBe(false);
+  });
+});
+
 describe("published brief queries", () => {
   beforeEach(() => {
     mocks.getSupabaseAdmin.mockReturnValue({ from: mocks.from });
@@ -190,6 +272,29 @@ describe("published brief queries", () => {
       ascending: false,
     });
     expect(query.limit).toHaveBeenCalledWith(6);
+  });
+
+  it("lists v2 summaries without the retired engineering module", async () => {
+    const query = new QueryBuilder({
+      data: [
+        row(
+          "2026-08-03",
+          "2026-08-03T00:00:00.000Z",
+          content({
+            version: 2,
+            ai_masters: section("product_tools"),
+            ai_research: section("ai_research"),
+            agent_tools: section("agent_tools"),
+          }),
+        ),
+      ],
+      error: null,
+    });
+    useQueries(query);
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { modules: ["今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
   });
 
   it("caps an explicit list limit at six and drops malformed whole rows", async () => {

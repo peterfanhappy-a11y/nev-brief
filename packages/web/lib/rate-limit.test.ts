@@ -77,6 +77,8 @@ describe("subscription rate limiting", () => {
   });
 
   it("fails closed when durable storage rejects the attempt", async () => {
+    vi.stubEnv("AIVIZENS_DISPOSABLE_STACK", "true");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     rpcMock.mockResolvedValue({
       data: null,
       error: { message: "database unavailable" },
@@ -85,6 +87,40 @@ describe("subscription rate limiting", () => {
     await expect(
       checkSubscriptionRateLimit({ ipHash: IP_HASH, emailHash: EMAIL_HASH, now: NOW }),
     ).rejects.toThrow("Subscription rate-limit storage failed");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[test rate-limit RPC failure]",
+      expect.objectContaining({
+        hasError: true,
+        dataKind: "null",
+        rowCount: null,
+      }),
+    );
+  });
+
+  it("reports a sanitized client exception in the disposable acceptance stack", async () => {
+    vi.stubEnv("AIVIZENS_DISPOSABLE_STACK", "true");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const failure = new TypeError("fetch failed for reader@example.com");
+    Object.defineProperty(failure, "cause", {
+      value: {
+        code: "ECONNREFUSED",
+        message: `connect ${"a".repeat(64)} token.eyJyb2xlIjoidGVzdCJ9.signature`,
+      },
+    });
+    rpcMock.mockRejectedValue(failure);
+
+    await expect(
+      checkSubscriptionRateLimit({ ipHash: IP_HASH, emailHash: EMAIL_HASH, now: NOW }),
+    ).rejects.toThrow("Subscription rate-limit storage failed");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[test rate-limit RPC exception]",
+      {
+        name: "TypeError",
+        message: "fetch failed for [redacted]",
+        causeCode: "ECONNREFUSED",
+        causeMessage: "connect [redacted] [redacted]",
+      },
+    );
   });
 
   it("rejects non-hash identifiers before they can enter the database payload", async () => {

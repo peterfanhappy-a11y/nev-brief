@@ -160,9 +160,14 @@ def _story_items(section: DigestSection | None) -> tuple[tuple[int, DigestStory]
 
 def _required_digest_kinds(brief: AiBriefContent) -> tuple[DigestKind, ...]:
     required: list[DigestKind] = ["events", "builder"]
+    tool_sections = (
+        ("ai_research", "agent_tools")
+        if brief.version == 2
+        else _TOOL_SECTIONS
+    )
     required.extend(
         _SECTION_DIGEST_KINDS[section_name]
-        for section_name in _TOOL_SECTIONS
+        for section_name in tool_sections
         if _story_count(_section(brief, section_name)) > 0
     )
     return tuple(required)
@@ -443,11 +448,36 @@ def validate_brief(
     research_count = _story_count(_section(brief, "ai_research"))
     engineering_count = _story_count(_section(brief, "ai_engineering"))
     agent_count = _story_count(_section(brief, "agent_tools"))
-    tool_counts = (research_count, engineering_count, agent_count)
+    required_tool_sections = (
+        ("ai_research", "agent_tools")
+        if brief.version == 2
+        else _TOOL_SECTIONS
+    )
+    tool_counts = tuple(
+        _story_count(_section(brief, section_name))
+        for section_name in required_tool_sections
+    )
     tool_module_count = sum(count > 0 for count in tool_counts)
-    missing_tool_count = len(_TOOL_SECTIONS) - tool_module_count
+    missing_tool_count = len(required_tool_sections) - tool_module_count
 
-    if today_count < _PRIMARY_STORY_MINIMUM:
+    if brief.version == 2:
+        labels = [
+            story.label
+            for _, story in _story_items(_section(brief, "today_ai"))
+        ]
+        if (
+            len(labels) != 5
+            or labels.count("海外新闻") != 3
+            or labels.count("国内新闻") != 2
+        ):
+            blockers.append(
+                _issue(
+                    "today_ai_region_quota_invalid",
+                    "Today AI requires three overseas and two domestic stories.",
+                    "today_ai",
+                )
+            )
+    elif today_count < _PRIMARY_STORY_MINIMUM:
         blockers.append(
             _issue(
                 "today_ai_story_count_below_minimum",
@@ -471,7 +501,20 @@ def validate_brief(
                 "agent_tools",
             )
         )
-    if tool_module_count < _TOOL_MODULE_MINIMUM:
+    if brief.version == 2 and missing_tool_count:
+        missing_section = next(
+            section_name
+            for section_name in required_tool_sections
+            if _story_count(_section(brief, section_name)) == 0
+        )
+        blockers.append(
+            _issue(
+                "tool_module_missing",
+                "A required tool-learning module is unavailable.",
+                missing_section,
+            )
+        )
+    elif brief.version != 2 and tool_module_count < _TOOL_MODULE_MINIMUM:
         blockers.append(
             _issue(
                 "tool_module_count_below_minimum",
@@ -481,7 +524,7 @@ def validate_brief(
     elif missing_tool_count == 1:
         missing_section = next(
             section_name
-            for section_name in _TOOL_SECTIONS
+            for section_name in required_tool_sections
             if _story_count(_section(brief, section_name)) == 0
         )
         warnings.append(

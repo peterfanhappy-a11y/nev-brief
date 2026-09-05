@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 import re
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import TYPE_CHECKING
 
@@ -55,6 +55,26 @@ def _filter_agent_tools(tools: list[AgentTool]) -> list[AgentTool]:
             continue
         filtered.append(tool)
     return filtered
+
+
+def _select_today_ai_items(items: list[EventItem]) -> list[EventItem]:
+    overseas = [item for item in items if not item.category.startswith("国内")]
+    domestic = [item for item in items if item.category.startswith("国内")]
+    if (
+        len(overseas) < config.TODAY_AI_OVERSEAS_COUNT
+        or len(domestic) < config.TODAY_AI_DOMESTIC_COUNT
+    ):
+        return []
+    return [
+        *(
+            replace(item, category="海外新闻", value_tag="")
+            for item in overseas[:config.TODAY_AI_OVERSEAS_COUNT]
+        ),
+        *(
+            replace(item, category="国内新闻", value_tag="")
+            for item in domestic[:config.TODAY_AI_DOMESTIC_COUNT]
+        ),
+    ]
 
 
 @dataclass
@@ -256,7 +276,10 @@ async def _build_today_ai(
     if not items:
         log.warning("ai_digest.events_empty")
         return None, None, True, True
-    items = items[: config.TODAY_AI_TOP_N]  # 上游一次给 8 条，只取 TOP-N
+    items = _select_today_ai_items(items)
+    if not items:
+        log.warning("ai_digest.events_regional_quota_unmet", date=brief_date)
+        return None, None, True, True
 
     outcome = await condenser.condense_today_ai(items)
     if outcome is None:
@@ -450,7 +473,6 @@ async def build_digest_modules(
     ai_research, research_deepseek, research_qwen = await _build_research(
         date_str, digests.get("research")
     )
-    ai_engineering = await _build_engineering(date_str, digests.get("engineering"))
     agent_tools, agent_deepseek = await _build_agent(date_str, digests.get("agent"))
 
     return DigestBundle(
@@ -461,7 +483,7 @@ async def build_digest_modules(
         today_ai=today_ai,
         ai_masters=ai_masters,
         ai_research=ai_research,
-        ai_engineering=ai_engineering,
+        ai_engineering=None,
         agent_tools=agent_tools,
         deepseek_complete=all(
             (today_deepseek, masters_deepseek, research_deepseek, agent_deepseek)

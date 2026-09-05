@@ -84,3 +84,55 @@ test("maps only Supabase /rest/v1 requests to the PostgREST root", async () => {
     await close(upstream);
   }
 });
+
+test("reports redacted PostgREST RPC diagnostics for a failed rate-limit call", async () => {
+  const upstream = createServer((_request, response) => {
+    response.writeHead(400, { "content-type": "application/json" });
+    response.end(
+      JSON.stringify({
+        code: "42883",
+        message: "function check_ai_subscription_rate_limit(text, text, timestamp with time zone) does not exist",
+        details:
+          "reader@example.com aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature",
+      }),
+    );
+  });
+  const upstreamUrl = await listen(upstream);
+  const proxy = createSupabaseRestProxy({ upstreamUrl });
+  const proxyUrl = await listen(proxy);
+  const originalError = console.error;
+  const diagnostics = [];
+  console.error = (message) => diagnostics.push(message);
+
+  try {
+    const response = await fetch(`${proxyUrl}/rest/v1/rpc/check_ai_subscription_rate_limit`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ip_hash: "a".repeat(64), email_hash: "b".repeat(64) }),
+    });
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      code: "42883",
+      message: "function check_ai_subscription_rate_limit(text, text, timestamp with time zone) does not exist",
+      details:
+        "reader@example.com aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa eyJhbGciOiJIUzI1NiJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.signature",
+    });
+    assert.deepEqual(diagnostics, [
+      "[test PostgREST RPC failure] " +
+        JSON.stringify({
+          status: 400,
+          error: {
+            code: "42883",
+            message:
+              "function check_ai_subscription_rate_limit(text, text, timestamp with time zone) does not exist",
+            details: "[redacted] [redacted] [redacted]",
+          },
+        }),
+    ]);
+  } finally {
+    console.error = originalError;
+    await close(proxy);
+    await close(upstream);
+  }
+});

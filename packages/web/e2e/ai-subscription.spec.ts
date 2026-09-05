@@ -110,13 +110,6 @@ test.describe("touch verification", () => {
       pointerId: 7,
       pointerType: "touch",
     });
-    await page.waitForTimeout(2_100);
-    await progressBar.dispatchEvent("pointerup", {
-      button: 0,
-      pointerId: 7,
-      pointerType: "touch",
-    });
-
     await expect(page.getByRole("heading", { name: "订阅请求已收到" })).toBeVisible();
   });
 });

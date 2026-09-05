@@ -111,7 +111,9 @@ DIGEST_ENGINEERING_SUBJECT_PREFIX = "ai-engineering-digest-"
 DIGEST_AGENT_SUBJECT_PREFIX = "ai-agent-digest-"
 
 # 压缩字数上限（软约束，DeepSeek prompt 里也会写）
-TODAY_AI_TOP_N = 3                # 今日AI 取前几条（上游一次给 8 条，只用 TOP3）
+TODAY_AI_OVERSEAS_COUNT = 3
+TODAY_AI_DOMESTIC_COUNT = 2
+TODAY_AI_TOP_N = TODAY_AI_OVERSEAS_COUNT + TODAY_AI_DOMESTIC_COUNT
 TODAY_AI_SUMMARY_CHARS = 150      # 今日AI 每条正文
 AI_MASTERS_SUMMARY_CHARS = 120    # AI大神 每条正文
 AI_MASTERS_PICK_TOP5 = 2          # 前5条选几条

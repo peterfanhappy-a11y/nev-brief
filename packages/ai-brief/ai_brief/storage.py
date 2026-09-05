@@ -21,6 +21,7 @@ import psycopg
 from ai_brief.schema import (
     QUALITY_ISSUE_CODES,
     QUALITY_METRIC_KEYS,
+    AiBriefContent,
     quality_path_is_allowed,
 )
 from ai_brief.schema import (
@@ -50,6 +51,12 @@ _ALLOWED_ERROR_CODES = frozenset(
         "storage_write_failed",
     }
 )
+
+
+def _normalize_v2_content(content: dict[str, Any]) -> dict[str, Any]:
+    if content.get("version") != 2:
+        return content
+    return AiBriefContent.model_validate(content).model_dump(mode="json")
 
 
 class DigestRunAlreadyFinishedError(RuntimeError):
@@ -369,6 +376,7 @@ def save_generated_brief(
     status: Literal["blocked", "awaiting_approval"],
 ) -> None:
     """Finalize generated content only while the claimed row remains mutable."""
+    content = _normalize_v2_content(content)
     safe_sources, _parse_counts = _safe_digest_run_payloads(digest_sources)
     safe_report = _safe_quality_report(quality_report)
     if safe_report is None or safe_report.get("passed") is not (status == "awaiting_approval"):
@@ -539,6 +547,7 @@ def upsert_daily_brief(
     model: str | None,
 ) -> BriefWriteResult:
     """Write a draft unless the date is already approved or published."""
+    content = _normalize_v2_content(content)
     sql = """
         INSERT INTO ai_daily_briefs (brief_date, content, model, generated_at)
         VALUES (%s, %s, %s, NOW())

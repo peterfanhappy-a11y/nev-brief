@@ -4,9 +4,11 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from email.message import EmailMessage
 from typing import cast
+from unittest.mock import patch
 
 import pytest
 from ai_brief import config
+from ai_brief.digest import generate
 from ai_brief.digest.generate import build_digest_modules
 from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.digest.imap_client import Attachment, DigestEmail, parse_message
@@ -212,3 +214,11 @@ async def test_generation_consumes_envelopes_without_fetching_gmail() -> None:
     assert bundle.ai_research is None
     assert bundle.ai_engineering is None
     assert bundle.agent_tools is None
+
+
+async def test_generation_does_not_build_the_legacy_engineering_section() -> None:
+    """Invoking the retired engineering builder would reintroduce that v2 module."""
+    with patch.object(generate, "_build_engineering", side_effect=AssertionError):
+        bundle = await build_digest_modules(BRIEF_DATE, dict.fromkeys(PREFIXES))
+
+    assert bundle.ai_engineering is None

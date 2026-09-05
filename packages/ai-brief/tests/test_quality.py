@@ -91,6 +91,34 @@ def _valid_brief() -> AiBriefContent:
     )
 
 
+def _v2_brief(
+    labels: list[str] | None = None,
+    *,
+    include_agent_tools: bool = True,
+) -> AiBriefContent:
+    today_labels = labels or ["海外新闻", "海外新闻", "海外新闻", "国内新闻", "国内新闻"]
+    today_stories = [
+        _story(f"Today {index}", f"https://openai.com/news/{index}")
+        for index in range(1, len(today_labels) + 1)
+    ]
+    for story, label in zip(today_stories, today_labels, strict=True):
+        story.label = label
+    return AiBriefContent(
+        version=2,
+        brief_date=BRIEF_DATE.isoformat(),
+        subject="AI agents move from demos into production",
+        preheader="Three research and engineering shifts worth tracking",
+        editorial="Today’s evidence points to more reliable, useful AI systems.",
+        intro_bullets=["Models improve", "Tools mature"],
+        today_ai=_section(Theme.MODEL_RESEARCH, today_stories),
+        ai_masters=_valid_brief().ai_masters,
+        ai_research=_valid_brief().ai_research,
+        ai_engineering=None,
+        agent_tools=_valid_brief().agent_tools if include_agent_tools else None,
+        stage1_stats=Stage1Stats(candidates=11, dupe_groups=0),
+    )
+
+
 def _envelope(
     kind: DigestKind,
     *,
@@ -143,6 +171,16 @@ def _valid_digests() -> dict[DigestKind, DigestEnvelope | None]:
     }
 
 
+def _fresh_v2_digests() -> dict[DigestKind, DigestEnvelope | None]:
+    digests = _valid_digests()
+    digests["events"] = _envelope(
+        "events",
+        source_urls=tuple(f"https://openai.com/news/{index}" for index in range(1, 6)),
+    )
+    digests["engineering"] = None
+    return digests
+
+
 def _report(
     brief: AiBriefContent | None = None,
     digests: dict[DigestKind, DigestEnvelope | None] | None = None,
@@ -180,6 +218,52 @@ def test_valid_brief_passes_with_complete_counts_and_freshness_metrics() -> None
     assert report.metrics["events_freshness_hours"] == 2.0
     assert report.metrics["max_digest_freshness_hours"] == 2.0
     assert report.metrics["quality_passed"] is True
+
+
+def test_v2_requires_three_overseas_and_two_domestic_today_ai() -> None:
+    """A regional imbalance must block an otherwise complete v2 brief."""
+    report = _report(
+        _v2_brief(["海外新闻"] * 4 + ["国内新闻"]),
+        _fresh_v2_digests(),
+    )
+
+    assert report.passed is False
+    assert "today_ai_region_quota_invalid" in _codes(report)
+
+
+def test_valid_v2_brief_ignores_the_retired_engineering_digest() -> None:
+    """The four-module v2 contract must not require historical engineering input."""
+    report = _report(_v2_brief(), _fresh_v2_digests())
+
+    assert report.passed is True
+    assert "required_digest_stale" not in _codes(report)
+
+
+@pytest.mark.parametrize(
+    ("labels", "include_agent_tools", "expected_code"),
+    [
+        (["海外新闻"] * 3 + ["国内新闻"], True, "today_ai_region_quota_invalid"),
+        (["海外新闻"] * 3 + ["国内新闻"] * 2, False, "tool_module_missing"),
+    ],
+)
+def test_v2_rejects_missing_required_content(
+    labels: list[str],
+    include_agent_tools: bool,
+    expected_code: str,
+) -> None:
+    """v2 requires exactly five regional stories and all three retained modules."""
+    report = _report(
+        _v2_brief(labels, include_agent_tools=include_agent_tools),
+        _fresh_v2_digests(),
+    )
+
+    assert report.passed is False
+    assert expected_code in _codes(report)
+
+
+def test_v1_keeps_legacy_today_ai_and_engineering_compatibility() -> None:
+    """Historical v1 briefs retain their three-story Today AI and engineering contract."""
+    assert _report(_valid_brief(), _valid_digests()).passed is True
 
 
 def test_backfill_allows_primary_digests_up_to_forty_hours() -> None:

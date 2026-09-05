@@ -33,6 +33,30 @@ function mappedPath(requestUrl) {
   return `${pathname}${url.search}`;
 }
 
+function redactDiagnosticText(value) {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[redacted]")
+    .replace(/\b[a-f0-9]{64}\b/gi, "[redacted]")
+    .replace(/\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[redacted]");
+}
+
+function postgrestRpcDiagnostic(status, body) {
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    payload = {};
+  }
+  const error = Object.fromEntries(
+    ["code", "message", "details"]
+      .filter((key) => typeof payload?.[key] === "string")
+      .map((key) => [key, redactDiagnosticText(payload[key])]),
+  );
+  console.error(
+    `[test PostgREST RPC failure] ${JSON.stringify({ status, error })}`,
+  );
+}
+
 export function createSupabaseRestProxy({ upstreamUrl }) {
   const upstream = new URL(upstreamUrl);
   if (upstream.protocol !== "http:" && upstream.protocol !== "https:") {
@@ -56,6 +80,19 @@ export function createSupabaseRestProxy({ upstreamUrl }) {
         headers: forwardedHeaders(request.headers, upstream.host),
       },
       (upstreamResponse) => {
+        const isRateLimitRpcFailure =
+          (upstreamResponse.statusCode ?? 200) >= 400 &&
+          path === "/rpc/check_ai_subscription_rate_limit";
+        const diagnosticChunks = [];
+        if (isRateLimitRpcFailure) {
+          upstreamResponse.on("data", (chunk) => diagnosticChunks.push(chunk));
+          upstreamResponse.on("end", () => {
+            postgrestRpcDiagnostic(
+              upstreamResponse.statusCode ?? 502,
+              Buffer.concat(diagnosticChunks).toString("utf8"),
+            );
+          });
+        }
         response.writeHead(
           upstreamResponse.statusCode ?? 502,
           forwardedHeaders(upstreamResponse.headers),

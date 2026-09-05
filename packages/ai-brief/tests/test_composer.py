@@ -11,6 +11,8 @@ from ai_brief.schema import (
     DailyTip,
     DigestSection,
     DigestStory,
+    FeaturedItem,
+    QuickHit,
     Theme,
     Tool,
     YesterdayTop,
@@ -22,6 +24,7 @@ def _today_ai() -> DigestSection:
         theme=Theme.MODEL_RESEARCH,
         header_image="https://img/today-ai.png",
         header_image_alt="Sonnet 5",
+        subtitle="今日 AI 副标题",
         stories=[
             DigestStory(
                 headline="Anthropic 发布 Claude Sonnet 5",
@@ -43,6 +46,7 @@ def _ai_masters() -> DigestSection:
     return DigestSection(
         theme=Theme.PRODUCT_TOOLS,
         header_image="https://img/masters.png",
+        subtitle="大神模块副标题",
         stories=[
             DigestStory(
                 headline="互联网广告商业模式已死",
@@ -111,7 +115,10 @@ def test_render_text_digest_sections() -> None:
     assert "《今日AI》" in text
     assert "Anthropic 发布 Claude Sonnet 5" in text
     assert "《AI大神》" in text
+    assert "今日 AI 副标题" not in text
+    assert "大神模块副标题" not in text
     assert "https://www.anthropic.com/news/claude-sonnet-5" in text
+    assert "\n   原文：https://www.anthropic.com/news/claude-sonnet-5" in text
     assert "product=ai" in text
 
 
@@ -153,6 +160,70 @@ def test_render_engineering_labels_number_and_break_after_colon() -> None:
 
     assert "1. 问题：<br>先让 AI 看懂项目" in html
     assert re.search(r"1\. 问题：\s+先让 AI 看懂项目", text)
+
+
+def test_render_v2_uses_numbered_sections_without_engineering() -> None:
+    brief = _brief(
+        version=2,
+        ai_research=DigestSection(
+            theme=Theme.AI_RESEARCH,
+            stories=[DigestStory(headline="研究标题", summary="研究摘要")],
+        ),
+        ai_engineering=DigestSection(
+            theme=Theme.AI_ENGINEERING,
+            stories=[DigestStory(headline="不应显示", summary="工程摘要")],
+        ),
+        agent_tools=DigestSection(
+            theme=Theme.AGENT_TOOLS,
+            stories=[DigestStory(headline="工具标题", summary="工具摘要")],
+        ),
+        tools=[Tool(name="不应显示的旧工具", one_liner="旧工具说明", url="https://example.com/tool")],
+        daily_tip=DailyTip(title="不应显示的旧技巧", body="旧技巧说明"),
+        quick_hits=[QuickHit(text="不应显示的旧快讯", url="https://example.com/hit")],
+        yesterday_top=YesterdayTop(headline="不应显示的昨日焦点", url="https://example.com/yesterday"),
+        featured=[
+            FeaturedItem(
+                theme=Theme.MODEL_RESEARCH,
+                theme_label="模型研究",
+                headline="不应出现在邮件的精选内容",
+                details=["精选详情"],
+                significance="精选意义",
+                url="https://example.com/featured",
+                source_name="精选来源",
+            )
+        ],
+    )
+
+    html, text = render(
+        brief,
+        date(2026, 7, 6),
+        delivery_id="d",
+        unsubscribe_token="t",  # noqa: S106 - inert test value
+    )
+
+    for title in ("一、今日AI", "二、AI大神", "三、AI研究", "四、Agent工具"):
+        assert title in html
+        assert f"《{title}》" in text
+    assert brief.ai_engineering is None
+    assert brief.featured == []
+    assert brief.tools == []
+    assert brief.daily_tip is None
+    assert brief.quick_hits == []
+    assert brief.yesterday_top is None
+    assert "AI工程" not in html
+    assert "AI工程" not in text
+    assert "不应显示" not in html
+    assert "不应显示" not in text
+    assert "不应出现在邮件的精选内容" not in html
+    assert "不应出现在邮件的精选内容" not in text
+    for legacy_text in (
+        "不应显示的旧工具",
+        "不应显示的旧技巧",
+        "不应显示的旧快讯",
+        "不应显示的昨日焦点",
+    ):
+        assert legacy_text not in html
+        assert legacy_text not in text
 
 
 def test_greeting_name_from_email() -> None:

@@ -11,6 +11,7 @@ from ai_brief.digest.condenser import _rebalance, build_engineering_stories
 from ai_brief.digest.generate import (
     _filter_agent_tools,
     _is_usable_header_image,
+    _select_today_ai_items,
     _today_ai_image_candidates,
 )
 from ai_brief.digest.image_judge import _parse_index
@@ -24,6 +25,39 @@ from ai_brief.digest.models import (
     ResearchPaper,
 )
 from PIL import Image
+
+
+def _event(index: int, *, category: str) -> EventItem:
+    return EventItem(
+        index=index,
+        category=category,
+        value_tag="important",
+        headline=f"Headline {index}",
+        url=f"https://example.com/{index}",
+        body=f"Source body {index}",
+        image_note="",
+    )
+
+
+def test_select_today_ai_items_keeps_three_overseas_then_two_domestic() -> None:
+    """Selecting by global source order could leave either regional quota unmet."""
+    selected = _select_today_ai_items([
+        _event(1, category="海外大模型公司"),
+        _event(2, category="国内大模型公司"),
+        _event(3, category="海外"),
+        _event(4, category="国内"),
+        _event(5, category="海外"),
+        _event(6, category="海外"),
+        _event(7, category="国内"),
+    ])
+
+    assert [item.index for item in selected] == [1, 3, 5, 2, 4]
+    assert [item.label for item in selected] == ["海外新闻"] * 3 + ["国内新闻"] * 2
+
+
+def test_select_today_ai_items_rejects_missing_domestic_quota() -> None:
+    """Publishing a regional imbalance would violate the v2 Today AI contract."""
+    assert _select_today_ai_items([_event(1, category="国内"), _event(2, category="海外")]) == []
 
 
 def _items() -> dict[int, BuilderItem]:

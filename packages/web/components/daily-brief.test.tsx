@@ -130,6 +130,31 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
   },
 };
 
+const V2_BRIEF: AiPublishedBrief = {
+  ...COMPLETE_BRIEF,
+  content: {
+    ...COMPLETE_BRIEF.content,
+    version: 2,
+    today_ai: {
+      ...COMPLETE_BRIEF.content.today_ai!,
+      stories: Array.from({ length: 5 }, (_, index) => ({
+        headline: `今日 AI 第 ${index + 1} 条`,
+        summary: `第 ${index + 1} 条摘要`,
+        url: `https://example.com/today-${index + 1}`,
+        label: index < 3 ? "海外新闻" : "国内新闻",
+      })),
+    },
+    ai_engineering: null,
+    featured: [],
+    tools: [
+      { name: "不应显示的旧工具", one_liner: "旧工具说明", url: "https://example.com/tool" },
+    ],
+    daily_tip: { title: "不应显示的旧技巧", body: "旧技巧说明" },
+    quick_hits: [{ text: "不应显示的旧快讯", url: "https://example.com/hit" }],
+    yesterday_top: { headline: "不应显示的昨日焦点", url: "https://example.com/yesterday" },
+  },
+};
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -196,6 +221,68 @@ describe("estimateChineseReadMinutes", () => {
 });
 
 describe("DailyBrief", () => {
+  it("uses the stored v2 four-module content for displayed reading time", () => {
+    vi.stubGlobal("React", React);
+    const brief: AiPublishedBrief = {
+      ...V2_BRIEF,
+      content: {
+        ...V2_BRIEF.content,
+        subject: "",
+        editorial: "",
+        intro_bullets: [],
+        today_ai: {
+          ...V2_BRIEF.content.today_ai!,
+          subtitle: "",
+          stories: [
+            {
+              headline: "可见内容",
+              summary: "",
+              url: "",
+              label: "",
+            },
+          ],
+        },
+        ai_masters: null,
+        ai_research: null,
+        agent_tools: null,
+      },
+    };
+
+    render(<DailyBrief brief={brief} />);
+
+    expect(screen.getByText(/\d+ 分钟阅读/)).toHaveTextContent("1 分钟阅读");
+  });
+
+  it("renders four numbered v2 modules and all five Today AI stories", () => {
+    vi.stubGlobal("React", React);
+    render(<DailyBrief brief={V2_BRIEF} />);
+
+    for (const title of [
+      "一、今日AI",
+      "二、AI大神",
+      "三、AI研究",
+      "四、Agent工具",
+    ]) {
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    expect(
+      screen.queryByRole("heading", { name: "AI工程" }),
+    ).not.toBeInTheDocument();
+    for (const legacyText of [
+      "不应显示的旧工具",
+      "不应显示的旧技巧",
+      "不应显示的旧快讯",
+      "不应显示的昨日焦点",
+    ]) {
+      expect(screen.queryByText(legacyText)).not.toBeInTheDocument();
+    }
+    for (let index = 1; index <= 5; index += 1) {
+      expect(
+        screen.getByRole("heading", { name: new RegExp(`今日 AI 第 ${index} 条`) }),
+      ).toBeInTheDocument();
+    }
+  });
+
   it("renders every current content module from the validated issue", () => {
     vi.stubGlobal("React", React);
     render(<DailyBrief brief={COMPLETE_BRIEF} />);
