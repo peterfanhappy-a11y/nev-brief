@@ -55,6 +55,15 @@ export async function checkSubscriptionRateLimit(
     !Number.isInteger(row.retry_after_seconds) ||
     row.retry_after_seconds < 0
   ) {
+    if (process.env.AIVIZENS_DISPOSABLE_STACK === "true") {
+      console.error("[test rate-limit RPC failure]", {
+        hasError: Boolean(error),
+        errorCode: typeof error === "object" && error && "code" in error ? error.code : null,
+        errorMessage: typeof error === "object" && error && "message" in error ? error.message : null,
+        dataKind: data === null ? "null" : Array.isArray(data) ? "array" : typeof data,
+        rowCount: Array.isArray(data) ? data.length : null,
+      });
+    }
     throw new Error("Subscription rate-limit storage failed");
   }
 

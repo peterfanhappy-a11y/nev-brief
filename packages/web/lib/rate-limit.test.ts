@@ -77,6 +77,8 @@ describe("subscription rate limiting", () => {
   });
 
   it("fails closed when durable storage rejects the attempt", async () => {
+    vi.stubEnv("AIVIZENS_DISPOSABLE_STACK", "true");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     rpcMock.mockResolvedValue({
       data: null,
       error: { message: "database unavailable" },
@@ -85,6 +87,14 @@ describe("subscription rate limiting", () => {
     await expect(
       checkSubscriptionRateLimit({ ipHash: IP_HASH, emailHash: EMAIL_HASH, now: NOW }),
     ).rejects.toThrow("Subscription rate-limit storage failed");
+    expect(errorSpy).toHaveBeenCalledWith(
+      "[test rate-limit RPC failure]",
+      expect.objectContaining({
+        hasError: true,
+        dataKind: "null",
+        rowCount: null,
+      }),
+    );
   });
 
   it("rejects non-hash identifiers before they can enter the database payload", async () => {
