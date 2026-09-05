@@ -159,6 +159,41 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     assert items[1].url == "https://example.com/events/nvidia"
 
 
+def test_events_parses_card_markup_with_grouped_category_label() -> None:
+    html = """
+    <main>
+      <div class="card">
+        <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+        <h2>1. Open model improves agent planning</h2>
+        <p>新的规划方法提高了复杂任务的完成率。</p>
+        <p class="meta">来源：Example News | 原文：
+          <a href="https://example.com/events/agent-planning">阅读原文</a>
+        </p>
+      </div>
+      <div class="card">
+        <span class="cat">国内吸睛 · 国内·最吸引眼球</span>
+        <h2>2. 国产模型推出新推理能力</h2>
+        <p>该能力面向开发者开放测试。</p>
+        <p class="meta">来源：量子位 | 原文：
+          <a href="https://example.com/events/domestic-reasoning">阅读原文</a>
+        </p>
+      </div>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.index for item in items] == [1, 2]
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].headline == "Open model improves agent planning"
+    assert items[0].body == "新的规划方法提高了复杂任务的完成率。"
+    assert items[0].image_note == "Example News"
+    assert items[0].url == "https://example.com/events/agent-planning"
+    assert items[1].category == "国内"
+    assert items[1].value_tag == "最吸引眼球"
+
+
 def test_events_flat_h2_parser_does_not_treat_extension_as_second_story() -> None:
     html = """
     <main>

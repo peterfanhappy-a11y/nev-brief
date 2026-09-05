@@ -49,6 +49,51 @@ def _read_link(meta: Node | None) -> str:
     return ""
 
 
+def _parse_card_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse card/cat markup with a grouped category label and meta link."""
+    items: list[EventItem] = []
+    for card in tree.css("div.card"):
+        category_node = card.css_first("span.cat")
+        title_node = card.css_first("h2")
+        meta = card.css_first("p.meta")
+        if category_node is None or title_node is None or meta is None:
+            continue
+
+        raw_title = _clean(title_node.text())
+        match = _TITLE_NUM_RE.match(raw_title)
+        index = int(match.group(1)) if match else len(items) + 1
+        headline = match.group(2).strip() if match else raw_title
+
+        grouped_label = re.split(
+            r"\s+·\s+", _clean(category_node.text()), maxsplit=1
+        )[-1]
+        category, value_tag = _split_label(grouped_label)
+
+        body_parts = [
+            _clean(paragraph.text())
+            for paragraph in card.css("p")
+            if "meta" not in (paragraph.attributes.get("class") or "").split()
+            and paragraph.css_first("a") is None
+        ]
+        url = _read_link(meta)
+        source_match = _SOURCE_RE.search(_clean(meta.text()))
+        source = source_match.group(1).strip() if source_match else ""
+
+        if headline and url:
+            items.append(
+                EventItem(
+                    index=index,
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=" ".join(part for part in body_parts if part),
+                    image_note=source,
+                )
+            )
+    return items
+
+
 def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
     """Parse the current upstream blocks: label div, h2, summary p, link p."""
     items: list[EventItem] = []
@@ -273,6 +318,7 @@ def parse_events_digest(html: str) -> list[EventItem]:
         )
     return (
         items
+        or _parse_card_markup(tree)
         or _parse_current_markup(tree)
         or _parse_link_card_h3_markup(tree)
         or _parse_flat_h2_markup(tree)
