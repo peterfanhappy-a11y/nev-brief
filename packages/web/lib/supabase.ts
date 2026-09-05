@@ -1,6 +1,11 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
 
 let _client: SupabaseClient | null = null;
+type RealtimeOptions = NonNullable<
+  NonNullable<Parameters<typeof createClient>[2]>["realtime"]
+>;
+const serverWebSocketTransport = WebSocket as unknown as RealtimeOptions["transport"];
 
 /**
  * 服务端 service-role 客户端 — 绕过 RLS。
@@ -17,6 +22,7 @@ export function getSupabaseAdmin(): SupabaseClient {
   }
   _client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    realtime: { transport: serverWebSocketTransport },
   });
   return _client;
 }
