@@ -159,6 +159,166 @@ def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     assert items[1].url == "https://example.com/events/nvidia"
 
 
+def test_events_parses_card_markup_with_grouped_category_label() -> None:
+    html = """
+    <main>
+      <div class="card">
+        <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+        <h2>1. Open model improves agent planning</h2>
+        <p>新的规划方法提高了复杂任务的完成率。</p>
+        <p class="meta">来源：Example News | 原文：
+          <a href="https://example.com/events/agent-planning">阅读原文</a>
+        </p>
+      </div>
+      <div class="card">
+        <span class="cat">国内吸睛 · 国内·最吸引眼球</span>
+        <h2>2. 国产模型推出新推理能力</h2>
+        <p>该能力面向开发者开放测试。</p>
+        <p class="meta">来源：量子位 | 原文：
+          <a href="https://example.com/events/domestic-reasoning">阅读原文</a>
+        </p>
+      </div>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.index for item in items] == [1, 2]
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].headline == "Open model improves agent planning"
+    assert items[0].body == "新的规划方法提高了复杂任务的完成率。"
+    assert items[0].image_note == "Example News"
+    assert items[0].url == "https://example.com/events/agent-planning"
+    assert items[1].category == "国内"
+    assert items[1].value_tag == "最吸引眼球"
+
+
+def test_events_card_parser_does_not_duplicate_nested_card() -> None:
+    html = """
+    <div class="card">
+      <section>
+        <div class="card">
+          <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+          <h2>1. 唯一一条真实新闻</h2>
+          <p>新闻正文。</p>
+          <p class="meta">来源：Example News | 原文：
+            <a href="https://example.com/events/only-story">阅读原文</a>
+          </p>
+        </div>
+      </section>
+    </div>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.headline for item in items] == ["唯一一条真实新闻"]
+
+
+def test_events_card_parser_ignores_non_original_link_card() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 订阅活动</h2>
+      <p>这是一张推广卡片。</p>
+      <p class="meta">来源：Example News |
+        <a href="https://example.com/promotion">了解更多</a>
+      </p>
+    </div>
+    """
+
+    assert parse_events_digest(html) == []
+
+
+def test_events_card_parser_accepts_grouped_label_without_spaces() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型·海外大模型公司·最有价值</span>
+      <h2>1. 无空格标签新闻</h2>
+      <p>新闻正文。</p>
+      <p class="meta">来源：Example News | 原文：
+        <a href="https://example.com/events/compact-label">阅读原文</a>
+      </p>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.category == "海外大模型公司"
+    assert item.value_tag == "最有价值"
+
+
+def test_events_card_parser_preserves_body_with_inline_link() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外吸睛 · 海外·最吸引眼球</span>
+      <h2>1. 正文包含背景链接</h2>
+      <p><a href="https://example.com/background">背景资料</a>说明模型能力变化。</p>
+      <p class="meta">来源：Example News | 原文：
+        <a href="https://example.com/events/inline-link">阅读原文</a>
+      </p>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.body == "背景资料说明模型能力变化。"
+
+
+def test_events_card_parser_distinguishes_source_link_from_original_link() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">国内大模型 · 国内大模型公司·最有价值</span>
+      <h2>1. 来源名也带链接</h2>
+      <p>新闻正文。</p>
+      <p class="meta">来源：
+        <a href="https://example.com/source">Example News</a>
+        原文：<a href="https://example.com/events/source-link">阅读原文</a>
+      </p>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.image_note == "Example News"
+    assert item.url == "https://example.com/events/source-link"
+
+
+def test_events_card_parser_associates_bare_url_with_original_field() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 来源和原文都显示网址</h2>
+      <p>新闻正文。</p>
+      <p class="meta">来源：
+        <a href="https://example.com">https://example.com</a>
+        原文：<a href="https://example.com/events/bare-url">
+          https://example.com/events/bare-url
+        </a>
+      </p>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.url == "https://example.com/events/bare-url"
+
+
+def test_events_card_parser_ignores_original_author_promotion() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 原文作者福利</h2>
+      <p>这是一张推广卡片。</p>
+      <p class="meta">来源：Example News | 原文作者福利：
+        <a href="https://example.com/promotion">了解更多</a>
+      </p>
+    </div>
+    """
+
+    assert parse_events_digest(html) == []
+
+
 def test_events_flat_h2_parser_does_not_treat_extension_as_second_story() -> None:
     html = """
     <main>

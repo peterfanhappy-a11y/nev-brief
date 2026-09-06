@@ -17,8 +17,14 @@ from ai_brief.digest.models import EventItem
 
 _TITLE_NUM_RE = re.compile(r"^\s*(\d+)\s*[.、)．]\s*(.*)$", re.S)
 _SOURCE_RE = re.compile(r"来源\s*[:：]?\s*([^|｜]+)")
+_CARD_SOURCE_RE = re.compile(
+    r"来源\s*[:：]?\s*(.*?)(?:\s*[|｜]\s*|\s*原文\s*[:：]|$)"
+)
 _SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
 _SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
+_HTTP_URL_RE = re.compile(r"^https?://")
+_ORIGINAL_FIELD_RE = re.compile(r"(?:^|[|｜]\s*)原文\s*[:：]")
+_ORIGINAL_LINK_TEXT_RE = re.compile(r"^(?:阅读|查看)原文(?:\s*[→›»])?$")
 _LINK_CARD_LABEL_RE = re.compile(
     r"^(?P<label>.+?)\s+(?P<index>\d+)/\d+\s*[·•]\s*(?P<source>.+)$"
 )
@@ -47,6 +53,82 @@ def _read_link(meta: Node | None) -> str:
         if href.startswith("http"):
             return href
     return ""
+
+
+def _read_original_link(meta: Node) -> str:
+    for anchor in meta.css("a"):
+        href = (anchor.attributes.get("href") or "").strip()
+        if _HTTP_URL_RE.match(href) and _ORIGINAL_LINK_TEXT_RE.match(
+            _clean(anchor.text())
+        ):
+            return href
+
+    after_original_field = False
+    child = meta.child
+    while child is not None:
+        if child.tag == "a":
+            href = (child.attributes.get("href") or "").strip()
+            if after_original_field and _HTTP_URL_RE.match(href):
+                return href
+        elif _ORIGINAL_FIELD_RE.search(_clean(child.text())):
+            after_original_field = True
+        child = child.next
+    return ""
+
+
+def _parse_card_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse card/cat markup with a grouped category label and meta link."""
+    def direct_children(node: Node) -> list[Node]:
+        children: list[Node] = []
+        child = node.child
+        while child is not None:
+            if not child.tag.startswith("-"):
+                children.append(child)
+            child = child.next
+        return children
+
+    items: list[EventItem] = []
+    for card in tree.css("div.card"):
+        children = direct_children(card)
+        if [child.tag for child in children] != ["span", "h2", "p", "p"]:
+            continue
+        category_node, title_node, _, meta = children
+        if (
+            "cat" not in (category_node.attributes.get("class") or "").split()
+            or "meta" not in (meta.attributes.get("class") or "").split()
+        ):
+            continue
+
+        raw_title = _clean(title_node.text())
+        match = _TITLE_NUM_RE.match(raw_title)
+        index = int(match.group(1)) if match else len(items) + 1
+        headline = match.group(2).strip() if match else raw_title
+
+        label_parts = [
+            part.strip() for part in _clean(category_node.text()).split("·") if part.strip()
+        ]
+        category, value_tag = _split_label("·".join(label_parts[-2:]))
+        if value_tag not in _FLAT_VALUE_TAGS:
+            continue
+
+        body = _clean(children[2].text())
+        url = _read_original_link(meta)
+        source_match = _CARD_SOURCE_RE.search(_clean(meta.text()))
+        source = source_match.group(1).strip() if source_match else ""
+
+        if headline and url:
+            items.append(
+                EventItem(
+                    index=index,
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=body,
+                    image_note=source,
+                )
+            )
+    return items
 
 
 def _parse_current_markup(tree: HTMLParser) -> list[EventItem]:
@@ -273,6 +355,7 @@ def parse_events_digest(html: str) -> list[EventItem]:
         )
     return (
         items
+        or _parse_card_markup(tree)
         or _parse_current_markup(tree)
         or _parse_link_card_h3_markup(tree)
         or _parse_flat_h2_markup(tree)
