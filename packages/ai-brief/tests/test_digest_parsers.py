@@ -284,6 +284,41 @@ def test_events_card_parser_distinguishes_source_link_from_original_link() -> No
     assert item.url == "https://example.com/events/source-link"
 
 
+def test_events_card_parser_associates_bare_url_with_original_field() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 来源和原文都显示网址</h2>
+      <p>新闻正文。</p>
+      <p class="meta">来源：
+        <a href="https://example.com">https://example.com</a>
+        原文：<a href="https://example.com/events/bare-url">
+          https://example.com/events/bare-url
+        </a>
+      </p>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.url == "https://example.com/events/bare-url"
+
+
+def test_events_card_parser_ignores_original_author_promotion() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 原文作者福利</h2>
+      <p>这是一张推广卡片。</p>
+      <p class="meta">来源：Example News | 原文作者福利：
+        <a href="https://example.com/promotion">了解更多</a>
+      </p>
+    </div>
+    """
+
+    assert parse_events_digest(html) == []
+
+
 def test_events_flat_h2_parser_does_not_treat_extension_as_second_story() -> None:
     html = """
     <main>

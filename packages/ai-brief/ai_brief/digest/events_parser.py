@@ -23,6 +23,8 @@ _CARD_SOURCE_RE = re.compile(
 _SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
 _SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
 _HTTP_URL_RE = re.compile(r"^https?://")
+_ORIGINAL_FIELD_RE = re.compile(r"(?:^|[|｜]\s*)原文\s*[:：]")
+_ORIGINAL_LINK_TEXT_RE = re.compile(r"^(?:阅读|查看)原文(?:\s*[→›»])?$")
 _LINK_CARD_LABEL_RE = re.compile(
     r"^(?P<label>.+?)\s+(?P<index>\d+)/\d+\s*[·•]\s*(?P<source>.+)$"
 )
@@ -54,16 +56,23 @@ def _read_link(meta: Node | None) -> str:
 
 
 def _read_original_link(meta: Node) -> str:
-    candidates: list[tuple[str, str]] = []
     for anchor in meta.css("a"):
         href = (anchor.attributes.get("href") or "").strip()
-        if _HTTP_URL_RE.match(href):
-            candidates.append((_clean(anchor.text()), href))
-    for text, href in candidates:
-        if "阅读原文" in text or _HTTP_URL_RE.match(text):
+        if _HTTP_URL_RE.match(href) and _ORIGINAL_LINK_TEXT_RE.match(
+            _clean(anchor.text())
+        ):
             return href
-    if "原文" in _clean(meta.text()) and candidates:
-        return candidates[-1][1]
+
+    after_original_field = False
+    child = meta.child
+    while child is not None:
+        if child.tag == "a":
+            href = (child.attributes.get("href") or "").strip()
+            if after_original_field and _HTTP_URL_RE.match(href):
+                return href
+        elif _ORIGINAL_FIELD_RE.search(_clean(child.text())):
+            after_original_field = True
+        child = child.next
     return ""
 
 
