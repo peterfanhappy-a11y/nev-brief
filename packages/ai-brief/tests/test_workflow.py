@@ -259,9 +259,30 @@ def test_generation_claim_binds_owner_and_rejects_an_active_generating_row() -> 
     sql, params = cursor.execute.call_args.args
     normalized = " ".join(sql.split())
     assert "source_run_id" in normalized
-    assert "status IN ('blocked', 'awaiting_approval')" in normalized
+    assert "status = ANY(%s)" in normalized
     assert "status IN ('generating'" not in normalized
-    assert params == (BRIEF_DATE, RUN_ID)
+    assert params == (BRIEF_DATE, RUN_ID, ["blocked", "awaiting_approval"])
+
+
+def test_scheduled_generation_claim_cannot_replace_an_awaiting_candidate() -> None:
+    connection = _connection()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = ("generating",)
+    connection.cursor.return_value.__enter__.return_value = cursor
+    connection.cursor.return_value.__exit__.return_value = False
+
+    assert (
+        storage.claim_brief_generation(
+            connection,
+            BRIEF_DATE,
+            RUN_ID,
+            replace_awaiting_approval=False,
+        )
+        == "started"
+    )
+    sql = " ".join(cursor.execute.call_args.args[0].split())
+    assert "status = ANY(%s)" in sql
+    assert cursor.execute.call_args.args[1] == (BRIEF_DATE, RUN_ID, ["blocked"])
 
 
 def test_generation_finalize_and_failure_are_owner_compare_and_swap_operations() -> None:
@@ -300,16 +321,24 @@ async def test_generation_conflicts_before_adapter_or_model_calls() -> None:
     build = AsyncMock()
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
-        patch.object(storage, "claim_brief_generation", return_value="conflict"),
+        patch.object(storage, "claim_brief_generation", return_value="conflict") as claim,
         patch.object(storage, "finish_digest_run") as finish,
         patch.object(runner, "build_digest_modules", build),
     ):
-        result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+        result = await runner.generate_for_review(
+            connection,
+            BRIEF_DATE,
+            adapter,
+            preserve_existing=True,
+        )
 
     assert result.status == "conflict"
     assert result.exit_code == 1
     assert adapter.fetch_calls == 0
     build.assert_not_awaited()
+    assert claim.call_args.kwargs == {
+        "replace_awaiting_approval": False
+    }
     assert finish.call_args.kwargs == {
         "status": "failed",
         "digest_sources": {},
@@ -317,6 +346,30 @@ async def test_generation_conflicts_before_adapter_or_model_calls() -> None:
         "stage": "state",
         "error_summary": "brief_generation_failed",
     }
+
+
+@pytest.mark.parametrize(
+    ("backfill", "max_age_hours"),
+    [(False, 24.0), (True, 0.0), (True, 169.0)],
+)
+async def test_generation_rejects_invalid_backfill_age_at_workflow_boundary(
+    backfill: bool,
+    max_age_hours: float,
+) -> None:
+    connection = _connection()
+    with (
+        patch.object(storage, "start_digest_run") as start,
+        pytest.raises(ValueError, match="max_digest_age_hours"),
+    ):
+        await runner.generate_for_review(
+            connection,
+            BRIEF_DATE,
+            _Adapter(),
+            backfill=backfill,
+            max_digest_age_hours=max_age_hours,
+        )
+
+    start.assert_not_called()
 
 
 async def test_generation_exception_records_safe_failed_run_without_partial_content() -> None:
@@ -508,13 +561,13 @@ async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed()
 
 
 @pytest.mark.parametrize(
-    ("status", "report", "expected_status", "changed"),
+    ("status", "report", "expected_status", "changed", "exit_code"),
     [
-        ("awaiting_approval", {"passed": True}, "approved", True),
-        ("awaiting_approval", {"passed": False}, "awaiting_approval", False),
-        ("blocked", {"passed": True}, "blocked", False),
-        ("approved", {"passed": True}, "approved", False),
-        ("published", {"passed": True}, "published", False),
+        ("awaiting_approval", {"passed": True}, "approved", True, 0),
+        ("awaiting_approval", {"passed": False}, "awaiting_approval", False, 1),
+        ("blocked", {"passed": True}, "blocked", False, 1),
+        ("approved", {"passed": True}, "approved", False, 0),
+        ("published", {"passed": True}, "published", False, 0),
     ],
 )
 def test_approval_requires_awaiting_brief_with_stored_passing_report(
@@ -522,6 +575,7 @@ def test_approval_requires_awaiting_brief_with_stored_passing_report(
     report: dict[str, bool],
     expected_status: str,
     changed: bool,
+    exit_code: int,
 ) -> None:
     connection = _connection()
     locked = SimpleNamespace(status=status, quality_report=report)
@@ -534,7 +588,7 @@ def test_approval_requires_awaiting_brief_with_stored_passing_report(
 
     assert result.status == expected_status
     assert result.changed is changed
-    assert result.exit_code == (0 if changed else 1)
+    assert result.exit_code == exit_code
     assert approve.call_count == int(changed)
     compose.assert_not_called()
 

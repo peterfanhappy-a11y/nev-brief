@@ -23,7 +23,7 @@ _CARD_SOURCE_RE = re.compile(
 _SOURCE_URL_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]\s*(https://\S+)")
 _SOURCE_PREFIX_RE = re.compile(r"^\s*([^·•|｜]+?)\s*[·•]")
 _HTTP_URL_RE = re.compile(r"^https?://")
-_ORIGINAL_FIELD_RE = re.compile(r"(?:^|[|｜]\s*)原文\s*[:：]")
+_ORIGINAL_FIELD_RE = re.compile(r"(?:^|[|｜]\s*)原文(?:链接)?\s*[:：]")
 _ORIGINAL_LINK_TEXT_RE = re.compile(r"^(?:阅读|查看)原文(?:\s*[→›»])?$")
 _LINK_CARD_LABEL_RE = re.compile(
     r"^(?P<label>.+?)\s+(?P<index>\d+)/\d+\s*[·•]\s*(?P<source>.+)$"
@@ -90,7 +90,11 @@ def _parse_card_markup(tree: HTMLParser) -> list[EventItem]:
     items: list[EventItem] = []
     for card in tree.css("div.card"):
         children = direct_children(card)
-        if [child.tag for child in children] != ["span", "h2", "p", "p"]:
+        if (
+            len(children) != 4
+            or [child.tag for child in children[:3]] != ["span", "h2", "p"]
+            or children[3].tag not in {"p", "div"}
+        ):
             continue
         category_node, title_node, _, meta = children
         if (
@@ -312,6 +316,69 @@ def _parse_link_card_h3_markup(tree: HTMLParser) -> list[EventItem]:
     return items
 
 
+def _parse_sibling_category_item_markup(tree: HTMLParser) -> list[EventItem]:
+    """Parse sibling category + item blocks with a bare URL source link."""
+
+    def next_element(node: Node) -> Node | None:
+        sibling = node.next
+        while sibling is not None and sibling.tag.startswith("-"):
+            sibling = sibling.next
+        return sibling
+
+    def direct_children(node: Node) -> list[Node]:
+        children: list[Node] = []
+        child = node.child
+        while child is not None:
+            if not child.tag.startswith("-"):
+                children.append(child)
+            child = child.next
+        return children
+
+    items: list[EventItem] = []
+    for label in tree.css("div.cat"):
+        card = next_element(label)
+        if (
+            card is None
+            or card.tag != "div"
+            or "item" not in (card.attributes.get("class") or "").split()
+        ):
+            continue
+        children = direct_children(card)
+        if [child.tag for child in children] != ["h3", "p", "div"]:
+            continue
+        title_node, body_node, source_node = children
+        if "src" not in (source_node.attributes.get("class") or "").split():
+            continue
+
+        category, value_tag = _split_label(label.text())
+        title_match = _TITLE_NUM_RE.match(_clean(title_node.text()))
+        source_text = _clean(source_node.text())
+        url = _read_original_link(source_node)
+        if (
+            value_tag not in _FLAT_VALUE_TAGS
+            or title_match is None
+            or not url
+        ):
+            continue
+        body = _clean(body_node.text())
+        source_match = _CARD_SOURCE_RE.search(source_text)
+        source = source_match.group(1).strip() if source_match else ""
+        headline = title_match.group(2).strip()
+        if headline and body and source and url:
+            items.append(
+                EventItem(
+                    index=int(title_match.group(1)),
+                    category=category,
+                    value_tag=value_tag,
+                    headline=headline,
+                    url=url,
+                    body=body,
+                    image_note=source,
+                )
+            )
+    return items
+
+
 def parse_events_digest(html: str) -> list[EventItem]:
     tree = HTMLParser(html or "")
     items: list[EventItem] = []
@@ -356,6 +423,7 @@ def parse_events_digest(html: str) -> list[EventItem]:
     return (
         items
         or _parse_card_markup(tree)
+        or _parse_sibling_category_item_markup(tree)
         or _parse_current_markup(tree)
         or _parse_link_card_h3_markup(tree)
         or _parse_flat_h2_markup(tree)

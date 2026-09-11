@@ -116,6 +116,80 @@ def test_events_parses_link_card_h3_markup() -> None:
     assert items[1].value_tag == "最吸引眼球"
 
 
+def test_events_parses_sibling_category_and_item_markup() -> None:
+    html = """
+    <main>
+      <div class="meta">日报说明，不是新闻卡片。</div>
+      <div class="cat">海外大模型公司·最有价值</div>
+      <div class="item">
+        <h3>1. Anthropic 发布经济情景研究</h3>
+        <p>研究分析不同 AI 能力路径可能带来的经济影响。</p>
+        <div class="src">来源：Anthropic ｜ 原文链接：
+          <a href="https://example.com/events/econ-scenarios">
+            https://example.com/events/econ-scenarios
+          </a>
+        </div>
+      </div>
+      <div class="cat">国内·最吸引眼球</div>
+      <div class="item">
+        <h3>2. 国产机器人展示新能力</h3>
+        <p>机器人在复杂环境中完成连续操作。</p>
+        <div class="src">来源：Example News ｜ 原文链接：
+          <a href="https://example.com/events/domestic-robot">
+            https://example.com/events/domestic-robot
+          </a>
+        </div>
+      </div>
+    </main>
+    """
+
+    items = parse_events_digest(html)
+
+    assert [item.index for item in items] == [1, 2]
+    assert items[0].category == "海外大模型公司"
+    assert items[0].value_tag == "最有价值"
+    assert items[0].headline == "Anthropic 发布经济情景研究"
+    assert items[0].body == "研究分析不同 AI 能力路径可能带来的经济影响。"
+    assert items[0].image_note == "Anthropic"
+    assert items[0].url == "https://example.com/events/econ-scenarios"
+    assert items[1].category == "国内"
+    assert items[1].value_tag == "最吸引眼球"
+
+
+def test_events_sibling_markup_uses_the_link_after_original_field() -> None:
+    html = """
+    <div class="cat">海外大模型公司·最有价值</div>
+    <div class="item">
+      <h3>1. 模型公司发布新研究</h3>
+      <p>研究正文。</p>
+      <div class="src">
+        来源：<a href="https://example.com/publisher">Example</a> ｜
+        原文链接：<a href="https://example.com/article">https://example.com/article</a>
+      </div>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.url == "https://example.com/article"
+
+
+def test_events_sibling_markup_rejects_promotional_original_text() -> None:
+    html = """
+    <div class="cat">海外大模型公司·最有价值</div>
+    <div class="item">
+      <h3>1. 模型公司发布新研究</h3>
+      <p>研究正文。</p>
+      <div class="src">
+        来源：Example ｜ 原文链接作者福利：
+        <a href="https://example.com/promotion">了解更多</a>
+      </div>
+    </div>
+    """
+
+    assert parse_events_digest(html) == []
+
+
 def test_events_parses_flat_h2_email_markup_with_url_link_text() -> None:
     html = """
     <main>
@@ -302,6 +376,27 @@ def test_events_card_parser_associates_bare_url_with_original_field() -> None:
     item = parse_events_digest(html)[0]
 
     assert item.url == "https://example.com/events/bare-url"
+
+
+def test_events_card_parser_accepts_div_meta_with_bare_url_anchor() -> None:
+    html = """
+    <div class="card">
+      <span class="cat">海外大模型 · 海外大模型公司·最有价值</span>
+      <h2>1. 新模型提升复杂任务执行能力</h2>
+      <p>新版本提高了多步骤任务的稳定性。</p>
+      <div class="meta">来源：Example News | 时间：09-10凌晨(CST)<br>
+        原文：<a href="https://example.com/events/new-model">
+          https://example.com/events/new-model
+        </a>
+      </div>
+    </div>
+    """
+
+    item = parse_events_digest(html)[0]
+
+    assert item.headline == "新模型提升复杂任务执行能力"
+    assert item.image_note == "Example News"
+    assert item.url == "https://example.com/events/new-model"
 
 
 def test_events_card_parser_ignores_original_author_promotion() -> None:

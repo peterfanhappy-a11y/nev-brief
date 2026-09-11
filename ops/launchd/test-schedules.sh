@@ -16,12 +16,20 @@ plutil -lint "$GEN" >/dev/null
 plutil -lint "$REL" >/dev/null
 
 grep -q '<string>com.aivizens.ai-generate</string>' "$GEN"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Hour' "$GEN")" == "8" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Minute' "$GEN")" == "10" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:0:Hour' "$GEN")" == "8" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:0:Minute' "$GEN")" == "10" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:1:Hour' "$GEN")" == "9" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:1:Minute' "$GEN")" == "10" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:2:Hour' "$GEN")" == "10" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:2:Minute' "$GEN")" == "10" ]]
 grep -q '<string>com.aivizens.ai-release</string>' "$REL"
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Hour' "$REL")" == "8" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:Minute' "$REL")" == "45" ]]
-grep -q 'generate 08:10 / release 08:45' "$INSTALL"
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:0:Hour' "$REL")" == "8" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:0:Minute' "$REL")" == "45" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:1:Hour' "$REL")" == "9" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:1:Minute' "$REL")" == "45" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:2:Hour' "$REL")" == "10" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :StartCalendarInterval:2:Minute' "$REL")" == "45" ]]
+grep -q 'generate 08:10/09:10/10:10 / release 08:45/09:45/10:45' "$INSTALL"
 grep -q 'ai-generate-.*\.log' "$GEN_RUN"
 grep -q 'ai-release-.*\.log' "$REL_RUN"
 grep -q 'source "$PROJECT_ROOT/.env"' "$GEN_RUN"
@@ -55,6 +63,7 @@ FAKE_UV
 chmod +x "$TMP_DIR/bin/uv"
 TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
   AIVIZENS_OPERATOR_ID=test-operator bash "$GEN_RUN"
+grep -q 'python -m ai_brief generate --date .* --skip-existing' "$TMP_DIR/trace"
 grep -q 'python -m ai_brief approve --date' "$TMP_DIR/trace"
 : > "$TMP_DIR/trace"
 if TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \

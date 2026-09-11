@@ -287,6 +287,26 @@ def test_backfill_still_blocks_primary_digests_older_than_forty_hours() -> None:
     assert "required_digest_stale" in _codes(report)
 
 
+def test_backfill_age_override_applies_to_every_required_v2_digest() -> None:
+    digests = _fresh_v2_digests()
+    digests["events"] = _envelope(
+        "events",
+        age_hours=120,
+        source_urls=tuple(f"https://openai.com/news/{index}" for index in range(1, 6)),
+    )
+    for kind in ("builder", "research", "agent"):
+        digests[kind] = _envelope(kind, age_hours=120)
+
+    report = _report(
+        _v2_brief(),
+        digests,
+        primary_digest_max_age_hours=168.0,
+    )
+
+    assert report.passed is True
+    assert "required_digest_stale" not in _codes(report)
+
+
 @pytest.mark.parametrize(
     ("section_name", "code"),
     [
