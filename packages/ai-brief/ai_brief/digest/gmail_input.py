@@ -14,12 +14,9 @@ _SUBJECT_PREFIXES: dict[DigestKind, str] = {
     "events": config.DIGEST_EVENTS_SUBJECT_PREFIX,
     "builder": config.DIGEST_BUILDER_SUBJECT_PREFIX,
     "research": config.DIGEST_RESEARCH_SUBJECT_PREFIX,
-    "engineering": config.DIGEST_ENGINEERING_SUBJECT_PREFIX,
     "agent": config.DIGEST_AGENT_SUBJECT_PREFIX,
 }
-_FALLBACK_KINDS: frozenset[DigestKind] = frozenset(
-    {"research", "engineering", "agent"}
-)
+_FALLBACK_KINDS: frozenset[DigestKind] = frozenset({"research", "agent"})
 _FALLBACK_HOURS = 40.0
 
 
@@ -46,9 +43,11 @@ class GmailDigestAdapter:
         *,
         sender: str | None = None,
         fetcher: FetchDigestEmail = fetch_latest,
+        allow_fallback: bool = True,
     ) -> None:
         self._sender = sender or config.digest_sender()
         self._fetcher = fetcher
+        self._allow_fallback = allow_fallback
 
     def fetch(self, brief_date: date) -> dict[DigestKind, DigestEnvelope | None]:
         requested = brief_date.isoformat()
@@ -56,7 +55,7 @@ class GmailDigestAdapter:
         for kind, prefix in _SUBJECT_PREFIXES.items():
             email = self._fetcher(self._sender, prefix, requested)
             used_fallback = False
-            if email is None and kind in _FALLBACK_KINDS:
+            if email is None and self._allow_fallback and kind in _FALLBACK_KINDS:
                 email = self._fetcher(
                     self._sender,
                     prefix,

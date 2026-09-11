@@ -394,7 +394,7 @@ def _validate_digests(
         envelope = digests.get(kind)
         limit = (
             primary_digest_max_age_hours
-            if kind in {"events", "builder"} and primary_digest_max_age_hours is not None
+            if primary_digest_max_age_hours is not None
             else _PRIMARY_DIGEST_MAX_AGE_HOURS
             if kind in {"events", "builder"}
             else _TOOL_DIGEST_MAX_AGE_HOURS

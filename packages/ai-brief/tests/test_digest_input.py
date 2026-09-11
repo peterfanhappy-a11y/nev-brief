@@ -19,7 +19,6 @@ PREFIXES: dict[DigestKind, str] = {
     "events": config.DIGEST_EVENTS_SUBJECT_PREFIX,
     "builder": config.DIGEST_BUILDER_SUBJECT_PREFIX,
     "research": config.DIGEST_RESEARCH_SUBJECT_PREFIX,
-    "engineering": config.DIGEST_ENGINEERING_SUBJECT_PREFIX,
     "agent": config.DIGEST_AGENT_SUBJECT_PREFIX,
 }
 
@@ -41,7 +40,7 @@ def _email(
     )
 
 
-def test_fetches_all_five_kinds_as_exact_date_envelopes() -> None:
+def test_fetches_only_the_four_v2_kinds_as_exact_date_envelopes() -> None:
     """Changing a prefix mapping or exact-match policy must break this contract."""
     emails = {_prefix: _email(kind) for kind, _prefix in PREFIXES.items()}
 
@@ -52,7 +51,7 @@ def test_fetches_all_five_kinds_as_exact_date_envelopes() -> None:
 
     digests = GmailDigestAdapter(sender="digest@example.test", fetcher=fetcher).fetch(BRIEF_DATE)
 
-    assert set(digests) == {"events", "builder", "research", "engineering", "agent"}
+    assert set(digests) == {"events", "builder", "research", "agent"}
     for kind in PREFIXES:
         envelope = digests[kind]
         assert envelope is not None
@@ -73,12 +72,11 @@ def test_missing_mail_is_represented_by_none_for_its_kind() -> None:
         "events": None,
         "builder": None,
         "research": None,
-        "engineering": None,
         "agent": None,
     }
 
 
-@pytest.mark.parametrize("kind", ["research", "engineering", "agent"])
+@pytest.mark.parametrize("kind", ["research", "agent"])
 def test_tool_learning_uses_a_recent_40_hour_fallback_when_exact_date_is_missing(
     kind: DigestKind,
 ) -> None:
@@ -149,6 +147,29 @@ def test_tool_learning_rejects_fallback_mail_older_than_40_hours() -> None:
     digests = GmailDigestAdapter(sender="digest@example.test", fetcher=fetcher).fetch(BRIEF_DATE)
 
     assert digests["agent"] is None
+
+
+def test_backfill_input_can_disable_cross_date_fallback() -> None:
+    calls: list[str | None] = []
+
+    def fetcher(
+        _sender: str,
+        prefix: str,
+        requested: str | None,
+        **_: object,
+    ) -> DigestEmail | None:
+        if prefix == PREFIXES["research"]:
+            calls.append(requested)
+        return None
+
+    digests = GmailDigestAdapter(
+        sender="digest@example.test",
+        fetcher=fetcher,
+        allow_fallback=False,
+    ).fetch(BRIEF_DATE)
+
+    assert calls == ["2026-08-04"]
+    assert digests["research"] is None
 
 
 def test_envelope_preserves_attachments_and_serializes_only_safe_metadata() -> None:

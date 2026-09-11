@@ -29,6 +29,8 @@ from ai_brief.runner import (
 )
 from ai_brief.schema import AiBriefContent
 
+_MAX_BACKFILL_AGE_HOURS = 168.0
+
 
 def _parse_date(s: str) -> date:
     return datetime.strptime(s, "%Y-%m-%d").date()
@@ -55,7 +57,22 @@ def _build_parser() -> argparse.ArgumentParser:
 
     g = sub.add_parser("generate", help="生成候选简报并等待人工审核")
     g.add_argument("--date", type=_parse_date, required=True)
-    g.add_argument("--backfill", action="store_true", help="一次性回填，核心日报时效上限 40 小时")
+    g.add_argument(
+        "--backfill",
+        action="store_true",
+        help="一次性回填，必需日报时效上限默认 40 小时",
+    )
+    g.add_argument(
+        "--max-age-hours",
+        type=float,
+        default=None,
+        help="回填输入时效上限（最大 168 小时）",
+    )
+    g.add_argument(
+        "--skip-existing",
+        action="store_true",
+        help="定时重试时保留已生成、已批准或已发布的当日日报",
+    )
 
     v = sub.add_parser("preview-url", help="生成只读审核预览 URL")
     v.add_argument("--date", type=_parse_date, required=True)
@@ -85,10 +102,37 @@ async def _cmd_daily(args: argparse.Namespace) -> int:
 
 
 async def _cmd_generate(args: argparse.Namespace) -> int:
+    if args.max_age_hours is not None:
+        if not args.backfill:
+            print("ERR max-age-hours requires --backfill", flush=True)
+            return 2
+        if not 0 < args.max_age_hours <= _MAX_BACKFILL_AGE_HOURS:
+            print("ERR max-age-hours must be between 0 and 168", flush=True)
+            return 2
     conn = connect()
     try:
+        if args.skip_existing:
+            existing_status = storage.fetch_brief_status(conn, args.date)
+            conn.commit()
+            if existing_status in {"awaiting_approval", "approved", "published"}:
+                print(
+                    json.dumps(
+                        {
+                            "date": args.date.isoformat(),
+                            "status": existing_status,
+                            "skipped": True,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                return 0
         result = await generate_for_review(
-            conn, args.date, GmailDigestAdapter(), backfill=args.backfill
+            conn,
+            args.date,
+            GmailDigestAdapter(allow_fallback=not args.backfill),
+            backfill=args.backfill,
+            max_digest_age_hours=args.max_age_hours,
+            preserve_existing=args.skip_existing,
         )
         print(
             json.dumps(

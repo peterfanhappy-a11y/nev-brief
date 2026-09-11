@@ -343,8 +343,15 @@ def claim_brief_generation(
     conn: psycopg.Connection,
     brief_date: date,
     run_id: UUID,
+    *,
+    replace_awaiting_approval: bool = True,
 ) -> BriefGenerationClaim:
     """Claim a mutable daily row for one run; active generating is not stealable."""
+    replaceable_statuses = (
+        ["blocked", "awaiting_approval"]
+        if replace_awaiting_approval
+        else ["blocked"]
+    )
     sql = """
         INSERT INTO ai_daily_briefs (
             brief_date, content, status, source_run_id, generated_at
@@ -355,11 +362,11 @@ def claim_brief_generation(
             source_run_id = EXCLUDED.source_run_id,
             failure_reason = NULL,
             updated_at = statement_timestamp()
-        WHERE ai_daily_briefs.status IN ('blocked', 'awaiting_approval')
+        WHERE ai_daily_briefs.status = ANY(%s)
         RETURNING status;
     """
     with conn.cursor() as cur:
-        cur.execute(sql, (brief_date, run_id))
+        cur.execute(sql, (brief_date, run_id, replaceable_statuses))
         row = cur.fetchone()
     return "started" if row is not None else "conflict"
 
@@ -578,6 +585,13 @@ def upsert_daily_brief(
 def fetch_brief(conn: psycopg.Connection, brief_date: date) -> dict[str, Any] | None:
     with conn.cursor() as cur:
         cur.execute("SELECT content FROM ai_daily_briefs WHERE brief_date = %s;", (brief_date,))
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def fetch_brief_status(conn: psycopg.Connection, brief_date: date) -> BriefStatus | None:
+    with conn.cursor() as cur:
+        cur.execute("SELECT status FROM ai_daily_briefs WHERE brief_date = %s;", (brief_date,))
         row = cur.fetchone()
     return row[0] if row else None
 

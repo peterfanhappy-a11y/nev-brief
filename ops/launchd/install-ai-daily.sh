@@ -54,7 +54,7 @@ echo "→ launchctl bootstrap OK"
 if launchctl print "gui/$(id -u)/com.aivizens.ai-generate" >/dev/null 2>&1 \
    && launchctl print "gui/$(id -u)/com.aivizens.ai-release" >/dev/null 2>&1; then
     echo ""
-    echo "✅ AIVIZENS generate 08:10 / release 08:45 已注册"
+    echo "✅ AIVIZENS generate 08:10/09:10/10:10 / release 08:45/09:45/10:45 已注册"
     echo ""
     echo "手动测一次:"
     echo "  launchctl kickstart gui/$(id -u)/com.aivizens.ai-generate"

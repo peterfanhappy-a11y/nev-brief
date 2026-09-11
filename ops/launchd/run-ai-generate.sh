@@ -17,7 +17,7 @@ cd "$PROJECT_ROOT"
 echo "[$(date -u +%FT%TZ)] generate starting" | tee -a "$LOG_FILE"
 set +e
 RUN_DATE="$(TZ=Asia/Shanghai date +%F)"
-TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief generate --date "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE"
+TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief generate --date "$RUN_DATE" --skip-existing 2>&1 | tee -a "$LOG_FILE"
 code=${PIPESTATUS[0]}
 if [[ "$code" -eq 0 ]]; then
     echo "[$(date -u +%FT%TZ)] approve starting" | tee -a "$LOG_FILE"

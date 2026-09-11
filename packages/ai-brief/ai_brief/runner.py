@@ -24,6 +24,7 @@ from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, Yesterda
 log = get_logger("ai_brief.runner")
 
 GenerationStatus = Literal["blocked", "awaiting_approval", "conflict", "failed"]
+_MAX_DIGEST_AGE_HOURS = 168.0
 
 
 @dataclass(frozen=True)
@@ -176,8 +177,15 @@ async def generate_for_review(
     adapter: DigestInputAdapter,
     *,
     backfill: bool = False,
+    max_digest_age_hours: float | None = None,
+    preserve_existing: bool = False,
 ) -> GenerationResult:
     """Generate a candidate and stop at blocked or mandatory human review."""
+    if max_digest_age_hours is not None:
+        if not backfill:
+            raise ValueError("max_digest_age_hours requires backfill")
+        if not 0 < max_digest_age_hours <= _MAX_DIGEST_AGE_HOURS:
+            raise ValueError("max_digest_age_hours must be between 0 and 168")
     date_str = brief_date.isoformat()
     try:
         run_id = storage.start_digest_run(conn, brief_date, type(adapter).__name__)
@@ -190,7 +198,12 @@ async def generate_for_review(
     stage = "state"
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     try:
-        claim = storage.claim_brief_generation(conn, brief_date, run_id)
+        claim = storage.claim_brief_generation(
+            conn,
+            brief_date,
+            run_id,
+            replace_awaiting_approval=not preserve_existing,
+        )
         if claim == "conflict":
             storage.finish_digest_run(
                 conn,
@@ -218,7 +231,14 @@ async def generate_for_review(
 
         stage = "quality"
         if backfill:
-            log.warning("ai_runner.backfill_enabled", brief_date=date_str, max_age_hours=40)
+            backfill_age_limit = (
+                max_digest_age_hours if max_digest_age_hours is not None else 40.0
+            )
+            log.warning(
+                "ai_runner.backfill_enabled",
+                brief_date=date_str,
+                max_age_hours=backfill_age_limit,
+            )
             report = validate_brief(
                 brief,
                 digests,
@@ -226,7 +246,7 @@ async def generate_for_review(
                 deepseek_complete=bundle.deepseek_complete,
                 qwen_complete=bundle.qwen_complete,
                 now=datetime.now(UTC),
-                primary_digest_max_age_hours=40.0,
+                primary_digest_max_age_hours=backfill_age_limit,
             )
         else:
             report = validate_brief(
@@ -377,6 +397,15 @@ def approve_brief(
         if locked is None:
             conn.rollback()
             return TransitionResult(brief_date.isoformat(), "missing", False, "missing", 1)
+        if locked.status in {"approved", "published"}:
+            conn.rollback()
+            return TransitionResult(
+                brief_date.isoformat(),
+                locked.status,
+                False,
+                f"already_{locked.status}",
+                0,
+            )
         report = locked.quality_report
         if locked.status != "awaiting_approval" or not (
             isinstance(report, dict) and report.get("passed") is True
