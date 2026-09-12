@@ -39,10 +39,14 @@ mkdir -p "$PROJECT_ROOT/logs"
 launchctl bootout "gui/$(id -u)/com.aivizens.ai-generate" 2>/dev/null || true
 launchctl bootout "gui/$(id -u)/com.aivizens.ai-release" 2>/dev/null || true
 launchctl bootout "gui/$(id -u)/com.aivizens.ai-daily" 2>/dev/null || true
+if launchctl print "gui/$(id -u)/com.aivizens.ai-release" >/dev/null 2>&1; then
+    echo "❌ 旧 release agent 仍在运行，停止安装以免留下无 plist 的任务" >&2
+    exit 1
+fi
 rm -f "$LEGACY_DEST_REL"
 
 mkdir -p "$HOME/Library/LaunchAgents"
-sed "s|REPLACE_ME|$HOME|g" "$PLIST_GEN" > "$DEST_GEN"
+sed "s|REPLACE_ME/nev-brief|$PROJECT_ROOT|g" "$PLIST_GEN" > "$DEST_GEN"
 echo "→ 写入 $DEST_GEN"
 
 launchctl bootstrap "gui/$(id -u)" "$DEST_GEN"

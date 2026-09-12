@@ -58,10 +58,14 @@ chmod +x "$TMP_DIR/bin/uv"
 
 TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
   AIVIZENS_OPERATOR_ID=test-operator bash "$GEN_RUN"
-grep -q 'python -m ai_brief generate --date .* --skip-existing' "$TMP_DIR/trace"
-grep -q 'python -m ai_brief approve --date' "$TMP_DIR/trace"
-grep -q 'python -m ai_brief release --date' "$TMP_DIR/trace"
-grep -q 'python -m ai_brief deliver --date .* --retry-transient' "$TMP_DIR/trace"
+RUN_DATE="$(TZ=Asia/Shanghai date +%F)"
+cat > "$TMP_DIR/expected-trace" <<EOF
+run python -m ai_brief generate --date $RUN_DATE --skip-existing
+run python -m ai_brief approve --date $RUN_DATE
+run python -m ai_brief release --date $RUN_DATE
+run python -m ai_brief deliver --date $RUN_DATE --retry-transient
+EOF
+diff -u "$TMP_DIR/expected-trace" "$TMP_DIR/trace"
 
 : > "$TMP_DIR/trace"
 if TRACE_FILE="$TMP_DIR/trace" PATH="$TMP_DIR/bin:$PATH" PROJECT_ROOT="$TMP_DIR/project" \
@@ -107,13 +111,21 @@ grep -q 'python -m ai_brief deliver --date' "$TMP_DIR/trace"
 # Exercise installation in an isolated fake HOME. The legacy release agent is
 # booted out and its plist removed, while only the caffeinated cycle is loaded.
 TEST_HOME="$TMP_DIR/home"
-TEST_PROJECT="$TEST_HOME/nev-brief"
+TEST_PROJECT="$TMP_DIR/custom-project"
 mkdir -p "$TEST_PROJECT/ops/launchd" "$TEST_HOME/Library/LaunchAgents"
 cp "$GEN" "$GEN_RUN" "$INSTALL" "$TEST_PROJECT/ops/launchd/"
 touch "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-release.plist"
 cat > "$TMP_DIR/bin/launchctl" <<'FAKE_LAUNCHCTL'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$LAUNCHCTL_TRACE"
+if [[ "$*" == *"com.aivizens.ai-release"* ]]; then
+  if [[ "$1" == "print" ]]; then
+    [[ "${FAKE_RELEASE_STUCK:-0}" == "1" ]] && exit 0 || exit 1
+  fi
+  if [[ "$1" == "bootout" && "${FAKE_RELEASE_STUCK:-0}" == "1" ]]; then
+    exit 1
+  fi
+fi
 exit 0
 FAKE_LAUNCHCTL
 chmod +x "$TMP_DIR/bin/launchctl"
@@ -121,11 +133,22 @@ LAUNCHCTL_TRACE="$TMP_DIR/launchctl-trace" HOME="$TEST_HOME" \
   PROJECT_ROOT="$TEST_PROJECT" PATH="$TMP_DIR/bin:$PATH" bash "$TEST_PROJECT/ops/launchd/install-ai-daily.sh"
 [[ -f "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-generate.plist" ]]
 [[ ! -e "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-release.plist" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :WorkingDirectory' "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-generate.plist")" == "$TEST_PROJECT" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:3' "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-generate.plist")" == "$TEST_PROJECT/ops/launchd/run-ai-generate.sh" ]]
 grep -q 'bootout .*com.aivizens.ai-release' "$TMP_DIR/launchctl-trace"
 grep -q 'bootstrap .*com.aivizens.ai-generate.plist' "$TMP_DIR/launchctl-trace"
 if grep -q 'bootstrap .*com.aivizens.ai-release.plist' "$TMP_DIR/launchctl-trace"; then
   echo 'legacy release agent was bootstrapped' >&2
   exit 1
 fi
+
+touch "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-release.plist"
+if LAUNCHCTL_TRACE="$TMP_DIR/launchctl-stuck-trace" HOME="$TEST_HOME" \
+  PROJECT_ROOT="$TEST_PROJECT" PATH="$TMP_DIR/bin:$PATH" FAKE_RELEASE_STUCK=1 \
+  bash "$TEST_PROJECT/ops/launchd/install-ai-daily.sh"; then
+  echo 'install unexpectedly succeeded while legacy release agent remained loaded' >&2
+  exit 1
+fi
+[[ -f "$TEST_HOME/Library/LaunchAgents/com.aivizens.ai-release.plist" ]]
 
 echo 'launchd schedule contract ok'
