@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>com.aivizens.ai-generate</string>
-<key>ProgramArguments</key><array><string>/bin/bash</string><string>REPLACE_ME/nev-brief/ops/launchd/run-ai-generate.sh</string></array>
+<key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-s</string><string>/bin/bash</string><string>REPLACE_ME/nev-brief/ops/launchd/run-ai-generate.sh</string></array>
 <key>EnvironmentVariables</key><dict><key>PROJECT_ROOT</key><string>REPLACE_ME/nev-brief</string></dict>
 <key>WorkingDirectory</key><string>REPLACE_ME/nev-brief</string>
 <key>StartCalendarInterval</key><array>

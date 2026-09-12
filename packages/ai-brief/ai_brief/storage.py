@@ -795,7 +795,7 @@ def retry_transient_deliveries(
         SET status = 'pending', updated_at = statement_timestamp()
         WHERE status = 'failed'
           AND retry_count < %s
-          AND error LIKE 'transient:%'
+          AND error LIKE 'transient:%%'
           AND (%s IS NULL OR brief_date = %s)
         RETURNING id;
     """
