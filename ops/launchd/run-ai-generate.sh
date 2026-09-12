@@ -26,6 +26,18 @@ if [[ "$code" -eq 0 ]]; then
     code=${PIPESTATUS[0]}
     echo "[$(date -u +%FT%TZ)] approve finished exit=$code" | tee -a "$LOG_FILE"
 fi
+if [[ "$code" -eq 0 ]]; then
+    echo "[$(date -u +%FT%TZ)] release starting" | tee -a "$LOG_FILE"
+    TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief release --date "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE"
+    code=${PIPESTATUS[0]}
+    echo "[$(date -u +%FT%TZ)] release finished exit=$code" | tee -a "$LOG_FILE"
+fi
+if [[ "$code" -eq 0 ]]; then
+    echo "[$(date -u +%FT%TZ)] deliver starting" | tee -a "$LOG_FILE"
+    TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief deliver --date "$RUN_DATE" --retry-transient 2>&1 | tee -a "$LOG_FILE"
+    code=${PIPESTATUS[0]}
+    echo "[$(date -u +%FT%TZ)] deliver finished exit=$code" | tee -a "$LOG_FILE"
+fi
 set -e
 echo "[$(date -u +%FT%TZ)] generate finished exit=$code" | tee -a "$LOG_FILE"
 exit "$code"

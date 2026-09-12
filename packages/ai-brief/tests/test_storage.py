@@ -9,6 +9,8 @@ from unittest.mock import MagicMock
 
 from ai_brief import storage
 from ai_brief.storage import AiArticle
+from psycopg._queries import PostgresQuery
+from psycopg.adapt import Transformer
 
 
 def _mock_conn(
@@ -91,6 +93,20 @@ def test_lock_active_subscriber_holds_row_lock() -> None:
 def test_lock_active_subscriber_rejects_unsubscribed() -> None:
     conn, _cur = _mock_conn(fetch_rows=[("unsubscribed",)])
     assert storage.lock_active_subscriber(conn, subscriber_id="sid1") is False
+
+
+def test_retry_transient_deliveries_uses_valid_psycopg_placeholders() -> None:
+    conn, cur = _mock_conn(fetch_rows=[("delivery-1",), ("delivery-2",)])
+
+    def adapt_query(query: str, params: tuple[object, ...]) -> None:
+        PostgresQuery(Transformer()).convert(query, params)
+
+    cur.execute.side_effect = adapt_query
+
+    assert storage.retry_transient_deliveries(
+        conn,
+        brief_date=date(2026, 9, 12),
+    ) == 2
 
 
 def test_fetch_previous_brief_returns_content() -> None:
