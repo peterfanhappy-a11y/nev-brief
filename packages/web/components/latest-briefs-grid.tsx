@@ -5,25 +5,7 @@ import React, { useState } from "react";
 
 import type { AiBriefSummary } from "@/lib/ai-briefs";
 
-const MODULE_ACCENTS = [
-  "from-indigo-500 to-violet-500",
-  "from-sky-500 to-cyan-500",
-  "from-emerald-500 to-teal-500",
-  "from-amber-500 to-orange-500",
-  "from-rose-500 to-pink-500",
-] as const;
 const BRIEFS_PER_PAGE = 6;
-
-function moduleAccent(modules: string[]): string {
-  if (modules.length === 0) return "from-gray-200 to-gray-300";
-
-  const key = modules.join("|");
-  const index = Array.from(key).reduce(
-    (sum, character) => sum + character.codePointAt(0)!,
-    0,
-  );
-  return MODULE_ACCENTS[index % MODULE_ACCENTS.length];
-}
 
 function BriefCard({ brief }: { brief: AiBriefSummary }) {
   const modules = brief.modules.filter((module) => module.trim().length > 0);
@@ -35,7 +17,7 @@ function BriefCard({ brief }: { brief: AiBriefSummary }) {
         className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
       >
         <div
-          className={`h-1.5 bg-gradient-to-r ${moduleAccent(modules)}`}
+          className="h-1.5 bg-gradient-to-r from-amber-500 to-orange-500"
           aria-hidden="true"
         />
         <div className="flex flex-1 flex-col p-5">

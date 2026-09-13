@@ -83,6 +83,12 @@ describe("LatestBriefsGrid", () => {
     ).toBeInTheDocument();
     expect(container.querySelectorAll("article")).toHaveLength(6);
     expect(container.querySelectorAll("time")).toHaveLength(6);
+    for (const card of container.querySelectorAll("article")) {
+      expect(card.querySelector('[aria-hidden="true"]')).toHaveClass(
+        "from-amber-500",
+        "to-orange-500",
+      );
+    }
 
     const newestCard = screen
       .getByRole("heading", { name: "智能体开始接管重复工作" })
