@@ -297,7 +297,7 @@ describe("published brief queries", () => {
     ]);
   });
 
-  it("caps an explicit list limit at six and drops malformed whole rows", async () => {
+  it("caps an explicit archive limit at one thousand and drops malformed whole rows", async () => {
     const query = new QueryBuilder({
       data: [
         row("2026-08-03", "2026-08-03T00:00:00.000Z"),
@@ -311,10 +311,10 @@ describe("published brief queries", () => {
     });
     useQueries(query);
 
-    const result = await listPublishedBriefs(100);
+    const result = await listPublishedBriefs(5000);
 
     expect(result.map((brief) => brief.briefDate)).toEqual(["2026-08-03"]);
-    expect(query.limit).toHaveBeenCalledWith(6);
+    expect(query.limit).toHaveBeenCalledWith(1000);
   });
 
   it("rejects list query failures without exposing the raw database error", async () => {

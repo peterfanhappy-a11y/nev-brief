@@ -4,7 +4,8 @@ import { z } from "zod";
 
 import { getSupabaseAdmin } from "@/lib/supabase";
 
-const MAX_PUBLISHED_BRIEFS = 6;
+const DEFAULT_PUBLISHED_BRIEFS = 6;
+const MAX_PUBLISHED_BRIEFS = 1000;
 const PUBLISHED_DATE_PAGE_SIZE = 1000;
 const BRIEF_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -243,12 +244,12 @@ function moduleLabels(content: AiBriefContent): string[] {
 }
 
 function listLimit(limit: number): number {
-  if (!Number.isFinite(limit)) return MAX_PUBLISHED_BRIEFS;
+  if (!Number.isFinite(limit)) return DEFAULT_PUBLISHED_BRIEFS;
   return Math.min(MAX_PUBLISHED_BRIEFS, Math.max(1, Math.trunc(limit)));
 }
 
 export async function listPublishedBriefs(
-  limit = MAX_PUBLISHED_BRIEFS,
+  limit = DEFAULT_PUBLISHED_BRIEFS,
 ): Promise<AiBriefSummary[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("ai_daily_briefs")

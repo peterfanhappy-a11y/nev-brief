@@ -116,32 +116,35 @@ function DigestBlock({
   const headingId = `daily-section-${slotId}`;
 
   return (
-    <section className="border-t border-gray-100 py-10" aria-labelledby={headingId}>
-      <h2
+    <section
+      className="mt-6 overflow-hidden rounded-xl border-2 border-gray-900 bg-white"
+      aria-labelledby={headingId}
+    >
+      <h3
         id={headingId}
-        className="text-2xl font-bold text-gray-900"
+        className="px-5 pt-4 text-sm font-extrabold tracking-wider text-indigo-600"
       >
         {title}
-      </h2>
-      {section.subtitle && (
-        <p className="mt-2 text-sm leading-relaxed text-gray-500">
-          {section.subtitle}
-        </p>
-      )}
+      </h3>
       {section.header_image && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={section.header_image}
           alt={imageAlt}
           loading="lazy"
-          className="mt-6 aspect-[16/9] w-full rounded-xl object-cover"
+          className="mt-4 aspect-[16/9] w-full object-cover"
         />
       )}
-      <div className="mt-6 space-y-6">
+      {section.subtitle && (
+        <p className="px-5 pt-4 text-lg font-extrabold leading-relaxed text-gray-900">
+          {section.subtitle}
+        </p>
+      )}
+      <div className="mt-4 divide-y divide-gray-200 border-t border-gray-200">
         {section.stories.map((story, storyIndex) => (
-          <div key={`${slotId}-story-${storyIndex}`}>
+          <div key={`${slotId}-story-${storyIndex}`} className="px-5 py-5">
             {story.label && (
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">
                 {story.label}
               </p>
             )}
@@ -163,13 +166,23 @@ function DigestBlock({
             <p className="mt-2 leading-relaxed text-gray-700">{story.summary}</p>
             {story.url && (
               <p className="mt-3 text-sm font-medium">
-                <ExternalLink href={story.url}>{section.cta_label}</ExternalLink>
+                <ExternalLink href={story.url}>
+                  {section.cta_label}<span aria-hidden="true"> →</span>
+                </ExternalLink>
               </p>
             )}
           </div>
         ))}
       </div>
     </section>
+  );
+}
+
+function SectionGroupTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="mt-10 bg-gray-950 px-4 py-3 text-center text-sm font-extrabold tracking-[0.35em] text-white">
+      {children}
+    </h2>
   );
 }
 
@@ -180,8 +193,17 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const digestSections = visibleDigestSections(content);
 
   return (
-    <article className="rounded-2xl border border-gray-100 bg-white px-6 py-8 shadow-sm sm:px-10 sm:py-12">
-      <header className="pb-10">
+    <article className="bg-white px-1 py-2 sm:px-4 sm:py-4">
+      <section
+        aria-labelledby="daily-overview-heading"
+        className="rounded-xl border-2 border-gray-900 bg-white p-6 sm:p-8"
+      >
+        <p
+          id="daily-overview-heading"
+          className="text-sm font-extrabold tracking-wider text-indigo-600"
+        >
+          概览
+        </p>
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
           <time dateTime={brief.briefDate}>{brief.briefDate}</time>
           <span aria-hidden="true">·</span>
@@ -195,7 +217,10 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
             {content.editorial}
           </p>
         )}
-        <ul className="mt-6 space-y-2 rounded-xl bg-indigo-50/70 p-5 text-gray-800">
+        <div className="mt-6 border-t border-gray-200 pt-5 text-xs font-extrabold tracking-wider text-gray-900">
+          今日 AI 简报
+        </div>
+        <ul className="mt-3 space-y-2 text-gray-800">
           {content.intro_bullets.map((bullet, bulletIndex) => (
             <li key={`intro-${bulletIndex}`} className="flex gap-3">
               <span className="text-indigo-500" aria-hidden="true">
@@ -205,9 +230,11 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
             </li>
           ))}
         </ul>
-      </header>
+      </section>
 
-      {digestSections.map(
+      <SectionGroupTitle>今日精选</SectionGroupTitle>
+
+      {digestSections.slice(0, 2).map(
         ({ slotId, title, section }) =>
           section && (
             <DigestBlock
@@ -220,8 +247,8 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
       )}
 
       {featured.length > 0 && (
-        <section className="border-t border-gray-100 py-10">
-          <h2 className="text-2xl font-bold text-gray-900">更多精选</h2>
+        <section className="mt-6 rounded-xl border-2 border-gray-900 p-5 sm:p-6">
+          <h2 className="text-xl font-bold text-gray-900">更多精选</h2>
           <div className="mt-6 space-y-8">
             {featured.map((item, itemIndex) => (
               <div key={`featured-${itemIndex}`}>
@@ -257,6 +284,20 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
             ))}
           </div>
         </section>
+      )}
+
+      <SectionGroupTitle>工具学习</SectionGroupTitle>
+
+      {digestSections.slice(2).map(
+        ({ slotId, title, section }) =>
+          section && (
+            <DigestBlock
+              key={slotId}
+              slotId={slotId}
+              title={title}
+              section={section}
+            />
+          ),
       )}
 
       {content.version !== 2 && content.tools.length > 0 && (

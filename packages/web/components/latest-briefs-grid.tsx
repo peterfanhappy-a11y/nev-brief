@@ -1,5 +1,7 @@
+"use client";
+
 import Link from "next/link";
-import React from "react";
+import React, { useState } from "react";
 
 import type { AiBriefSummary } from "@/lib/ai-briefs";
 
@@ -10,6 +12,7 @@ const MODULE_ACCENTS = [
   "from-amber-500 to-orange-500",
   "from-rose-500 to-pink-500",
 ] as const;
+const BRIEFS_PER_PAGE = 6;
 
 function moduleAccent(modules: string[]): string {
   if (modules.length === 0) return "from-gray-200 to-gray-300";
@@ -76,7 +79,9 @@ export default function LatestBriefsGrid({
   briefs: AiBriefSummary[];
   unavailable?: boolean;
 }) {
-  const visibleBriefs = briefs.slice(0, 6);
+  const [visibleCount, setVisibleCount] = useState(BRIEFS_PER_PAGE);
+  const visibleBriefs = briefs.slice(0, visibleCount);
+  const hasMore = visibleBriefs.length < briefs.length;
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-16">
@@ -103,11 +108,24 @@ export default function LatestBriefsGrid({
           </Link>
         </div>
       ) : visibleBriefs.length > 0 ? (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {visibleBriefs.map((brief) => (
-            <BriefCard key={brief.briefDate} brief={brief} />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleBriefs.map((brief) => (
+              <BriefCard key={brief.briefDate} brief={brief} />
+            ))}
+          </div>
+          {hasMore && (
+            <div className="mt-10 text-center">
+              <button
+                type="button"
+                onClick={() => setVisibleCount((count) => count + BRIEFS_PER_PAGE)}
+                className="rounded-full border-2 border-gray-900 bg-white px-8 py-2.5 text-sm font-semibold text-gray-900 transition-colors hover:bg-gray-900 hover:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+              >
+                更多
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50/60 px-6 py-12 text-center">
           <h3 className="text-xl font-semibold text-gray-900">

@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import LatestBriefsGrid from "@/components/latest-briefs-grid";
@@ -64,9 +64,19 @@ const BRIEFS: AiBriefSummary[] = [
   },
 ];
 
+const ARCHIVE_BRIEFS: AiBriefSummary[] = [
+  ...BRIEFS,
+  ...Array.from({ length: 6 }, (_, index) => ({
+    ...BRIEFS[6],
+    briefDate: `2026-07-${String(27 - index).padStart(2, "0")}`,
+    subject: `归档日报第 ${index + 8} 期`,
+    publishedAt: `2026-07-${String(27 - index).padStart(2, "0")}T01:00:00.000Z`,
+  })),
+];
+
 describe("LatestBriefsGrid", () => {
-  it("renders at most six real daily issues with semantic archive links", () => {
-    const { container } = render(<LatestBriefsGrid briefs={BRIEFS} />);
+  it("reveals six more daily issues per click until the archive is exhausted", () => {
+    const { container } = render(<LatestBriefsGrid briefs={ARCHIVE_BRIEFS} />);
 
     expect(
       screen.getByRole("heading", { name: "最新日报" }),
@@ -102,6 +112,18 @@ describe("LatestBriefsGrid", () => {
     expect(screen.getByText("开源模型生态继续扩张")).toBeInTheDocument();
     expect(screen.queryByText("不应渲染的第七期")).not.toBeInTheDocument();
     expect(screen.queryByText("阅读全文")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+
+    expect(container.querySelectorAll("article")).toHaveLength(12);
+    expect(screen.getByText("不应渲染的第七期")).toBeInTheDocument();
+    expect(screen.queryByText("归档日报第 13 期")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "更多" }));
+
+    expect(container.querySelectorAll("article")).toHaveLength(13);
+    expect(screen.getByText("归档日报第 13 期")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
   });
 
   it("keeps a subscription path visible while the first issue is prepared", () => {
