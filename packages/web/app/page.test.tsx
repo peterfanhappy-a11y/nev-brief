@@ -42,10 +42,10 @@ describe("AIVIZENS homepage", () => {
     vi.restoreAllMocks();
   });
 
-  it("loads the latest six published summaries into the daily grid", async () => {
+  it("loads enough published summaries for the expandable daily archive", async () => {
     await renderHomepage();
 
-    expect(mocks.listPublishedBriefs).toHaveBeenCalledWith(6);
+    expect(mocks.listPublishedBriefs).toHaveBeenCalledWith(1000);
     expect(
       screen.getByRole("heading", { name: "真实发布日报" }),
     ).toBeInTheDocument();

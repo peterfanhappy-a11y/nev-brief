@@ -221,6 +221,34 @@ describe("estimateChineseReadMinutes", () => {
 });
 
 describe("DailyBrief", () => {
+  it("groups v2 content like the email and frames every primary module", () => {
+    vi.stubGlobal("React", React);
+    render(<DailyBrief brief={V2_BRIEF} />);
+
+    expect(screen.getByRole("region", { name: "概览" })).toHaveClass(
+      "border-2",
+      "border-gray-900",
+    );
+
+    for (const groupTitle of ["今日精选", "工具学习"]) {
+      expect(screen.getByRole("heading", { name: groupTitle })).toHaveClass(
+        "bg-gray-950",
+        "text-white",
+      );
+    }
+
+    for (const moduleTitle of [
+      "一、今日AI",
+      "二、AI大神",
+      "三、AI研究",
+      "四、Agent工具",
+    ]) {
+      expect(
+        screen.getByRole("heading", { name: moduleTitle }).closest("section"),
+      ).toHaveClass("border-2", "border-gray-900");
+    }
+  });
+
   it("uses the stored v2 four-module content for displayed reading time", () => {
     vi.stubGlobal("React", React);
     const brief: AiPublishedBrief = {

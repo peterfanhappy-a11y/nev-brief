@@ -25,7 +25,7 @@ export default async function AiTrendsHome() {
   let briefsUnavailable = false;
 
   try {
-    briefs = await listPublishedBriefs(6);
+    briefs = await listPublishedBriefs(1000);
   } catch {
     briefsUnavailable = true;
     console.error("[homepage] published briefs unavailable");
