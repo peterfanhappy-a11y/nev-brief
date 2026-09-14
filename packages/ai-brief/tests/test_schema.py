@@ -62,7 +62,11 @@ def _v2_contract_brief() -> AiBriefContent:
 
 def test_v3_requires_a_complete_opc_case() -> None:
     valid = _v2_contract_brief().model_copy(
-        update={"version": 3, "opc_case": _opc_case(), "intro_bullets": ["一", "二", "三", "🧰 工具"]}
+        update={
+            "version": 3,
+            "opc_case": _opc_case(),
+            "intro_bullets": ["一", "二", "三", "🧰 工具"],
+        }
     )
     assert AiBriefContent.model_validate(valid.model_dump()).version == 3
 
