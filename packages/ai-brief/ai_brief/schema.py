@@ -194,6 +194,18 @@ class YesterdayTop(BaseModel):
     url: str
 
 
+class OpcCase(BaseModel):
+    sharer: str = Field(min_length=1, max_length=80)
+    headline: str = Field(min_length=1, max_length=120)
+    summary: str = Field(min_length=1, max_length=500)
+    original_revenue: str = Field(min_length=1, max_length=80)
+    monthly_revenue_usd: int = Field(gt=0)
+    revenue_display: str = Field(min_length=1, max_length=80)
+    url: str
+    header_image: str
+    header_image_alt: str = Field(min_length=1, max_length=160)
+
+
 class Stage1Stats(BaseModel):
     candidates: int = 0
     dupe_groups: int = 0
@@ -203,7 +215,7 @@ class Stage1Stats(BaseModel):
 class AiBriefContent(BaseModel):
     """完整简报文档。存 ai_daily_briefs.content。"""
 
-    version: Literal[1, 2] = SCHEMA_VERSION
+    version: Literal[1, 2, 3] = SCHEMA_VERSION
     brief_date: str  # YYYY-MM-DD
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
@@ -222,16 +234,19 @@ class AiBriefContent(BaseModel):
     daily_tip: DailyTip | None = None
     quick_hits: list[QuickHit] = Field(default_factory=list, max_length=6)
     yesterday_top: YesterdayTop | None = None
+    opc_case: OpcCase | None = None
     model: str | None = None
     stage1_stats: Stage1Stats | None = None
 
     @model_validator(mode="after")
-    def remove_v2_engineering_content(self) -> AiBriefContent:
-        if self.version == 2:
+    def remove_frozen_content(self) -> AiBriefContent:
+        if self.version in (2, 3):
             self.ai_engineering = None
             self.featured = []
             self.tools = []
             self.daily_tip = None
             self.quick_hits = []
             self.yesterday_top = None
+        if self.version == 3 and self.opc_case is None:
+            raise ValueError("v3 content requires opc_case")
         return self

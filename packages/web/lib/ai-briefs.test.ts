@@ -144,6 +144,27 @@ describe("AiBriefContentSchema", () => {
     ).toBe(2);
   });
 
+  it("accepts complete v3 OPC content and rejects an absent OPC case", () => {
+    const v3Content = content({
+      version: 3,
+      opc_case: {
+        sharer: "Ruslan",
+        headline: "$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+        summary: "他重建电商 AI 销售代理并恢复增长。",
+        original_revenue: "$167K MRR",
+        monthly_revenue_usd: 167_000,
+        revenue_display: "$167K 美元月度营收",
+        url: "https://www.indiehackers.com/post/example",
+        header_image: "https://cdn.example.com/opc.png",
+        header_image_alt: "Ruslan 的 Zipchat 案例",
+      },
+    });
+
+    expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(true);
+    delete v3Content.opc_case;
+    expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(false);
+  });
+
   it("rejects v2 content that still contains engineering data", () => {
     const parsed = AiBriefContentSchema.safeParse(
       content({

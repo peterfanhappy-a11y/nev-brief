@@ -6,6 +6,7 @@ from ai_brief.schema import (
     AiBriefContent,
     DailyTip,
     FeaturedItem,
+    OpcCase,
     QuickHit,
     Theme,
     Tool,
@@ -32,6 +33,48 @@ def _engineering_featured() -> FeaturedItem:
     return _minimal_featured().model_copy(
         update={"theme": Theme.AI_ENGINEERING, "theme_label": "AI工程"},
     )
+
+
+def _opc_case() -> OpcCase:
+    return OpcCase(
+        sharer="Ruslan",
+        headline="$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+        summary="他重建电商 AI 销售代理并恢复增长。",
+        original_revenue="$167K MRR",
+        monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收",
+        url="https://www.indiehackers.com/post/example",
+        header_image="https://cdn.example.com/opc.png",
+        header_image_alt="Ruslan 的 Zipchat 案例",
+    )
+
+
+def _v2_contract_brief() -> AiBriefContent:
+    return AiBriefContent(
+        version=2,
+        brief_date="2026-09-14",
+        subject="AI 日报",
+        preheader="今天最值得关注的 AI 动态",
+        editorial="今天的核心判断。",
+        intro_bullets=["要点一"],
+    )
+
+
+def test_v3_requires_a_complete_opc_case() -> None:
+    valid = _v2_contract_brief().model_copy(
+        update={"version": 3, "opc_case": _opc_case(), "intro_bullets": ["一", "二", "三", "🧰 工具"]}
+    )
+    assert AiBriefContent.model_validate(valid.model_dump()).version == 3
+
+    with pytest.raises(ValidationError):
+        AiBriefContent.model_validate(
+            valid.model_dump(exclude={"opc_case"})
+        )
+
+
+def test_v2_remains_valid_without_opc_case() -> None:
+    brief = _v2_contract_brief().model_copy(update={"version": 2, "opc_case": None})
+    assert AiBriefContent.model_validate(brief.model_dump()).opc_case is None
 
 
 def test_minimal_valid_brief() -> None:

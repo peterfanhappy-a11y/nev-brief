@@ -110,13 +110,27 @@ const YesterdayTopSchema = z.object({
   url: HttpsUrlSchema,
 });
 
+const OpcCaseSchema = z
+  .object({
+    sharer: z.string().min(1).max(80),
+    headline: z.string().min(1).max(120),
+    summary: z.string().min(1).max(500),
+    original_revenue: z.string().min(1).max(80),
+    monthly_revenue_usd: z.number().int().positive(),
+    revenue_display: z.string().min(1).max(80),
+    url: HttpsUrlSchema,
+    header_image: HttpsUrlSchema,
+    header_image_alt: z.string().min(1).max(160),
+  })
+  .strict();
+
 const Stage1StatsSchema = z.object({
   candidates: z.number().int().default(0),
   dupe_groups: z.number().int().default(0),
 });
 
 export const AiBriefContentSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]).default(1),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
@@ -134,23 +148,31 @@ export const AiBriefContentSchema = z.object({
   yesterday_top: YesterdayTopSchema.nullish().transform(
     (value) => value ?? null,
   ),
+  opc_case: OpcCaseSchema.nullish().transform((value) => value ?? null),
   model: z.string().nullish().transform((value) => value ?? null),
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
   ),
 }).superRefine((content, context) => {
-  if (content.version !== 2) return;
+  if (content.version === 3 && !content.opc_case) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v3 content requires opc_case",
+      path: ["opc_case"],
+    });
+  }
+  if (content.version !== 2 && content.version !== 3) return;
   if (content.ai_engineering) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include AI engineering",
+      message: `v${content.version} content cannot include AI engineering`,
       path: ["ai_engineering"],
     });
   }
   if (content.featured.length > 0) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include featured items",
+      message: `v${content.version} content cannot include featured items`,
       path: ["featured"],
     });
   }
@@ -162,7 +184,7 @@ export const AiBriefContentSchema = z.object({
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include legacy auxiliary sections",
+      message: `v${content.version} content cannot include legacy auxiliary sections`,
       path: ["tools"],
     });
   }
