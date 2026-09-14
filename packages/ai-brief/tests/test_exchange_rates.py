@@ -171,16 +171,13 @@ def test_non_usd_arr_uses_monthly_euro_cross_rate() -> None:
 def test_fetches_daily_ecb_rates_from_fixture(monkeypatch: pytest.MonkeyPatch) -> None:
     response = Mock()
     response.text = ECB_FIXTURE.read_text(encoding="utf-8")
-    monkeypatch.setattr("ai_brief.digest.exchange_rates.httpx.get", Mock(return_value=response))
+    get = Mock(return_value=response)
+    monkeypatch.setattr("ai_brief.digest.exchange_rates.httpx.get", get)
 
     rates = fetch_ecb_rates()
 
     assert rates == {"EUR": Decimal("1"), "USD": Decimal("1.20"), "CNY": Decimal("7.20")}
-    from ai_brief.digest import exchange_rates
-
-    exchange_rates.httpx.get.assert_called_once_with(
-        ECB_DAILY_RATES_URL, timeout=10.0, follow_redirects=True
-    )
+    get.assert_called_once_with(ECB_DAILY_RATES_URL, timeout=10.0, follow_redirects=True)
     response.raise_for_status.assert_called_once_with()
 
 
