@@ -12,7 +12,7 @@ from ai_brief.digest.models import OpcCaseCandidate, Revenue
 
 _HEADER_RE = re.compile(r"^案例\s*(\d+)\s*·\s*([^：]+?)\s*：\s*(.+)$")
 _REVENUE_RE = re.compile(
-    r"^(?P<currency>US\$|USD|美元|\$|EUR|欧元|€|GBP|英镑|£|CNY|RMB|人民币|JPY|日元)\s*"
+    r"^(?P<currency>US\$|USD|美元|\$|EUR|欧元|€|GBP|英镑|£|CNY|RMB|人民币|JPY|日元|[A-Z]{3})\s*"
     r"(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*"
     r"(?P<unit>[KMB])?\+?\s*(?P<period>MRR|ARR)$",
     re.IGNORECASE,
@@ -43,9 +43,9 @@ def parse_revenue(text: str) -> Revenue | None:
         return None
 
     currency = match.group("currency")
-    currency_code = _CURRENCY_CODES.get(currency.upper(), _CURRENCY_CODES.get(currency))
+    currency_code = _CURRENCY_CODES.get(currency.upper())
     if currency_code is None:
-        return None
+        currency_code = _CURRENCY_CODES.get(currency, currency.upper())
     unit = (match.group("unit") or "").upper()
     period = match.group("period").upper()
     return Revenue(

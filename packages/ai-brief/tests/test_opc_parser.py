@@ -45,6 +45,9 @@ def test_rejects_ambiguous_or_incomplete_revenue(revenue_text: str) -> None:
         ("人民币 1 MRR", "CNY"),
         ("JPY 1 MRR", "JPY"),
         ("日元 1 MRR", "JPY"),
+        ("CAD 1 MRR", "CAD"),
+        ("AUD 1 MRR", "AUD"),
+        ("XXX 1 MRR", "XXX"),
     ],
 )
 def test_parses_explicit_currency_tokens(revenue_text: str, currency: str) -> None:
