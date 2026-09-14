@@ -1,9 +1,10 @@
 """Normalize OPC case revenue into comparable monthly USD amounts."""
+
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Callable, Mapping, Sequence
+from decimal import ROUND_HALF_UP, Decimal
 from xml.etree import ElementTree
 
 import httpx
@@ -29,7 +30,7 @@ def fetch_ecb_rates() -> dict[str, Decimal]:
     try:
         response = httpx.get(ECB_DAILY_RATES_URL, timeout=10.0, follow_redirects=True)
         response.raise_for_status()
-        root = ElementTree.fromstring(response.text)
+        root = ElementTree.fromstring(response.text)  # noqa: S314 - ECB rates are a trusted XML feed.
     except (httpx.HTTPError, ElementTree.ParseError) as error:
         raise RevenueConversionError("could not fetch ECB rates") from error
 
@@ -67,17 +68,31 @@ def monthly_revenue_usd(revenue: Revenue, rates: Mapping[str, Decimal]) -> Decim
         usd_amount = period_amount
     else:
         _positive_rate(rates, "EUR")
-        usd_amount = period_amount / _positive_rate(rates, revenue.currency) * _positive_rate(rates, "USD")
+        usd_amount = (
+            period_amount / _positive_rate(rates, revenue.currency) * _positive_rate(rates, "USD")
+        )
     return usd_amount.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
 
 
+def _display_amount(amount: Decimal) -> str:
+    value = format(amount.normalize(), "f")
+    return value.rstrip("0").rstrip(".") if "." in value else value
+
+
 def format_monthly_usd(amount: Decimal, *, approximate: bool) -> str:
-    thousands = amount / Decimal(1000)
-    compact = format(thousands.normalize(), "f")
-    if "." in compact:
-        compact = compact.rstrip("0").rstrip(".")
+    unit = ""
+    divisor = Decimal(1)
+    for threshold, candidate_divisor, candidate_unit in (
+        (Decimal("1000000000"), Decimal("1000000000"), "B"),
+        (Decimal("1000000"), Decimal("1000000"), "M"),
+        (Decimal("1000"), Decimal("1000"), "K"),
+    ):
+        if amount >= threshold:
+            divisor = candidate_divisor
+            unit = candidate_unit
+            break
     prefix = "约 " if approximate else ""
-    return f"{prefix}${compact}K 美元月度营收"
+    return f"{prefix}${_display_amount(amount / divisor)}{unit} 美元月度营收"
 
 
 def select_highest_case(
@@ -91,7 +106,7 @@ def select_highest_case(
         rates = rates_loader()
     converted_cases = [(case, monthly_revenue_usd(case.revenue, rates)) for case in cases]
     candidate, monthly_amount = max(converted_cases, key=lambda item: (item[1], -item[0].index))
-    converted = candidate.revenue.currency != "USD"
+    converted = candidate.revenue.currency != "USD" or candidate.revenue.period != "MRR"
     return SelectedOpcCase(
         candidate=candidate,
         monthly_revenue_usd=monthly_amount,
