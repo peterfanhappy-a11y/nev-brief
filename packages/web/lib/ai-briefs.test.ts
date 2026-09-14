@@ -225,13 +225,13 @@ describe("published brief queries", () => {
     vi.unstubAllEnvs();
   });
 
-  it("lists validated summaries newest-first with a default limit of six", async () => {
+  it("orders validated summaries by brief date when an older issue is backfilled later", async () => {
     const query = new QueryBuilder({
       data: [
         row("2026-08-03", "2026-08-03T00:00:00.000Z"),
         row(
           "2026-08-02",
-          "2026-08-02T00:00:00.000Z",
+          "2026-08-04T00:00:00.000Z",
           content({
             brief_date: "2026-08-02",
             subject: "Older subject",
@@ -261,14 +261,12 @@ describe("published brief queries", () => {
         preheader: "Published preheader",
         editorial: "Published editorial",
         modules: [],
-        publishedAt: "2026-08-02T00:00:00.000Z",
+        publishedAt: "2026-08-04T00:00:00.000Z",
       },
     ]);
     expect(query.eq).toHaveBeenCalledWith("status", "published");
-    expect(query.order).toHaveBeenNthCalledWith(1, "published_at", {
-      ascending: false,
-    });
-    expect(query.order).toHaveBeenNthCalledWith(2, "brief_date", {
+    expect(query.order).toHaveBeenCalledTimes(1);
+    expect(query.order).toHaveBeenCalledWith("brief_date", {
       ascending: false,
     });
     expect(query.limit).toHaveBeenCalledWith(6);
