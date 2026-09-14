@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from collections import Counter
 from decimal import Decimal
+from typing import Literal, cast
 
 from selectolax.parser import HTMLParser, Node
 
@@ -11,11 +12,24 @@ from ai_brief.digest.models import OpcCaseCandidate, Revenue
 
 _HEADER_RE = re.compile(r"^案例\s*(\d+)\s*·\s*([^：]+?)\s*：\s*(.+)$")
 _REVENUE_RE = re.compile(
-    r"^(?P<currency>US\$|USD|\$)\s*(?P<amount>\d+(?:\.\d+)?)\s*"
+    r"^(?P<currency>US\$|USD|美元|\$|EUR|欧元|€|GBP|英镑|£|CNY|RMB|人民币|JPY|日元)\s*"
+    r"(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*"
     r"(?P<unit>[KMB])?\+?\s*(?P<period>MRR|ARR)$",
     re.IGNORECASE,
 )
-_MULTIPLIERS = {"": Decimal(1), "K": Decimal(1_000), "M": Decimal(1_000_000), "B": Decimal(1_000_000_000)}
+_MULTIPLIERS = {
+    "": Decimal(1),
+    "K": Decimal(1_000),
+    "M": Decimal(1_000_000),
+    "B": Decimal(1_000_000_000),
+}
+_CURRENCY_CODES = {
+    "$": "USD", "US$": "USD", "USD": "USD", "美元": "USD",
+    "€": "EUR", "EUR": "EUR", "欧元": "EUR",
+    "£": "GBP", "GBP": "GBP", "英镑": "GBP",
+    "CNY": "CNY", "RMB": "CNY", "人民币": "CNY",
+    "JPY": "JPY", "日元": "JPY",
+}
 
 
 def _clean(text: str) -> str:
@@ -28,16 +42,16 @@ def parse_revenue(text: str) -> Revenue | None:
     if match is None:
         return None
 
-    currency = match.group("currency").upper()
-    currency_code = "USD" if currency in {"$", "US$", "USD"} else ""
-    if not currency_code:
+    currency = match.group("currency")
+    currency_code = _CURRENCY_CODES.get(currency.upper(), _CURRENCY_CODES.get(currency))
+    if currency_code is None:
         return None
     unit = (match.group("unit") or "").upper()
     period = match.group("period").upper()
     return Revenue(
-        amount=Decimal(match.group("amount")) * _MULTIPLIERS[unit],
+        amount=Decimal(match.group("amount").replace(",", "")) * _MULTIPLIERS[unit],
         currency=currency_code,
-        period=period,  # type: ignore[arg-type]
+        period=cast(Literal["MRR", "ARR"], period),
         raw=raw,
     )
 
@@ -53,12 +67,18 @@ def _element_siblings_after(node: Node) -> list[Node]:
 
 
 def parse_opc_digest(html: str) -> list[OpcCaseCandidate]:
+    headers = [
+        (h3, header)
+        for h3 in HTMLParser(html or "").css("h3")
+        if (header := _HEADER_RE.fullmatch(_clean(h3.text()))) is not None
+    ]
+    header_counts = Counter(int(header.group(1)) for _, header in headers)
     candidates: list[OpcCaseCandidate] = []
-    for h3 in HTMLParser(html or "").css("h3"):
-        header = _HEADER_RE.fullmatch(_clean(h3.text()))
-        if header is None:
+    for h3, header in headers:
+        index = int(header.group(1))
+        if index not in {1, 2}:
             continue
-        index, sharer, headline = int(header.group(1)), header.group(2).strip(), header.group(3).strip()
+        sharer, headline = header.group(2).strip(), header.group(3).strip()
         body = ""
         revenue: Revenue | None = None
         url = ""
@@ -78,8 +98,7 @@ def parse_opc_digest(html: str) -> list[OpcCaseCandidate]:
         if sharer and headline and body and revenue is not None and url:
             candidates.append(OpcCaseCandidate(index, sharer, headline, body, revenue, url))
 
-    counts = Counter(candidate.index for candidate in candidates)
     return sorted(
-        (candidate for candidate in candidates if counts[candidate.index] == 1),
+        (candidate for candidate in candidates if header_counts[candidate.index] == 1),
         key=lambda candidate: candidate.index,
     )
