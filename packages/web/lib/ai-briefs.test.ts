@@ -161,8 +161,10 @@ describe("AiBriefContentSchema", () => {
     });
 
     expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(true);
-    delete v3Content.opc_case;
-    expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(false);
+    expect(
+      AiBriefContentSchema.safeParse({ ...v3Content, opc_case: undefined })
+        .success,
+    ).toBe(false);
   });
 
   it("rejects v2 content that still contains engineering data", () => {

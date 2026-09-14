@@ -148,7 +148,7 @@ export const AiBriefContentSchema = z.object({
   yesterday_top: YesterdayTopSchema.nullish().transform(
     (value) => value ?? null,
   ),
-  opc_case: OpcCaseSchema.nullish().transform((value) => value ?? null),
+  opc_case: OpcCaseSchema.nullable().optional(),
   model: z.string().nullish().transform((value) => value ?? null),
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
