@@ -124,6 +124,7 @@ export const PUBLISHED_BRIEF_CONTENT: AiBriefContent = {
     headline: "Fixture 昨日热门",
     url: "https://example.com/yesterday",
   },
+  opc_case: null,
   model: "fixture-model",
   stage1_stats: { candidates: 12, dupe_groups: 2 },
 };

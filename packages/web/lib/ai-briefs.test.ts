@@ -136,7 +136,11 @@ describe("isBriefDate", () => {
 
 describe("AiBriefContentSchema", () => {
   it("accepts both historical v1 and four-module v2 content", () => {
-    expect(AiBriefContentSchema.parse(content()).version).toBe(1);
+    const v1 = AiBriefContentSchema.parse(content());
+
+    expect(v1.version).toBe(1);
+    expect(v1.opc_case).toBeNull();
+    expect(Object.hasOwn(v1, "opc_case")).toBe(true);
     expect(
       AiBriefContentSchema.parse(
         content({ version: 2, ai_engineering: null }),
@@ -161,10 +165,9 @@ describe("AiBriefContentSchema", () => {
     });
 
     expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(true);
-    expect(
-      AiBriefContentSchema.safeParse({ ...v3Content, opc_case: undefined })
-        .success,
-    ).toBe(false);
+    const missingOpcCase: Record<string, unknown> = { ...v3Content };
+    delete missingOpcCase.opc_case;
+    expect(AiBriefContentSchema.safeParse(missingOpcCase).success).toBe(false);
   });
 
   it("rejects v2 content that still contains engineering data", () => {

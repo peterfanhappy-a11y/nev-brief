@@ -76,6 +76,7 @@ const PUBLISHED_BRIEF: AiPublishedBrief = {
     daily_tip: null,
     quick_hits: [],
     yesterday_top: null,
+    opc_case: null,
     model: null,
     stage1_stats: null,
   },

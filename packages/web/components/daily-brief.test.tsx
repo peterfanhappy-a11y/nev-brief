@@ -125,6 +125,7 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
       headline: "昨日最受关注：本地模型部署",
       url: "https://example.com/yesterday",
     },
+    opc_case: null,
     model: "test-model",
     stage1_stats: { candidates: 24, dupe_groups: 3 },
   },
