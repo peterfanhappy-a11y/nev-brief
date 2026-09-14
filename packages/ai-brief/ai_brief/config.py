@@ -105,6 +105,7 @@ THEME_META = {t["key"]: t for t in THEMES}
 # 密钥走 AiSettings 从 .env 读（os.environ 里没有）。subject 前缀是常量。
 DIGEST_EVENTS_SUBJECT_PREFIX = "ai-events-digest-"     # + YYYY-MM-DD(GMT+8)
 DIGEST_BUILDER_SUBJECT_PREFIX = "follow-builder-digest-"
+DIGEST_OPC_SUBJECT_PREFIX = "ai-opc-sharing"
 # 工具学习板块的 digest 源（同 sender，subject 前缀 + YYYY-MM-DD）
 DIGEST_RESEARCH_SUBJECT_PREFIX = "ai-research-digest-"
 DIGEST_ENGINEERING_SUBJECT_PREFIX = "ai-engineering-digest-"

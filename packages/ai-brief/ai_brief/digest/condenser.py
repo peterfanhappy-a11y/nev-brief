@@ -43,7 +43,7 @@ def _clip_sentence(text: str, limit: int) -> str:
     cut = max(window.rfind(ch) for ch in _SENT_END)
     if cut >= limit * 0.45:  # 窗口内有靠后的句末标点 → 收在那里，成完整句
         return window[: cut + 1]
-    return window.rstrip("，、；：,;: ") + "…"
+    return window[:-1].rstrip("，、；：,;: ") + "…" if limit > 0 else ""
 
 
 @dataclass
@@ -64,8 +64,8 @@ _TODAY_AI_SYSTEM = """你是 AIVIZENS 的 AI 行业主编，为中文读者写�
 {
   "subject": "邮件主题：3条里最重磅那条改写成最抓眼球的中文标题，≤22字",
   "preheader": "以「另外：」开头 + 第二重磅新闻吸睛短标题，≤28字",
-  "editorial": "编辑导语：2-3句串起今天最重要的AI动向，专业有洞见，≤120字，别用「今天」「以下」套话开头",
-  "intro_bullets": ["每条一句话导读，emoji开头，≤20字（共3条，按给定顺序）"],
+  "editorial": "编辑导语：用1-2句简短开篇概括今天最重要的AI动向，专业有洞见，≤80字，不写后半段推荐，别用「今天」「以下」套话开头",
+  "intro_bullets": ["每条一句话导读，emoji开头，≤20字（必须恰好3条，按给定顺序；不要添加Agent工具导读）"],
   "summaries": [ {"index": 1, "summary": "≤150字压缩摘要"} ]
 }
 summaries 必须含全部 5 条、index 用给定编号。只输出 JSON。"""
@@ -114,7 +114,7 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
 
     raw_intro = raw.get("intro_bullets")
     intro = (
-        [str(b)[:40] for b in raw_intro if str(b).strip()]
+        [str(b) for b in raw_intro]
         if isinstance(raw_intro, list)
         else []
     )
@@ -128,15 +128,12 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
         and bool(editorial)
         and bool(intro)
     )
-    if not intro:
-        intro = [story.headline for story in stories]
-
     return ModelOutcome(
         value=TodayAIResult(
             subject=subject[:44] or stories[0].headline,
             preheader=preheader[:60],
             editorial=editorial[:220],
-            intro_bullets=intro[:4],
+            intro_bullets=intro,
             stories=stories,
         ),
         complete=complete,

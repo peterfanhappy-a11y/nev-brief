@@ -18,6 +18,7 @@ BRIEF_DATE = date(2026, 8, 4)
 PREFIXES: dict[DigestKind, str] = {
     "events": config.DIGEST_EVENTS_SUBJECT_PREFIX,
     "builder": config.DIGEST_BUILDER_SUBJECT_PREFIX,
+    "opc": "ai-opc-sharing",
     "research": config.DIGEST_RESEARCH_SUBJECT_PREFIX,
     "agent": config.DIGEST_AGENT_SUBJECT_PREFIX,
 }
@@ -40,7 +41,7 @@ def _email(
     )
 
 
-def test_fetches_only_the_four_v2_kinds_as_exact_date_envelopes() -> None:
+def test_fetches_only_the_five_v3_kinds_as_exact_date_envelopes() -> None:
     """Changing a prefix mapping or exact-match policy must break this contract."""
     emails = {_prefix: _email(kind) for kind, _prefix in PREFIXES.items()}
 
@@ -51,7 +52,7 @@ def test_fetches_only_the_four_v2_kinds_as_exact_date_envelopes() -> None:
 
     digests = GmailDigestAdapter(sender="digest@example.test", fetcher=fetcher).fetch(BRIEF_DATE)
 
-    assert set(digests) == {"events", "builder", "research", "agent"}
+    assert set(digests) == {"events", "builder", "opc", "research", "agent"}
     for kind in PREFIXES:
         envelope = digests[kind]
         assert envelope is not None
@@ -71,6 +72,7 @@ def test_missing_mail_is_represented_by_none_for_its_kind() -> None:
     assert digests == {
         "events": None,
         "builder": None,
+        "opc": None,
         "research": None,
         "agent": None,
     }
@@ -108,7 +110,7 @@ def test_tool_learning_uses_a_recent_40_hour_fallback_when_exact_date_is_missing
     assert envelope.used_fallback is True
 
 
-@pytest.mark.parametrize("kind", ["events", "builder"])
+@pytest.mark.parametrize("kind", ["events", "builder", "opc"])
 def test_exact_date_kinds_never_fall_back(kind: DigestKind) -> None:
     """Adding fallback to date-sensitive inputs could publish the wrong day's digest."""
     calls: list[tuple[str | None, float | None]] = []

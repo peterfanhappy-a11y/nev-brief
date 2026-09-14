@@ -15,14 +15,57 @@ import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
 import pytest
+from ai_brief.digest import condenser, generate
 from ai_brief.digest.generate import DigestBundle
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
-from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, Theme
+from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, OpcCase, Theme
 from ai_brief.storage import DigestRunStatus
 
 BRIEF_DATE = date(2026, 8, 4)
 RUN_ID = UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690")
+
+
+def _opc_case() -> OpcCase:
+    return OpcCase(
+        sharer="Ruslan", headline="Zipchat 再冲到 $2M ARR", summary="A useful case.",
+        original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收", url="https://example.com/opc",
+        header_image="https://img.test/opc.jpg", header_image_alt="Zipchat",
+    )
+
+
+@pytest.mark.parametrize(
+    "lead", ["安全叙事成为资本变量。与此同时，旧的后半段。", "安全叙事成为资本变量。"]
+)
+def test_editorial_keeps_lead_and_replaces_transition_with_opc(lead: str) -> None:
+    assert generate.build_editorial(lead, _opc_case()) == (
+        "安全叙事成为资本变量。今日给大家分享一个来自“Ruslan”的“Zipchat 再冲到 $2M ARR”OPC案例。"
+    )
+
+
+def test_editorial_clips_long_lead_at_sentence_boundary_without_losing_recommendation() -> None:
+    recommendation = "今日给大家分享一个来自“Ruslan”的“Zipchat 再冲到 $2M ARR”OPC案例。"
+    editorial = generate.build_editorial("安全叙事成为资本变量。" * 30, _opc_case())
+    assert editorial.endswith(recommendation)
+    assert editorial.removesuffix(recommendation).endswith("。")
+    assert len(editorial) <= 220
+
+
+def test_editorial_without_sentence_boundary_still_respects_limit() -> None:
+    editorial = generate.build_editorial("长" * 300, _opc_case())
+    assert editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
+    assert len(editorial) <= 220
+
+
+def test_sentence_clipper_reserves_room_for_ellipsis() -> None:
+    assert len(condenser._clip_sentence("长" * 300, 10)) <= 10
+
+
+def test_editorial_rejects_recommendation_that_cannot_fit() -> None:
+    case = _opc_case().model_copy(update={"sharer": "R" * 80, "headline": "H" * 120})
+    with pytest.raises(ValueError, match="OPC recommendation exceeds editorial limit"):
+        generate.build_editorial("安全叙事。", case)
 
 
 def _section(theme: Theme, *, header_image: str | None = "https://img.test/x.jpg") -> DigestSection:
@@ -45,7 +88,9 @@ def _bundle() -> DigestBundle:
         subject="A safe review candidate",
         preheader="Three important updates",
         editorial="A concise editorial for human review.",
-        intro_bullets=["One", "Two"],
+        intro_bullets=["One", "Two", "Three"],
+        opc_case=_opc_case(),
+        opc_candidate_count=2,
         today_ai=_section(Theme.MODEL_RESEARCH),
         ai_masters=_section(Theme.PRODUCT_TOOLS),
         ai_research=_section(Theme.AI_RESEARCH),
@@ -56,7 +101,7 @@ def _bundle() -> DigestBundle:
     )
 
 
-def _v2_bundle() -> DigestBundle:
+def _v3_bundle() -> DigestBundle:
     def stories(prefix: str, count: int, *, labels: list[str] | None = None) -> list[DigestStory]:
         return [
             DigestStory(
@@ -72,7 +117,9 @@ def _v2_bundle() -> DigestBundle:
         subject="A safe review candidate",
         preheader="Five region-balanced updates",
         editorial="A concise editorial for human review.",
-        intro_bullets=["One", "Two"],
+        intro_bullets=["One", "Two", "Three"],
+        opc_case=_opc_case(),
+        opc_candidate_count=2,
         today_ai=DigestSection(
             theme=Theme.MODEL_RESEARCH,
             header_image="https://img.test/x.jpg",
@@ -113,14 +160,107 @@ def _quality(*, passed: bool) -> QualityReport:
     )
 
 
-def test_new_generation_builds_a_four_module_v2_brief(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_new_generation_builds_a_five_module_v3_brief(monkeypatch: pytest.MonkeyPatch) -> None:
     """New candidates must omit engineering while retained v1 reads stay untouched."""
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
-    brief = runner._build_brief_without_lookup(BRIEF_DATE, _bundle(), None)
+    bundle = _v3_bundle()
+    assert bundle.agent_tools is not None
+    bundle.agent_tools.stories[0].headline = "spec-kit — 规范先行的 AI 编码流程"
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
 
-    assert brief.version == 2
+    assert brief.version == 3
     assert brief.ai_engineering is None
+    assert brief.opc_case == _opc_case()
+    assert brief.intro_bullets == ["One", "Two", "Three", "🧰 spec-kit — 规范先行的 AI 编码流程"]
+    assert bundle.intro_bullets == ["One", "Two", "Three"]
+    assert brief.editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
+    assert runner._module_count(bundle) == 5
+
+
+@pytest.mark.parametrize(
+    "bullets", [[], ["One"], ["One", "Two"], ["One", "Two", "Three", "Four", "Five"]]
+)
+def test_v3_generation_preserves_invalid_model_bullet_counts(bullets: list[str]) -> None:
+    bundle = _v3_bundle()
+    bundle.intro_bullets = bullets
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.intro_bullets == bullets + ["🧰 Agents 1"]
+
+
+@pytest.mark.parametrize("absent", [True, False])
+def test_v3_generation_does_not_invent_agent_bullet_when_no_first_story(absent: bool) -> None:
+    bundle = _v3_bundle()
+    bundle.agent_tools = (
+        None if absent else DigestSection.model_construct(theme=Theme.AGENT_TOOLS, stories=[])
+    )
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.intro_bullets == ["One", "Two", "Three"]
+
+
+def test_v3_missing_opc_preserves_lead_for_structured_quality_blocker() -> None:
+    bundle = _v3_bundle()
+    bundle.opc_case = None
+    with patch.object(
+        runner, "build_editorial", side_effect=AssertionError("no OPC recommendation")
+    ):
+        brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.version == 3
+    assert brief.opc_case is None
+    assert brief.editorial == bundle.editorial
+
+
+def test_opc_digest_sources_records_parsed_candidate_count() -> None:
+    envelope = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE, used_fallback=False,
+        text=None, html="<p>source</p>", attachments=(),
+    )
+    sources = runner._digest_sources({"opc": envelope}, _v3_bundle())
+    assert sources["opc"] is not None
+    assert sources["opc"]["parse_count"] == 2
+    assert "source</p>" not in repr(sources)
+
+
+async def test_digest_generation_includes_opc_case_and_candidate_count() -> None:
+    envelope = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE, used_fallback=False, text=None,
+        html=(
+            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
+            '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
+            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
+            '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
+        ),
+        attachments=(),
+    )
+    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": envelope})
+    assert bundle.opc_case is not None
+    assert bundle.opc_case.sharer == "Ruslan"
+    assert bundle.opc_case.header_image == ""
+    assert bundle.opc_candidate_count == 2
+
+
+@pytest.mark.parametrize("bullets", [
+    [], ["One", "Two"], ["One", "Two", "Three"],
+    ["One", "Two", "Three", "Four", "Five"], ["One", "", "Three"],
+])
+async def test_condenser_preserves_model_bullet_count_and_values(bullets: list[str]) -> None:
+    from ai_brief.digest.models import EventItem
+
+    item = EventItem(
+        index=1, category="海外", value_tag="", headline="Title",
+        url="https://example.com", body="Body", image_note="",
+    )
+    with patch.object(condenser, "extract_json_with_retry", new=AsyncMock(return_value={
+        "subject": "Subject", "preheader": "Preheader", "editorial": "Lead.",
+        "intro_bullets": bullets, "summaries": [{"index": 1, "summary": "Summary"}],
+    })):
+        result = await condenser.condense_today_ai([item])
+    assert result is not None
+    assert result.value.intro_bullets == bullets
 
 
 def _connection() -> MagicMock:
@@ -140,6 +280,7 @@ class _Adapter:
         return {
             "events": None,
             "builder": None,
+            "opc": None,
             "research": None,
             "engineering": None,
             "agent": None,
@@ -186,13 +327,13 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_called_once()
 
 
-async def test_v2_generation_stops_at_review_without_composing_or_delivering(
+async def test_v3_generation_stops_at_review_without_composing_or_delivering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A balanced v2 candidate is stored for review only, never released or sent."""
+    """A balanced v3 candidate is stored for review only, never released or sent."""
     connection = _connection()
     adapter = _Adapter()
-    bundle = _v2_bundle()
+    bundle = _v3_bundle()
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     with (
@@ -211,7 +352,9 @@ async def test_v2_generation_stops_at_review_without_composing_or_delivering(
     saved_content = save.call_args.kwargs["content"]
     assert result.status == "awaiting_approval"
     assert result.exit_code == 0
-    assert saved_content["version"] == 2
+    assert saved_content["version"] == 3
+    assert saved_content["opc_case"] == _opc_case().model_dump(mode="json")
+    assert saved_content["intro_bullets"] == ["One", "Two", "Three", "🧰 Agents 1"]
     assert saved_content["ai_engineering"] is None
     assert saved_content["featured"] == []
     assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
@@ -540,6 +683,7 @@ async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed()
     invalid_bundle = _bundle()
     invalid_bundle.intro_bullets = []
     invalid_bundle.today_ai = None
+    invalid_bundle.agent_tools = None
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
         patch.object(storage, "claim_brief_generation", return_value="started"),

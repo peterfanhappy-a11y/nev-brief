@@ -7,7 +7,7 @@ from typing import Literal, Protocol
 
 from ai_brief.digest.imap_client import Attachment
 
-DigestKind = Literal["events", "builder", "research", "engineering", "agent"]
+DigestKind = Literal["events", "builder", "opc", "research", "engineering", "agent"]
 
 
 @dataclass(frozen=True)

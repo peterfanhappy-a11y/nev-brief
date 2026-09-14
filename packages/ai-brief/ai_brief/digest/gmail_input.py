@@ -13,6 +13,7 @@ FetchDigestEmail = Callable[..., DigestEmail | None]
 _SUBJECT_PREFIXES: dict[DigestKind, str] = {
     "events": config.DIGEST_EVENTS_SUBJECT_PREFIX,
     "builder": config.DIGEST_BUILDER_SUBJECT_PREFIX,
+    "opc": config.DIGEST_OPC_SUBJECT_PREFIX,
     "research": config.DIGEST_RESEARCH_SUBJECT_PREFIX,
     "agent": config.DIGEST_AGENT_SUBJECT_PREFIX,
 }

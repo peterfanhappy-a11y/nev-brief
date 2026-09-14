@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import io
+from dataclasses import replace
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from ai_brief import config
-from ai_brief.digest import condenser, image_judge
+from ai_brief.digest import condenser, generate, image_judge, uploader
 from ai_brief.digest.condenser import _rebalance, build_engineering_stories
 from ai_brief.digest.generate import (
     _filter_agent_tools,
@@ -16,6 +18,7 @@ from ai_brief.digest.generate import (
 )
 from ai_brief.digest.image_judge import _parse_index
 from ai_brief.digest.imap_client import Attachment
+from ai_brief.digest.input import DigestEnvelope
 from ai_brief.digest.models import (
     AgentTool,
     BuilderItem,
@@ -25,6 +28,141 @@ from ai_brief.digest.models import (
     ResearchPaper,
 )
 from PIL import Image
+
+
+def _opc_image(filename: str, color: str) -> Attachment:
+    buf = io.BytesIO()
+    Image.new("RGB", (80, 50), color).save(buf, "PNG")
+    return Attachment(filename, "image/png", buf.getvalue())
+
+
+def _opc_envelope(attachments: tuple[Attachment, ...]) -> DigestEnvelope:
+    return DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=date(2026, 8, 4),
+        matched_date=date(2026, 8, 4), used_fallback=False, text=None,
+        html=(
+            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
+            '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
+            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
+            '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
+        ),
+        attachments=attachments,
+    )
+
+
+def test_opc_uploads_only_the_selected_case_image_without_qwen() -> None:
+    first, second = _opc_image("case1.jpg", "red"), _opc_image("case2.png", "blue")
+    with (
+        patch.object(
+            uploader, "upload_image", return_value="https://cdn.example.com/opc-case.png"
+        ) as upload,
+        patch.object(
+            image_judge, "pick_image", side_effect=AssertionError("OPC must not call Qwen")
+        ),
+    ):
+        result, count = generate.build_opc_case("2026-08-04", _opc_envelope((first, second)))
+
+    assert result is not None
+    assert result.sharer == "Ruslan"
+    assert result.monthly_revenue_usd == 167_000
+    assert result.revenue_display == "$167K 美元月度营收"
+    assert result.header_image == "https://cdn.example.com/opc-case.png"
+    assert count == 2
+    image = Image.open(io.BytesIO(upload.call_args.args[0]))
+    pixel = image.getpixel((10, 10))
+    assert isinstance(pixel, tuple)
+    red, _, blue = pixel
+    assert blue > 200 and red < 20
+    assert upload.call_args.kwargs["path"].startswith("ai/2026-08-04/opc-case-")
+
+
+def test_opc_requires_exactly_two_parsed_cases() -> None:
+    envelope = _opc_envelope(())
+    assert envelope.html is not None
+    envelope = replace(envelope, html=envelope.html.partition("<h3>案例2")[0])
+    assert generate.build_opc_case("2026-08-04", envelope) == (None, 1)
+    assert generate.build_opc_case("2026-08-04", None) == (None, 0)
+
+
+@pytest.mark.parametrize("selected", [None, b"broken-image"])
+def test_opc_missing_or_invalid_selected_image_never_uses_the_other_case(
+    selected: bytes | None,
+) -> None:
+    attachments = [_opc_image("case1.jpg", "red")]
+    if selected is not None:
+        attachments.append(Attachment("case2.png", "image/png", selected))
+    with patch.object(uploader, "upload_image", side_effect=AssertionError("must not upload")):
+        result, count = generate.build_opc_case("2026-08-04", _opc_envelope(tuple(attachments)))
+    assert result is not None
+    assert result.sharer == "Ruslan"
+    assert result.header_image == ""
+    assert count == 2
+
+
+@pytest.mark.parametrize("image_count", [1, 2, 3])
+def test_opc_positional_binding_requires_exactly_two_valid_unindexed_images(
+    image_count: int,
+) -> None:
+    images = tuple(_opc_image(name, color) for name, color in [
+        ("first.jpg", "red"), ("second.png", "blue"), ("extra.png", "green")
+    ][:image_count])
+    with patch.object(
+        uploader, "upload_image", return_value="https://cdn.example.com/opc-case.png"
+    ) as upload:
+        result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(images))
+    assert result is not None
+    assert bool(result.header_image) is (image_count == 2)
+    if image_count == 2:
+        pixel = Image.open(io.BytesIO(upload.call_args.args[0])).getpixel((10, 10))
+        assert isinstance(pixel, tuple)
+        red, _, blue = pixel
+        assert blue > 200 and red < 20
+    else:
+        upload.assert_not_called()
+
+
+def test_opc_does_not_rebind_indexed_or_invalid_images_positionally() -> None:
+    for images in (
+        (_opc_image("case1.jpg", "red"), _opc_image("unindexed.png", "blue")),
+        (_opc_image("first.jpg", "red"), Attachment("second.png", "image/png", b"broken")),
+    ):
+        with patch.object(uploader, "upload_image", side_effect=AssertionError("must not upload")):
+            result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(images))
+        assert result is not None
+        assert result.header_image == ""
+
+
+def test_opc_upload_and_exchange_rate_failures_propagate() -> None:
+    envelope = _opc_envelope((_opc_image("case1.jpg", "red"), _opc_image("case2.png", "blue")))
+    with (
+        patch.object(uploader, "upload_image", side_effect=RuntimeError("upload failed")),
+        pytest.raises(RuntimeError, match="upload failed"),
+    ):
+        generate.build_opc_case("2026-08-04", envelope)
+    assert envelope.html is not None
+    envelope = replace(envelope, html=envelope.html.replace("$10K", "€10K"))
+    with pytest.raises(RuntimeError, match="network failed"):
+        generate.build_opc_case(
+            "2026-08-04", envelope,
+            rates_loader=MagicMock(side_effect=RuntimeError("network failed")),
+        )
+
+
+def test_opc_invalid_revenue_selection_returns_no_case() -> None:
+    envelope = _opc_envelope(())
+    assert envelope.html is not None
+    envelope = replace(envelope, html=envelope.html.replace("$10K", "CAD10K"))
+    assert generate.build_opc_case("2026-08-04", envelope, rates_loader=lambda: {}) == (None, 2)
+
+
+def test_opc_upload_returning_none_reaches_durable_failure_handler() -> None:
+    envelope = _opc_envelope((_opc_image("case2.png", "blue"),))
+    with (
+        patch.object(uploader, "upload_image", return_value=None),
+        pytest.raises(RuntimeError, match="OPC image upload failed"),
+    ):
+        generate.build_opc_case("2026-08-04", envelope)
 
 
 def _event(index: int, *, category: str) -> EventItem:
