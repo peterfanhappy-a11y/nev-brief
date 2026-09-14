@@ -35,6 +35,11 @@ QUALITY_ISSUE_CODES = frozenset(
         "digest_date_fallback",
         "editorial_blank",
         "intro_blank",
+        "intro_bullet_count_invalid",
+        "intro_agent_topic_mismatch",
+        "opc_case_missing",
+        "opc_candidate_count_invalid",
+        "opc_image_missing",
         "non_core_items_filtered",
         "parse_failed",
         "placeholder_url",
@@ -69,6 +74,10 @@ QUALITY_METRIC_KEYS = frozenset(
         "intro_bullet_count",
         "max_digest_freshness_hours",
         "missing_tool_module_count",
+        "opc_candidate_count",
+        "opc_case_count",
+        "opc_monthly_revenue_usd",
+        "opc_freshness_hours",
         "parsed_items",
         "quality_passed",
         "qwen_complete",
@@ -86,7 +95,7 @@ QUALITY_METRIC_KEYS = frozenset(
     }
 )
 QUALITY_BRIEF_PATHS = frozenset(
-    {"editorial", "intro_bullets", "preheader", "subject"}
+    {"editorial", "intro_bullets", "preheader", "subject", "opc_case"}
 )
 QUALITY_DIGEST_SECTION_ROOTS = frozenset(
     {"agent_tools", "ai_engineering", "ai_masters", "ai_research", "today_ai"}
@@ -96,7 +105,7 @@ QUALITY_DIGEST_SECTION_FIELDS = frozenset(
 )
 QUALITY_DIGEST_STORY_FIELDS = frozenset({"headline", "label", "summary", "url"})
 QUALITY_DIGEST_SOURCE_KINDS = frozenset(
-    {"agent", "builder", "engineering", "events", "research"}
+    {"agent", "builder", "engineering", "events", "research", "opc"}
 )
 QUALITY_DIGEST_SOURCE_FIELDS = frozenset(
     {"matched_date", "received_at", "requested_date", "used_fallback"}
@@ -114,6 +123,8 @@ def quality_path_is_allowed(path: str) -> bool:
     root, separator, remainder = path.partition(".")
     if not separator:
         return False
+    if root == "opc_case":
+        return remainder in {"url", "header_image", "summary"}
     if root == "digests":
         kind, field_separator, field = remainder.partition(".")
         return kind in QUALITY_DIGEST_SOURCE_KINDS and (

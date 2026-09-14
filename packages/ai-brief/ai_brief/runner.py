@@ -251,6 +251,7 @@ async def generate_for_review(
                 qwen_complete=bundle.qwen_complete,
                 now=datetime.now(UTC),
                 primary_digest_max_age_hours=backfill_age_limit,
+                opc_candidate_count=bundle.opc_candidate_count,
             )
         else:
             report = validate_brief(
@@ -260,6 +261,7 @@ async def generate_for_review(
                 deepseek_complete=bundle.deepseek_complete,
                 qwen_complete=bundle.qwen_complete,
                 now=datetime.now(UTC),
+                opc_candidate_count=bundle.opc_candidate_count,
             )
         status: Literal["blocked", "awaiting_approval"] = (
             "awaiting_approval" if report.passed else "blocked"

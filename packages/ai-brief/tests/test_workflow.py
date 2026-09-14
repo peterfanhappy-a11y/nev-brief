@@ -11,6 +11,7 @@ from uuid import UUID, uuid4
 
 import ai_brief.composer as composer
 import ai_brief.config as config
+import ai_brief.deliverer as deliverer
 import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
@@ -368,7 +369,8 @@ async def test_v3_generation_stops_at_review_without_composing_or_delivering(
     deliver.assert_not_called()
 
 
-async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> None:
+@pytest.mark.parametrize("backfill", [False, True])
+async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfill: bool) -> None:
     connection = _connection()
     adapter = _Adapter()
     bundle = _bundle()
@@ -385,10 +387,11 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> No
         patch.object(runner, "validate_brief", validate),
         patch.object(runner, "_alert"),
     ):
-        await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+        await runner.generate_for_review(connection, BRIEF_DATE, adapter, backfill=backfill)
 
     assert validate.call_args.kwargs["deepseek_complete"] is False
     assert validate.call_args.kwargs["qwen_complete"] is False
+    assert validate.call_args.kwargs["opc_candidate_count"] == 2
 
 
 def test_generation_claim_binds_owner_and_rejects_an_active_generating_row() -> None:
@@ -883,6 +886,7 @@ def _seed_generated_brief(
     brief_date: date,
     *,
     passed: bool,
+    content: dict[str, Any] | None = None,
 ) -> UUID:
     run_id = storage.start_digest_run(conn, brief_date, "integration-test")
     conn.commit()
@@ -892,7 +896,7 @@ def _seed_generated_brief(
     storage.save_generated_brief(
         conn,
         brief_date=brief_date,
-        content=_brief_content(brief_date),
+        content=_brief_content(brief_date) if content is None else content,
         model="integration-model",
         digest_sources={},
         quality_report=report,
@@ -940,6 +944,53 @@ def _cleanup_workflow_fixtures(
         cur.execute("DELETE FROM ai_digest_runs WHERE brief_date = ANY(%s::date[]);", (dates,))
         cur.execute("DELETE FROM ai_subscribers WHERE email = ANY(%s::text[]);", (emails,))
     conn.commit()
+
+
+@pytest.mark.integration
+def test_postgres_v3_publishes_but_does_not_send_when_email_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief_date = date(2096, 9, 14)
+    email = "opc-v3-disabled-send@example.test"
+    monkeypatch.setenv("AI_EMAIL_SEND_ENABLED", "false")
+    conn = _postgres_connection()
+    try:
+        _cleanup_workflow_fixtures(conn, [brief_date], [email])
+        _insert_active_subscriber(conn, email)
+        bundle = _v3_bundle()
+        assert bundle.agent_tools is not None
+        v3 = AiBriefContent(
+            version=3, brief_date=brief_date.isoformat(),
+            subject="Frozen V3 candidate", preheader="OPC acceptance",
+            editorial="核心判断。今日给大家分享一个来自“Ruslan”的“Zipchat”OPC案例。",
+            intro_bullets=["一", "二", "三", f"🧰 {bundle.agent_tools.stories[0].headline}"],
+            opc_case=OpcCase(
+                sharer="Ruslan", headline="Zipchat", summary="案例正文",
+                original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+                revenue_display="$167K 美元月度营收",
+                url="https://www.indiehackers.com/post/case-two",
+                header_image="https://aivizens.com/images/opc.png", header_image_alt="Zipchat 案例",
+            ),
+            today_ai=bundle.today_ai, ai_masters=bundle.ai_masters,
+            ai_research=bundle.ai_research, ai_engineering=None,
+            agent_tools=bundle.agent_tools, model="integration-model",
+        ).model_dump(mode="json")
+        _seed_generated_brief(conn, brief_date, passed=True, content=v3)
+        assert runner.approve_brief(conn, brief_date, approved_by="integration-operator").changed
+        released = runner.release_approved(conn, brief_date, only_email=email)
+        result = deliverer.send_pending(conn, brief_date=brief_date)
+
+        assert (released.status, released.released, released.composed) == ("published", True, 1)
+        assert (result.attempted, result.sent, result.failed) == (0, 0, 0)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, count(*) FROM ai_deliveries "
+                "WHERE brief_date = %s GROUP BY status;", (brief_date,),
+            )
+            assert cur.fetchone() == ("pending", 1)
+    finally:
+        _cleanup_workflow_fixtures(conn, [brief_date], [email])
+        conn.close()
 
 
 @pytest.mark.integration

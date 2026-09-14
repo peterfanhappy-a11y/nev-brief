@@ -1,7 +1,7 @@
 """Deterministic quality-gate tests; all fixtures are local and side-effect free."""
 from __future__ import annotations
 
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -12,6 +12,7 @@ from ai_brief.schema import (
     AiBriefContent,
     DigestSection,
     DigestStory,
+    OpcCase,
     Stage1Stats,
     Theme,
 )
@@ -139,6 +140,7 @@ def _envelope(
         ),
         "research": ("https://arxiv.org/abs/2608.00001",),
         "engineering": (),
+        "opc": ("https://www.indiehackers.com/post/case-two",),
         "agent": (
             "https://github.com/acme/agent-one",
             "https://github.com/acme/agent-two",
@@ -195,6 +197,161 @@ def _report(
         now=kwargs.pop("now", NOW),
         **kwargs,
     )
+
+
+def _v3_brief() -> AiBriefContent:
+    brief = _v2_brief()
+    assert brief.agent_tools is not None
+    return brief.model_copy(update={
+        "version": 3,
+        "opc_case": OpcCase(
+            sharer="Ruslan", headline="Zipchat 再冲到 $2M ARR", summary="案例二正文",
+            original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+            revenue_display="$167K 美元月度营收",
+            url="https://www.indiehackers.com/post/case-two",
+            header_image="https://aivizens.com/images/opc.png",
+            header_image_alt="Ruslan 的 Zipchat 案例",
+        ),
+        "intro_bullets": ["Models improve", "Tools mature", "Agents ship",
+                          f"🧰 {brief.agent_tools.stories[0].headline}"],
+    })
+
+
+def _fresh_v3_digests() -> dict[DigestKind, DigestEnvelope | None]:
+    digests = _fresh_v2_digests()
+    digests["opc"] = _envelope("opc")
+    return digests
+
+
+def test_valid_v3_has_opc_metrics_and_known_domain() -> None:
+    report = _report(_v3_brief(), _fresh_v3_digests(), opc_candidate_count=2)
+    assert report.passed
+    assert report.warnings == ()
+    assert report.metrics["opc_candidate_count"] == 2
+    assert report.metrics["opc_case_count"] == 1
+    assert report.metrics["opc_monthly_revenue_usd"] == 167_000
+    assert report.metrics["opc_freshness_hours"] == 2.0
+    persisted = _safe_quality_report(asdict(report))
+    assert persisted is not None
+    assert persisted["metrics"] == report.metrics
+
+
+@pytest.mark.parametrize("count", [None, 0, 1, 3, True, 2.0])
+def test_v3_blocks_wrong_candidate_count(count: Any) -> None:
+    report = _report(_v3_brief(), _fresh_v3_digests(), opc_candidate_count=count)
+    assert any(i.code == "opc_candidate_count_invalid" and i.path == "digests.opc"
+               for i in report.blockers)
+
+
+def test_v3_blocks_missing_opc_case() -> None:
+    brief = _v3_brief().model_copy(update={"opc_case": None})
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert any(i.code == "opc_case_missing" and i.path == "opc_case"
+               for i in report.blockers)
+    assert report.metrics["opc_case_count"] == 0
+
+
+@pytest.mark.parametrize("image", ["", " ", "http://aivizens.com/opc.png", "https://"])
+def test_v3_blocks_missing_or_non_https_opc_image(image: str) -> None:
+    brief = _v3_brief()
+    assert brief.opc_case is not None
+    brief = brief.model_copy(update={
+        "opc_case": brief.opc_case.model_copy(update={"header_image": image}),
+    })
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert any(i.code == "opc_image_missing" and i.path == "opc_case.header_image"
+               for i in report.blockers)
+
+
+@pytest.mark.parametrize(("bullets", "code"), [
+    (["一", "二", "三"], "intro_bullet_count_invalid"),
+    (["一", "二", "三", "🧰 错误工具"], "intro_agent_topic_mismatch"),
+    (["一", "二", "三", "Agent 1"], "intro_agent_topic_mismatch"),
+])
+def test_v3_blocks_invalid_intro(bullets: list[str], code: str) -> None:
+    brief = _v3_brief().model_copy(update={"intro_bullets": bullets})
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert any(i.code == code and i.path == "intro_bullets" for i in report.blockers)
+
+
+@pytest.mark.parametrize("kind", ["opc", "events", "builder", "research", "agent"])
+def test_v3_requires_all_five_sources(kind: DigestKind) -> None:
+    digests = _fresh_v3_digests()
+    digests[kind] = None
+    report = _report(_v3_brief(), digests, opc_candidate_count=2)
+    assert any(i.code == "required_digest_stale" and i.path == f"digests.{kind}"
+               for i in report.blockers)
+
+
+@pytest.mark.parametrize("mutation", ["stale", "date", "undated", "fallback", "future"])
+def test_v3_requires_exact_date_fresh_opc_even_in_backfill(mutation: str) -> None:
+    envelope = _envelope("opc")
+    if mutation == "stale":
+        envelope = replace(envelope, received_at=NOW - timedelta(hours=24, seconds=1))
+    elif mutation == "date":
+        envelope = replace(envelope, matched_date=BRIEF_DATE - timedelta(days=1))
+    elif mutation == "undated":
+        envelope = replace(envelope, matched_date=None)
+    elif mutation == "fallback":
+        envelope = replace(envelope, used_fallback=True)
+    else:
+        envelope = replace(envelope, received_at=NOW + timedelta(minutes=6))
+    digests = _fresh_v3_digests()
+    digests["opc"] = envelope
+    report = _report(_v3_brief(), digests, opc_candidate_count=2,
+                     primary_digest_max_age_hours=40)
+    assert any(i.code == "required_digest_stale" and (i.path or "").startswith("digests.opc")
+               for i in report.blockers)
+    assert report.metrics["required_digests_fresh"] is False
+
+
+def test_v3_accepts_opc_at_exactly_24_hours() -> None:
+    digests = _fresh_v3_digests()
+    digests["opc"] = _envelope("opc", age_hours=24)
+    report = _report(_v3_brief(), digests, opc_candidate_count=2)
+    assert report.passed
+    assert report.metrics["opc_freshness_hours"] == 24.0
+
+
+@pytest.mark.parametrize(("url", "code"), [
+    ("", "critical_url_missing"),
+    ("http://www.indiehackers.com/post/case-two", "url_not_https"),
+    ("https://example.com/case-two", "placeholder_url"),
+    ("https://www.indiehackers.com/post/untrusted", "critical_url_missing"),
+])
+def test_v3_requires_trusted_https_opc_url(url: str, code: str) -> None:
+    brief = _v3_brief()
+    assert brief.opc_case is not None
+    brief = brief.model_copy(update={"opc_case": brief.opc_case.model_copy(update={"url": url})})
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert any(i.code == code and i.path == "opc_case.url" for i in report.blockers)
+
+
+@pytest.mark.parametrize("section", ["today_ai", "ai_masters", "ai_research", "agent_tools"])
+def test_v3_requires_all_retained_modules(section: str) -> None:
+    brief = _v3_brief().model_copy(update={section: None})
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert not report.passed
+    assert any(i.path == section for i in report.blockers)
+
+
+def test_v3_keeps_today_ai_regional_quota() -> None:
+    brief = _v3_brief()
+    brief.today_ai = _v2_brief(["海外新闻"] * 4 + ["国内新闻"]).today_ai
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert "today_ai_region_quota_invalid" in _codes(report)
+
+
+def test_v3_checks_opc_summary_length_warning() -> None:
+    brief = _v3_brief()
+    assert brief.opc_case is not None
+    brief = brief.model_copy(update={
+        "opc_case": brief.opc_case.model_copy(update={"summary": "文" * 450}),
+    })
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert report.passed
+    assert any(i.code == "summary_near_limit" and i.path == "opc_case.summary"
+               for i in report.warnings)
 
 
 def _codes(report: QualityReport, kind: str = "blockers") -> list[str]:
