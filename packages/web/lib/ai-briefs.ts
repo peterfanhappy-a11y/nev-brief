@@ -255,7 +255,6 @@ export async function listPublishedBriefs(
     .from("ai_daily_briefs")
     .select("brief_date, content, published_at")
     .eq("status", "published")
-    .order("published_at", { ascending: false })
     .order("brief_date", { ascending: false })
     .limit(listLimit(limit));
 
