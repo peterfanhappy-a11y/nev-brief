@@ -57,6 +57,34 @@
 {% endif %}
 {% endmacro %}
 
+{% macro opc_section(case) %}
+<tr><td style="padding:12px 0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
+    <tr><td style="padding:12px 18px 0;">
+      <span style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:2px;">一、OPC案例</span>
+    </td></tr>
+    <tr><td style="padding:8px 18px 0;">
+      <span style="font-size:11px;font-weight:700;color:#6b7280;letter-spacing:2px;">分享者：{{ case.sharer }}</span>
+    </td></tr>
+    <tr><td style="padding:10px 0 4px;">
+      <img src="{{ case.header_image }}" width="663" alt="{{ case.header_image_alt }}" style="display:block;width:100%;height:auto;">
+    </td></tr>
+    <tr><td style="padding:12px 18px 0;">
+      <div style="font-size:17px;font-weight:800;color:#111827;line-height:1.5;">{{ case.headline }}</div>
+    </td></tr>
+    <tr><td style="padding:10px 18px 0;">
+      <div style="font-size:14px;line-height:1.75;color:#374151;">{{ case.summary }}</div>
+    </td></tr>
+    <tr><td style="padding:10px 18px 0;">
+      <div style="font-size:14px;font-weight:800;color:#111827;">{{ case.revenue_display }}</div>
+    </td></tr>
+    <tr><td style="padding:10px 18px 16px;">
+      <a href="{{ case.url }}" style="font-size:13px;color:#4F46E5;text-decoration:none;font-weight:600;">阅读原文 →</a>
+    </td></tr>
+  </table>
+</td></tr>
+{% endmacro %}
+
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
 <tr><td align="center" style="padding:16px 10px;">
 <table role="presentation" width="667" cellpadding="0" cellspacing="0" style="width:667px;max-width:667px;background:#ffffff;">
@@ -91,11 +119,15 @@
     </table>
   </td></tr>
 
-  <!-- 4. 今日精选：模块 1&2 digest 驱动（各一张卡=头图+多条 story）；
+  <!-- 4. Digest modules：模块 1&2 digest 驱动（各一张卡=头图+多条 story）；
        模块 3&4 走 featured（内容生成待定义，暂空则省略）-->
-  {{ section_header('今 日 精 选') }}
-  {{ digest_section(brief.today_ai, '一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else '')) }}
-  {{ digest_section(brief.ai_masters, '二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else '')) }}
+  {% if brief.version == 3 %}
+  {{ section_header('OPC分享') }}
+  {{ opc_section(brief.opc_case) }}
+  {% endif %}
+  {{ section_header('今日精选' if brief.version == 3 else '今 日 精 选') }}
+  {{ digest_section(brief.today_ai, '二、今日AI' if brief.version == 3 else ('一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else ''))) }}
+  {{ digest_section(brief.ai_masters, '三、AI大神' if brief.version == 3 else ('二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else ''))) }}
   {% for item in brief.featured if brief.version != 2 %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
@@ -131,10 +163,10 @@
   {{ divider() }}
 
   <!-- ⑤ 工具学习模块（digest 驱动，同今日精选格式）-->
-  {{ section_header('工 具 学 习') }}
-  {{ digest_section(brief.ai_research, '三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')) }}
+  {{ section_header('工具学习' if brief.version == 3 else '工 具 学 习') }}
+  {{ digest_section(brief.ai_research, '四、AI研究' if brief.version == 3 else ('三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else ''))) }}
   {% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '') }}{% endif %}
-  {{ digest_section(brief.agent_tools, '四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')) }}
+  {{ digest_section(brief.agent_tools, '五、Agent工具' if brief.version == 3 else ('四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else ''))) }}
   {% if brief.version != 2 and brief.tools %}
   <tr><td style="padding:12px 0;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:2px solid #111827;border-radius:12px;">
