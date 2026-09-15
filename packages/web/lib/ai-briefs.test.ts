@@ -19,6 +19,7 @@ import {
   listPublishedBriefs,
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
+import { PUBLISHED_BRIEF_V3_CONTENT } from "@/test/fixtures/published-brief";
 
 type QueryResponse = {
   data: unknown;
@@ -318,6 +319,21 @@ describe("published brief queries", () => {
 
     await expect(listPublishedBriefs()).resolves.toMatchObject([
       { modules: ["今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
+  });
+
+  it("lists the v3 OPC case before all four digest module labels", async () => {
+    useQueries(new QueryBuilder({
+      data: [row(
+        PUBLISHED_BRIEF_V3_CONTENT.brief_date,
+        "2026-08-01T01:00:00.000Z",
+        PUBLISHED_BRIEF_V3_CONTENT,
+      )],
+      error: null,
+    }));
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { modules: ["OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具"] },
     ]);
   });
 

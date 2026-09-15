@@ -1,6 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { assertDisposableFixtureTarget } from "./published-brief";
+vi.mock("server-only", () => ({}));
+
+import { AiBriefContentSchema } from "@/lib/ai-briefs";
+import {
+  assertDisposableFixtureTarget,
+  PUBLISHED_BRIEF_CONTENT,
+  PUBLISHED_BRIEF_V3_CONTENT,
+} from "./published-brief";
+
+describe("published brief fixtures", () => {
+  it("provides a valid standalone v3 issue without changing the legacy fixture", () => {
+    const v3 = AiBriefContentSchema.parse(PUBLISHED_BRIEF_V3_CONTENT);
+    expect(v3.version).toBe(3);
+    expect(v3.opc_case?.sharer).toBe("Ruslan");
+    expect(v3.intro_bullets).toHaveLength(4);
+    expect([v3.today_ai, v3.ai_masters, v3.ai_research, v3.agent_tools])
+      .not.toContain(null);
+
+    const legacy = AiBriefContentSchema.parse(PUBLISHED_BRIEF_CONTENT);
+    expect(legacy.version).toBe(1);
+    expect(legacy.opc_case).toBeNull();
+    expect(legacy.ai_engineering).not.toBeNull();
+    expect(legacy.featured).toHaveLength(1);
+  });
+});
 
 describe("assertDisposableFixtureTarget", () => {
   it("rejects fixture mutation when the disposable-stack marker is missing", () => {

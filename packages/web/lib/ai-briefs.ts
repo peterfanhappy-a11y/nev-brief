@@ -241,8 +241,9 @@ function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
 }
 
 function moduleLabels(content: AiBriefContent): string[] {
-  const labels = (content.version === 2
+  const labels = (content.version === 2 || content.version === 3
     ? [
+        content.version === 3 && content.opc_case && "OPC案例",
         content.today_ai && "今日AI",
         content.ai_masters && "AI大神",
         content.ai_research && "AI研究",

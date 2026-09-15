@@ -2,14 +2,6 @@ import React from "react";
 
 import type { AiBriefContent, AiPublishedBrief } from "@/lib/ai-briefs";
 
-/** A conservative reading pace for compact Chinese news prose. */
-const CHINESE_CHARACTERS_PER_MINUTE = 400;
-
-export function estimateChineseReadMinutes(text: string): number {
-  const characters = Array.from(text.replace(/\s/g, "")).length;
-  return Math.max(1, Math.ceil(characters / CHINESE_CHARACTERS_PER_MINUTE));
-}
-
 type DigestSection = NonNullable<AiBriefContent["today_ai"]>;
 type DigestSectionEntry = {
   slotId: string;
@@ -18,6 +10,14 @@ type DigestSectionEntry = {
 };
 
 function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
+  if (content.version === 3) {
+    return [
+      { slotId: "today-ai", title: "二、今日AI", section: content.today_ai },
+      { slotId: "ai-masters", title: "三、AI大神", section: content.ai_masters },
+      { slotId: "ai-research", title: "四、AI研究", section: content.ai_research },
+      { slotId: "agent-tools", title: "五、Agent工具", section: content.agent_tools },
+    ];
+  }
   return content.version === 2
     ? [
         { slotId: "today-ai", title: "一、今日AI", section: content.today_ai },
@@ -40,46 +40,6 @@ function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
 
 function visibleFeatured(content: AiBriefContent) {
   return content.version === 2 ? [] : content.featured;
-}
-
-function issuePlainText(content: AiBriefContent): string {
-  const parts = [
-    content.subject,
-    content.editorial,
-    ...content.intro_bullets,
-  ];
-
-  for (const { section } of visibleDigestSections(content)) {
-    if (!section) continue;
-    parts.push(section.subtitle);
-    for (const story of section.stories) {
-      parts.push(story.headline, story.summary, story.label);
-    }
-  }
-
-  for (const item of visibleFeatured(content)) {
-    parts.push(
-      item.theme_label,
-      item.headline,
-      ...item.details,
-      item.significance,
-      item.source_name,
-    );
-  }
-  if (content.version !== 2) {
-    for (const tool of content.tools) parts.push(tool.name, tool.one_liner);
-    if (content.daily_tip) {
-      parts.push(content.daily_tip.title, content.daily_tip.body);
-    }
-    for (const hit of content.quick_hits) parts.push(hit.text);
-    if (content.yesterday_top) parts.push(content.yesterday_top.headline);
-  }
-
-  return parts.join("");
-}
-
-export function estimateBriefReadMinutes(content: AiBriefContent): number {
-  return estimateChineseReadMinutes(issuePlainText(content));
 }
 
 function ExternalLink({
@@ -178,6 +138,40 @@ function DigestBlock({
   );
 }
 
+function OpcBlock({ opc }: { opc: NonNullable<AiBriefContent["opc_case"]> }) {
+  return (
+    <section
+      className="mt-6 overflow-hidden rounded-xl border-2 border-gray-900 bg-white"
+      aria-labelledby="daily-section-opc-case"
+    >
+      <h3
+        id="daily-section-opc-case"
+        className="px-5 pt-4 text-sm font-extrabold tracking-wider text-indigo-600"
+      >
+        一、OPC案例
+      </h3>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={opc.header_image}
+        alt={opc.header_image_alt}
+        loading="lazy"
+        className="mt-4 aspect-[16/9] w-full object-cover"
+      />
+      <div className="p-5">
+        <h3 className="text-lg font-semibold text-gray-900">{opc.headline}</h3>
+        <p className="mt-2 text-sm text-gray-500">分享者：{opc.sharer}</p>
+        <p className="mt-2 font-semibold text-gray-900">{opc.revenue_display}</p>
+        <p className="mt-2 leading-relaxed text-gray-700">{opc.summary}</p>
+        <p className="mt-3 text-sm font-medium">
+          <ExternalLink href={opc.url}>
+            阅读原文<span aria-hidden="true"> →</span>
+          </ExternalLink>
+        </p>
+      </div>
+    </section>
+  );
+}
+
 function SectionGroupTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="mt-10 bg-gray-950 px-4 py-3 text-center text-sm font-extrabold tracking-[0.35em] text-white">
@@ -188,7 +182,6 @@ function SectionGroupTitle({ children }: { children: React.ReactNode }) {
 
 export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
   const { content } = brief;
-  const readMinutes = estimateBriefReadMinutes(content);
   const featured = visibleFeatured(content);
   const digestSections = visibleDigestSections(content);
 
@@ -207,11 +200,14 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500">
           <time dateTime={brief.briefDate}>{brief.briefDate}</time>
           <span aria-hidden="true">·</span>
-          <span>{readMinutes} 分钟阅读</span>
+          <span>5 分钟阅读</span>
         </div>
         <h1 className="mt-4 text-3xl font-bold leading-tight text-gray-900 sm:text-4xl">
           {content.subject}
         </h1>
+        <p className="mt-5 text-lg font-bold leading-relaxed text-gray-700">
+          早上好，AI科技爱好者们！以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。
+        </p>
         {content.editorial && (
           <p className="mt-5 text-lg leading-relaxed text-gray-700">
             {content.editorial}
@@ -231,6 +227,13 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
           ))}
         </ul>
       </section>
+
+      {content.version === 3 && content.opc_case && (
+        <>
+          <SectionGroupTitle>OPC分享</SectionGroupTitle>
+          <OpcBlock opc={content.opc_case} />
+        </>
+      )}
 
       <SectionGroupTitle>今日精选</SectionGroupTitle>
 

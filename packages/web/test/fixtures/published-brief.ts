@@ -129,6 +129,34 @@ export const PUBLISHED_BRIEF_CONTENT: AiBriefContent = {
   stage1_stats: { candidates: 12, dupe_groups: 2 },
 };
 
+export const PUBLISHED_BRIEF_V3_CONTENT: AiBriefContent = {
+  ...PUBLISHED_BRIEF_CONTENT,
+  version: 3,
+  intro_bullets: [
+    "OPC 案例：从失败中重建电商 AI 产品",
+    "今日 AI：智能体走入实际工作流",
+    "AI 大神：分享可复用的实践经验",
+    "工具学习：论文方法与 Agent 工具",
+  ],
+  opc_case: {
+    sharer: "Ruslan",
+    headline: "$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+    summary: "他重建电商 AI 销售代理，通过客户反馈持续改进产品并恢复增长。",
+    original_revenue: "$167K MRR",
+    monthly_revenue_usd: 167_000,
+    revenue_display: "$167K 美元月度营收",
+    url: "https://www.indiehackers.com/post/example",
+    header_image: "https://cdn.example.com/opc.png",
+    header_image_alt: "Ruslan 的 Zipchat 案例",
+  },
+  ai_engineering: null,
+  featured: [],
+  tools: [],
+  daily_tip: null,
+  quick_hits: [],
+  yesterday_top: null,
+};
+
 export interface AiDailyBriefFixtureRow {
   brief_date: string;
   content: AiBriefContent;
