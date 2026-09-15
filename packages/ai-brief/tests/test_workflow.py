@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
@@ -392,6 +393,106 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfil
     assert validate.call_args.kwargs["deepseek_complete"] is False
     assert validate.call_args.kwargs["qwen_complete"] is False
     assert validate.call_args.kwargs["opc_candidate_count"] == 2
+
+
+@pytest.mark.parametrize("backfill", [False, True])
+@pytest.mark.parametrize(
+    ("mutation", "expected_status", "issue"),
+    [
+        ("valid", "awaiting_approval", None),
+        ("missing_opc", "blocked", ("opc_case_missing", "opc_case")),
+        ("overlong_bullets", "blocked", ("intro_bullet_count_invalid", "intro_bullets")),
+        ("empty_image", "blocked", ("opc_image_missing", "opc_case.header_image")),
+    ],
+)
+async def test_generation_retains_quality_rejected_v3_through_real_storage(
+    backfill: bool,
+    mutation: str,
+    expected_status: str,
+    issue: tuple[str, str] | None,
+) -> None:
+    """Schema-invalid output must remain an auditable quality block, not a storage failure."""
+    bundle = _v3_bundle()
+    assert bundle.opc_case is not None
+    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
+    bundle.opc_case.header_image = "https://aivizens.com/images/opc.png"
+    if mutation == "missing_opc":
+        bundle.opc_case = None
+        bundle.opc_candidate_count = 0
+    elif mutation == "overlong_bullets":
+        bundle.intro_bullets = ["One", "Two", "Three", "Four", "Five"]
+    elif mutation == "empty_image":
+        bundle.opc_case.header_image = ""
+
+    digests: dict[DigestKind, DigestEnvelope | None] = {}
+    for kind, section in (
+        ("events", bundle.today_ai), ("builder", bundle.ai_masters),
+        ("research", bundle.ai_research), ("agent", bundle.agent_tools),
+    ):
+        assert section is not None
+        source_kind = cast(DigestKind, kind)
+        digests[source_kind] = DigestEnvelope(
+            kind=source_kind, message_id=f"<{kind}@test>", subject=f"{kind}-{BRIEF_DATE}",
+            received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+            used_fallback=False, text="\n".join(story.url for story in section.stories),
+            html="<p>private-source-body</p>", attachments=(),
+        )
+    digests["opc"] = None if bundle.opc_case is None else DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject=f"opc-{BRIEF_DATE}",
+        received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+        used_fallback=False, text=bundle.opc_case.url, html="<p>private-opc-body</p>",
+        attachments=(),
+    )
+    adapter = SimpleNamespace(fetch=lambda _date: digests)
+    connection = _connection()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (RUN_ID,)
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
+        patch.object(runner, "_alert"),
+    ):
+        result = await runner.generate_for_review(
+            connection, BRIEF_DATE, adapter, backfill=backfill,
+        )
+
+    assert result.status == expected_status
+    assert result.quality_report is not None
+    saved = [call.args[1] for call in cursor.execute.call_args_list
+             if "SET content = %s::jsonb" in call.args[0]]
+    finished = [call.args[1] for call in cursor.execute.call_args_list
+                if "UPDATE ai_digest_runs AS run" in call.args[0]]
+    assert len(saved) == len(finished) == 1
+    candidate = json.loads(saved[0][0])
+    report = json.loads(saved[0][3])
+    assert saved[0][2] == finished[0][0] == expected_status
+    assert json.loads(finished[0][3]) == report
+    assert report["passed"] is (expected_status == "awaiting_approval")
+    assert finished[0][4] == ("quality" if issue else None)
+    assert "private-" not in str(saved + finished)
+    assert all("message" not in entry for entry in report["blockers"])
+    assert candidate["intro_bullets"] == bundle.intro_bullets + ["🧰 Agents 1"]
+    assert candidate["opc_case"] == (
+        None if bundle.opc_case is None else bundle.opc_case.model_dump(mode="json")
+    )
+    assert candidate["ai_engineering"] is None
+    assert candidate["yesterday_top"] is None
+    assert candidate["featured"] == candidate["tools"] == candidate["quick_hits"] == []
+    assert candidate["daily_tip"] is None
+    if mutation == "missing_opc":
+        assert candidate["editorial"] == bundle.editorial
+    if issue is not None:
+        assert {"code": issue[0], "path": issue[1]} in report["blockers"]
+        cursor.fetchone.return_value = (saved[0][2], candidate, report, RUN_ID)
+        with patch.object(runner, "_alert"):
+            approval = runner.approve_brief(connection, BRIEF_DATE, approved_by="test-operator")
+            release = runner.release_approved(connection, BRIEF_DATE)
+        assert (approval.status, approval.changed, approval.reason) == (
+            "blocked", False, "not_approvable",
+        )
+        assert (release.status, release.released, release.composed) == ("blocked", False, 0)
 
 
 def test_generation_claim_binds_owner_and_rejects_an_active_generating_row() -> None:
