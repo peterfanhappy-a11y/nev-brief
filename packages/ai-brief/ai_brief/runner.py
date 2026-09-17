@@ -273,7 +273,7 @@ async def generate_for_review(
         storage.save_generated_brief(
             conn,
             brief_date=brief_date,
-            content=brief.model_dump(mode="json"),
+            content=brief.model_dump(mode="json", warnings=False),
             model=brief.model,
             digest_sources=sources,
             quality_report=report_payload,
@@ -354,8 +354,12 @@ def _build_brief_without_lookup(
     bundle: DigestBundle,
     yesterday_top: YesterdayTop | None,
 ) -> AiBriefContent:
-    intro = list(bundle.intro_bullets)
-    if bundle.agent_tools is not None and bundle.agent_tools.stories:
+    intro = (
+        list(bundle.intro_bullets)
+        if isinstance(bundle.intro_bullets, list)
+        else bundle.intro_bullets
+    )
+    if isinstance(intro, list) and bundle.agent_tools is not None and bundle.agent_tools.stories:
         intro.append(f"🧰 {bundle.agent_tools.stories[0].headline}")
     subject = bundle.subject or (
         bundle.today_ai.stories[0].headline

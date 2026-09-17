@@ -36,6 +36,7 @@ QUALITY_ISSUE_CODES = frozenset(
         "editorial_blank",
         "intro_blank",
         "intro_bullet_count_invalid",
+        "intro_bullet_invalid",
         "intro_agent_topic_mismatch",
         "opc_case_missing",
         "opc_candidate_count_invalid",

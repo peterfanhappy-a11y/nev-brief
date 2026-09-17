@@ -110,17 +110,25 @@ const YesterdayTopSchema = z.object({
   url: HttpsUrlSchema,
 });
 
+// Match Pydantic's Unicode code-point limits, including supplementary characters.
+function codePointString(min: number, max: number) {
+  return z.string().refine((value) => {
+    const length = Array.from(value).length;
+    return length >= min && length <= max;
+  }, `Expected ${min}-${max} Unicode code points`);
+}
+
 const OpcCaseSchema = z
   .object({
-    sharer: z.string().min(1).max(80),
-    headline: z.string().min(1).max(120),
-    summary: z.string().min(1).max(500),
-    original_revenue: z.string().min(1).max(80),
+    sharer: codePointString(1, 80),
+    headline: codePointString(1, 120),
+    summary: codePointString(1, 500),
+    original_revenue: codePointString(1, 80),
     monthly_revenue_usd: z.number().int().positive(),
-    revenue_display: z.string().min(1).max(80),
+    revenue_display: codePointString(1, 80),
     url: HttpsUrlSchema,
     header_image: HttpsUrlSchema,
-    header_image_alt: z.string().min(1).max(160),
+    header_image_alt: codePointString(1, 160),
   })
   .strict();
 
@@ -134,7 +142,7 @@ export const AiBriefContentSchema = z.object({
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
-  editorial: z.string().max(220).default(""),
+  editorial: codePointString(0, 220).default(""),
   intro_bullets: z.array(z.string()).min(1).max(4),
   today_ai: OptionalDigestSectionSchema,
   ai_masters: OptionalDigestSectionSchema,

@@ -613,6 +613,11 @@ def validate_brief(
                 "intro_bullet_count_invalid", "V3 requires exactly four intro bullets.",
                 "intro_bullets",
             ))
+        if any(not isinstance(bullet, str) or not bullet.strip() for bullet in intro):
+            blockers.append(_issue(
+                "intro_bullet_invalid", "Every V3 intro bullet must be a nonblank string.",
+                "intro_bullets",
+            ))
         agent_stories = _story_items(_section(brief, "agent_tools"))
         if len(intro) == 4 and (
             not agent_stories or intro[3] != f"🧰 {agent_stories[0][1].headline}"

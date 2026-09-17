@@ -20,6 +20,7 @@ import {
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
 import { PUBLISHED_BRIEF_V3_CONTENT } from "@/test/fixtures/published-brief";
+import opcUnicode from "../../../tests/fixtures/opc-unicode-contract.json";
 
 type QueryResponse = {
   data: unknown;
@@ -136,6 +137,34 @@ describe("isBriefDate", () => {
 });
 
 describe("AiBriefContentSchema", () => {
+  it.each(opcUnicode.bounded_strings)("counts $field by Unicode code points", ({ field, max }) => {
+    for (const boundary of opcUnicode.string_boundaries) {
+      const length = { empty: 0, one: 1, max, over: max + 1 }[boundary.length]!;
+      const value = length ? "题".repeat(length - 1) + "🚀" : "";
+      const parsed = AiBriefContentSchema.safeParse({
+        ...PUBLISHED_BRIEF_V3_CONTENT,
+        opc_case: { ...opcUnicode.opc_case, [field]: value },
+      });
+      expect(parsed.success).toBe(boundary.valid);
+      if (parsed.success) expect(parsed.data.opc_case).toHaveProperty(field, value);
+    }
+  });
+
+  it.each(opcUnicode.unbounded_urls)("preserves unbounded Unicode %s", (field) => {
+    const value = "https://aivizens.com/" + "🚀".repeat(2048);
+    const parsed = AiBriefContentSchema.parse({
+      ...PUBLISHED_BRIEF_V3_CONTENT, opc_case: { ...opcUnicode.opc_case, [field]: value },
+    });
+    expect(parsed.opc_case).toHaveProperty(field, value);
+  });
+
+  it.each(opcUnicode.monthly_revenue_usd)("shares monthly revenue boundary $value", ({ value, valid }) => {
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V3_CONTENT,
+      opc_case: { ...opcUnicode.opc_case, monthly_revenue_usd: value },
+    }).success).toBe(valid);
+  });
+
   it("accepts both historical v1 and four-module v2 content", () => {
     const v1 = AiBriefContentSchema.parse(content());
 
@@ -243,6 +272,21 @@ describe("AiBriefContentSchema", () => {
 });
 
 describe("published brief queries", () => {
+  it.each(opcUnicode.bounded_strings)("keeps a published row with boundary emoji in $field", async ({ field, max }) => {
+    const value = "题".repeat(max - 1) + "🚀";
+    const stored = {
+      ...PUBLISHED_BRIEF_V3_CONTENT,
+      opc_case: { ...opcUnicode.opc_case, [field]: value },
+      editorial: "文".repeat(219) + "🚀",
+    };
+    useQueries(new QueryBuilder({
+      data: row(stored.brief_date, "2026-08-01T01:00:00.000Z", stored), error: null,
+    }));
+    const published = await getPublishedBrief(stored.brief_date);
+    expect(published?.content.opc_case).toHaveProperty(field, value);
+    expect(published?.content.editorial).toBe(stored.editorial);
+  });
+
   beforeEach(() => {
     mocks.getSupabaseAdmin.mockReturnValue({ from: mocks.from });
   });

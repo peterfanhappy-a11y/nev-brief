@@ -248,8 +248,10 @@ async def test_digest_generation_includes_opc_case_and_candidate_count() -> None
 @pytest.mark.parametrize("bullets", [
     [], ["One", "Two"], ["One", "Two", "Three"],
     ["One", "Two", "Three", "Four", "Five"], ["One", "", "Three"],
+    ["", "", ""], [" ", "\t", "\n"], [None, None, None],
+    ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
 ])
-async def test_condenser_preserves_model_bullet_count_and_values(bullets: list[str]) -> None:
+async def test_condenser_preserves_model_bullet_count_and_values(bullets: Any) -> None:
     from ai_brief.digest.models import EventItem
 
     item = EventItem(
@@ -263,6 +265,88 @@ async def test_condenser_preserves_model_bullet_count_and_values(bullets: list[s
         result = await condenser.condense_today_ai([item])
     assert result is not None
     assert result.value.intro_bullets == bullets
+    assert result.complete is (
+        isinstance(bullets, list) and len(bullets) == 3
+        and all(isinstance(bullet, str) and bool(bullet.strip()) for bullet in bullets)
+    )
+
+
+@pytest.mark.parametrize("bullets", [
+    [], ["", "", ""], [" ", "\t", "\n"], [None, None, None],
+    ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
+    ["One", "Two", "Three", "Four"],
+])
+async def test_invalid_model_intro_reaches_real_runner_quality_and_blocked_storage(
+    bullets: Any,
+) -> None:
+    bundle = _v3_bundle()
+    assert bundle.opc_case is not None and bundle.today_ai is not None
+    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
+    digests: dict[DigestKind, DigestEnvelope | None] = {}
+    for kind, section in (
+        ("events", bundle.today_ai), ("builder", bundle.ai_masters),
+        ("research", bundle.ai_research), ("agent", bundle.agent_tools),
+    ):
+        assert section is not None
+        html = "".join(
+            f'<div class="item"><div class="label">{story.label}</div>'
+            f'<div class="title">{index}. {story.headline}</div>'
+            '<div class="summary">Source body.</div>'
+            f'<div class="meta"><a href="{story.url}">原文</a></div></div>'
+            for index, story in enumerate(section.stories, 1)
+        )
+        source_kind = cast(DigestKind, kind)
+        digests[source_kind] = DigestEnvelope(
+            kind=source_kind, message_id=f"<{kind}@test>", subject=f"{kind}-{BRIEF_DATE}",
+            received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+            used_fallback=False, text=None, html=html, attachments=(),
+        )
+    digests["opc"] = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject=f"ai-opc-sharing {BRIEF_DATE}",
+        received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+        used_fallback=False, text=bundle.opc_case.url, html=None, attachments=(),
+    )
+    connection = _connection()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (RUN_ID,)
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(condenser, "extract_json_with_retry", AsyncMock(return_value={
+            "subject": "Subject", "preheader": "Preheader", "editorial": "Lead.",
+            "intro_bullets": bullets,
+            "summaries": [{"index": i, "summary": "Summary."} for i in range(1, 6)],
+        })),
+        patch.object(
+            generate, "_pick_and_upload", return_value=("https://img.test/x.jpg", "", True)
+        ),
+        patch.object(generate, "_build_ai_masters", return_value=(bundle.ai_masters, True, True)),
+        patch.object(generate, "_build_research", return_value=(bundle.ai_research, True, True)),
+        patch.object(generate, "_build_agent", return_value=(bundle.agent_tools, True)),
+        patch.object(generate, "build_opc_case", return_value=(bundle.opc_case, 2)),
+        patch.object(runner, "_alert"),
+        patch.object(composer, "compose_frozen_brief") as compose,
+        patch.object(deliverer, "send_pending") as deliver,
+    ):
+        result = await runner.generate_for_review(
+            connection, BRIEF_DATE, SimpleNamespace(fetch=lambda _date: digests),
+        )
+        assert result.status == "blocked"
+        saved = [call.args[1] for call in cursor.execute.call_args_list
+                 if "SET content = %s::jsonb" in call.args[0]]
+        assert len(saved) == 1
+        candidate, report = json.loads(saved[0][0]), json.loads(saved[0][3])
+        assert candidate["intro_bullets"] == (
+            bullets + ["🧰 Agents 1"] if isinstance(bullets, list) else bullets
+        )
+        assert report["passed"] is False
+        assert any(issue["code"] == "deepseek_incomplete" for issue in report["blockers"])
+        cursor.fetchone.return_value = ("blocked", candidate, report, RUN_ID)
+        assert not runner.approve_brief(connection, BRIEF_DATE, approved_by="test").changed
+        assert not runner.release_approved(connection, BRIEF_DATE).released
+        compose.assert_not_called()
+        deliver.assert_not_called()
 
 
 def _connection() -> MagicMock:
@@ -473,6 +557,7 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
     assert finished[0][4] == ("quality" if issue else None)
     assert "private-" not in str(saved + finished)
     assert all("message" not in entry for entry in report["blockers"])
+    assert isinstance(bundle.intro_bullets, list)
     assert candidate["intro_bullets"] == bundle.intro_bullets + ["🧰 Agents 1"]
     assert candidate["opc_case"] == (
         None if bundle.opc_case is None else bundle.opc_case.model_dump(mode="json")

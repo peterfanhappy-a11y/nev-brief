@@ -1,0 +1,34 @@
+{
+  "opc_case": {
+    "sharer": "Ruslan",
+    "headline": "Zipchat 🚀",
+    "summary": "案例正文 🚀",
+    "original_revenue": "$167K MRR",
+    "monthly_revenue_usd": 167000,
+    "revenue_display": "$167K 美元月度营收",
+    "url": "https://www.indiehackers.com/post/🚀",
+    "header_image": "https://aivizens.com/images/🚀.png",
+    "header_image_alt": "Zipchat 🚀"
+  },
+  "bounded_strings": [
+    {"field": "sharer", "max": 80},
+    {"field": "headline", "max": 120},
+    {"field": "summary", "max": 500},
+    {"field": "original_revenue", "max": 80},
+    {"field": "revenue_display", "max": 80},
+    {"field": "header_image_alt", "max": 160}
+  ],
+  "string_boundaries": [
+    {"length": "empty", "valid": false},
+    {"length": "one", "valid": true},
+    {"length": "max", "valid": true},
+    {"length": "over", "valid": false}
+  ],
+  "unbounded_urls": ["url", "header_image"],
+  "monthly_revenue_usd": [
+    {"value": 0, "valid": false},
+    {"value": 1, "valid": true},
+    {"value": 1.5, "valid": false},
+    {"value": 167000, "valid": true}
+  ]
+}

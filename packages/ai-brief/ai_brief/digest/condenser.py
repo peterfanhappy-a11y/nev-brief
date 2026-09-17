@@ -51,7 +51,7 @@ class TodayAIResult:
     subject: str
     preheader: str
     editorial: str
-    intro_bullets: list[str]
+    intro_bullets: object  # Unvalidated model output retained for blocked-candidate auditing.
     stories: list[DigestStory]
 
 
@@ -112,12 +112,7 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
             DigestStory(headline=it.headline[:80], summary=summary, url=it.url, label=it.label)
         )
 
-    raw_intro = raw.get("intro_bullets")
-    intro = (
-        [str(b) for b in raw_intro]
-        if isinstance(raw_intro, list)
-        else []
-    )
+    intro = raw.get("intro_bullets")
     subject = str(raw.get("subject", "")).strip()
     preheader = str(raw.get("preheader", "")).strip()
     editorial = str(raw.get("editorial", "")).strip()
@@ -126,7 +121,9 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
         and bool(subject)
         and bool(preheader)
         and bool(editorial)
-        and bool(intro)
+        and isinstance(intro, list)
+        and len(intro) == 3
+        and all(isinstance(bullet, str) and bool(bullet.strip()) for bullet in intro)
     )
     return ModelOutcome(
         value=TodayAIResult(

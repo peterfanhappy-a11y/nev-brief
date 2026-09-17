@@ -1,6 +1,10 @@
 """AiBriefContent schema 回环 + 校验测试。"""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import pytest
 from ai_brief.schema import (
     AiBriefContent,
@@ -13,6 +17,45 @@ from ai_brief.schema import (
     YesterdayTop,
 )
 from pydantic import ValidationError
+
+OPC_UNICODE = json.loads(
+    (Path(__file__).resolve().parents[3] / "tests/fixtures/opc-unicode-contract.json").read_text()
+)
+
+
+@pytest.mark.parametrize("field", OPC_UNICODE["bounded_strings"])
+@pytest.mark.parametrize("boundary", OPC_UNICODE["string_boundaries"])
+def test_opc_unicode_code_point_boundaries(
+    field: dict[str, Any], boundary: dict[str, Any],
+) -> None:
+    length = {"empty": 0, "one": 1, "max": field["max"], "over": field["max"] + 1}[
+        boundary["length"]
+    ]
+    value = "题" * (length - 1) + "🚀" if length else ""
+    payload = {**OPC_UNICODE["opc_case"], field["field"]: value}
+    if boundary["valid"]:
+        parsed = OpcCase.model_validate(payload)
+        assert parsed.model_dump()[field["field"]] == value
+    else:
+        with pytest.raises(ValidationError):
+            OpcCase.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", OPC_UNICODE["unbounded_urls"])
+def test_opc_unicode_urls_have_no_character_limit(field: str) -> None:
+    value = "https://aivizens.com/" + "🚀" * 2048
+    parsed = OpcCase.model_validate({**OPC_UNICODE["opc_case"], field: value})
+    assert parsed.model_dump()[field] == value
+
+
+@pytest.mark.parametrize("boundary", OPC_UNICODE["monthly_revenue_usd"])
+def test_opc_shared_positive_integer_boundaries(boundary: dict[str, Any]) -> None:
+    payload = {**OPC_UNICODE["opc_case"], "monthly_revenue_usd": boundary["value"]}
+    if boundary["valid"]:
+        assert OpcCase.model_validate(payload).monthly_revenue_usd == boundary["value"]
+    else:
+        with pytest.raises(ValidationError):
+            OpcCase.model_validate(payload)
 
 
 def _minimal_featured() -> FeaturedItem:

@@ -90,7 +90,7 @@ class DigestBundle:
     subject: str
     preheader: str
     editorial: str
-    intro_bullets: list[str]
+    intro_bullets: object
     today_ai: DigestSection | None
     ai_masters: DigestSection | None
     ai_research: DigestSection | None = None

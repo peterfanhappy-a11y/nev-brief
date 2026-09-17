@@ -3,9 +3,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
+from io import BytesIO
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+from ai_brief.digest.generate import build_editorial, build_opc_case
+from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityReport, validate_brief
 from ai_brief.schema import (
@@ -16,7 +20,8 @@ from ai_brief.schema import (
     Stage1Stats,
     Theme,
 )
-from ai_brief.storage import _safe_quality_report
+from ai_brief.storage import _normalize_current_content, _safe_quality_report
+from PIL import Image
 
 NOW = datetime(2026, 8, 4, 0, 0, tzinfo=UTC)
 BRIEF_DATE = date(2026, 8, 4)
@@ -236,6 +241,35 @@ def test_valid_v3_has_opc_metrics_and_known_domain() -> None:
     assert persisted["metrics"] == report.metrics
 
 
+def test_generated_emoji_boundary_case_survives_quality_and_frozen_storage() -> None:
+    headline = "题" * 119 + "🚀"
+    image = BytesIO()
+    Image.new("RGB", (80, 50), "blue").save(image, "PNG")
+    envelope = replace(
+        _envelope("opc"),
+        html=(
+            '<h3>案例1 · Alice：First</h3><p>First body.</p><p>收入：$10K MRR</p>'
+            '<p><a href="https://www.indiehackers.com/post/case-one">原文</a></p>'
+            f'<h3>案例2 · Ruslan：{headline}</h3><p>Second body.</p><p>收入：$167K MRR</p>'
+            '<p><a href="https://www.indiehackers.com/post/case-two">原文</a></p>'
+        ),
+        attachments=(Attachment("case2.png", "image/png", image.getvalue()),),
+    )
+    with patch(
+        "ai_brief.digest.uploader.upload_image", return_value="https://aivizens.com/opc.png"
+    ):
+        opc, count = build_opc_case(BRIEF_DATE.isoformat(), envelope)
+    assert opc is not None
+    brief = _v3_brief().model_copy(update={
+        "opc_case": opc, "editorial": build_editorial("文" * 300, opc),
+    })
+    assert len(brief.editorial) == 220
+    assert _report(brief, _fresh_v3_digests(), opc_candidate_count=count).passed
+    frozen = _normalize_current_content(brief.model_dump(mode="json"))
+    assert frozen["opc_case"]["headline"] == headline
+    assert frozen["editorial"] == brief.editorial
+
+
 @pytest.mark.parametrize("count", [None, 0, 1, 3, True, 2.0])
 def test_v3_blocks_wrong_candidate_count(count: Any) -> None:
     report = _report(_v3_brief(), _fresh_v3_digests(), opc_candidate_count=count)
@@ -272,6 +306,15 @@ def test_v3_blocks_invalid_intro(bullets: list[str], code: str) -> None:
     brief = _v3_brief().model_copy(update={"intro_bullets": bullets})
     report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
     assert any(i.code == code and i.path == "intro_bullets" for i in report.blockers)
+
+
+@pytest.mark.parametrize("bullet", ["", " ", "\t", None, {"text": "value"}])
+def test_v3_requires_each_model_bullet_to_be_a_nonblank_string(bullet: Any) -> None:
+    brief = _v3_brief()
+    brief.intro_bullets[1] = bullet
+    report = _report(brief, _fresh_v3_digests(), opc_candidate_count=2)
+    assert not report.passed
+    assert any(issue.code == "intro_bullet_invalid" for issue in report.blockers)
 
 
 @pytest.mark.parametrize("kind", ["opc", "events", "builder", "research", "agent"])
