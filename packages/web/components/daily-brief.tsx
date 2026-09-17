@@ -150,6 +150,7 @@ function OpcBlock({ opc }: { opc: NonNullable<AiBriefContent["opc_case"]> }) {
       >
         一、OPC案例
       </h3>
+      <p className="mt-2 px-5 text-sm text-gray-500">分享者：{opc.sharer}</p>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={opc.header_image}
@@ -159,9 +160,8 @@ function OpcBlock({ opc }: { opc: NonNullable<AiBriefContent["opc_case"]> }) {
       />
       <div className="p-5">
         <h3 className="text-lg font-semibold text-gray-900">{opc.headline}</h3>
-        <p className="mt-2 text-sm text-gray-500">分享者：{opc.sharer}</p>
-        <p className="mt-2 font-semibold text-gray-900">{opc.revenue_display}</p>
         <p className="mt-2 leading-relaxed text-gray-700">{opc.summary}</p>
+        <p className="mt-2 font-semibold text-gray-900">{opc.revenue_display}</p>
         <p className="mt-3 text-sm font-medium">
           <ExternalLink href={opc.url}>
             阅读原文<span aria-hidden="true"> →</span>

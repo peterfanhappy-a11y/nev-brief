@@ -6,12 +6,12 @@ import { AiBriefContentSchema } from "@/lib/ai-briefs";
 import {
   assertDisposableFixtureTarget,
   PUBLISHED_BRIEF_CONTENT,
-  PUBLISHED_BRIEF_V3_CONTENT,
+  PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
 } from "./published-brief";
 
 describe("published brief fixtures", () => {
-  it("provides a valid standalone v3 issue without changing the legacy fixture", () => {
-    const v3 = AiBriefContentSchema.parse(PUBLISHED_BRIEF_V3_CONTENT);
+  it("provides a schema-valid rendering-only v3 fixture without changing the legacy fixture", () => {
+    const v3 = AiBriefContentSchema.parse(PUBLISHED_BRIEF_V3_RENDERING_CONTENT);
     expect(v3.version).toBe(3);
     expect(v3.opc_case?.sharer).toBe("Ruslan");
     expect(v3.intro_bullets).toHaveLength(4);

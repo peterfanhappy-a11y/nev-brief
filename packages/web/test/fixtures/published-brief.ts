@@ -129,7 +129,8 @@ export const PUBLISHED_BRIEF_CONTENT: AiBriefContent = {
   stage1_stats: { candidates: 12, dupe_groups: 2 },
 };
 
-export const PUBLISHED_BRIEF_V3_CONTENT: AiBriefContent = {
+// Rendering/schema fixture only: inherited story counts are not production quality-valid.
+export const PUBLISHED_BRIEF_V3_RENDERING_CONTENT: AiBriefContent = {
   ...PUBLISHED_BRIEF_CONTENT,
   version: 3,
   intro_bullets: [

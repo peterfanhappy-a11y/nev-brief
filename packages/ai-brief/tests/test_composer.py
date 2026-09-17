@@ -174,6 +174,14 @@ def test_render_v3_opc_sharing_before_digest_modules() -> None:
 
     assert html.index("OPC分享") < html.index("今日精选") < html.index("工具学习")
     assert text.index("OPC分享") < text.index("今日精选") < text.index("工具学习")
+    field_order = [
+        "Ruslan", "https://img/opc.png", "Zipchat 再冲到 $2M ARR",
+        "从产品定位到销售增长的完整复盘。", "$167K 美元月度营收",
+        "https://www.indiehackers.com/post/zipchat",
+    ]
+    for rendered in (html, text):
+        positions = [rendered.index(field) for field in field_order]
+        assert positions == sorted(positions)
     assert html.count("v3 intro ") == 4
     assert text.count("v3 intro ") == 4
     assert "早上好，Peter！" in html

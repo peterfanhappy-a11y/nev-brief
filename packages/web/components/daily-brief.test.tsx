@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DailyBrief from "@/components/daily-brief";
 import type { AiPublishedBrief } from "@/lib/ai-briefs";
-import { PUBLISHED_BRIEF_V3_CONTENT } from "@/test/fixtures/published-brief";
+import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
 
 const COMPLETE_BRIEF: AiPublishedBrief = {
   briefDate: "2026-08-03",
@@ -165,9 +165,9 @@ describe("DailyBrief", () => {
     render(
       <DailyBrief
         brief={{
-          briefDate: PUBLISHED_BRIEF_V3_CONTENT.brief_date,
+          briefDate: PUBLISHED_BRIEF_V3_RENDERING_CONTENT.brief_date,
           publishedAt: "2026-08-01T01:00:00.000Z",
-          content: PUBLISHED_BRIEF_V3_CONTENT,
+          content: PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
         }}
       />,
     );
@@ -178,7 +178,7 @@ describe("DailyBrief", () => {
     );
     expect(greeting).toHaveClass("font-bold");
     expect(screen.getByRole("heading", { level: 1 }).nextElementSibling).toBe(greeting);
-    expect(greeting.nextElementSibling).toHaveTextContent(PUBLISHED_BRIEF_V3_CONTENT.editorial);
+    expect(greeting.nextElementSibling).toHaveTextContent(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.editorial);
 
     const titles = [
       "OPC分享",
@@ -209,12 +209,24 @@ describe("DailyBrief", () => {
     expect(within(opc).getByRole("heading", {
       name: "$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
     })).toBeInTheDocument();
-    expect(opc).toHaveTextContent(PUBLISHED_BRIEF_V3_CONTENT.opc_case!.summary);
+    expect(opc).toHaveTextContent(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.summary);
     expect(within(opc).getByRole("link")).toHaveAttribute(
       "href", "https://www.indiehackers.com/post/example",
     );
+    const fieldOrder = [
+      within(opc).getByText("分享者：Ruslan"),
+      image,
+      within(opc).getByRole("heading", { name: PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.headline }),
+      within(opc).getByText(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.summary),
+      within(opc).getByText("$167K 美元月度营收"),
+      within(opc).getByRole("link"),
+    ];
+    for (let index = 1; index < fieldOrder.length; index++) {
+      expect(fieldOrder[index - 1].compareDocumentPosition(fieldOrder[index])
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
     expect(screen.getByRole("region", { name: "概览" }).querySelectorAll("li")).toHaveLength(4);
-    for (const bullet of PUBLISHED_BRIEF_V3_CONTENT.intro_bullets) {
+    for (const bullet of PUBLISHED_BRIEF_V3_RENDERING_CONTENT.intro_bullets) {
       expect(screen.getByText(bullet)).toBeInTheDocument();
     }
   });
