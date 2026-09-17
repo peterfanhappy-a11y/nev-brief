@@ -40,6 +40,7 @@ from ai_brief.schema import DigestSection, DigestStory, OpcCase, Theme
 log = get_logger("ai_brief.digest.generate")
 
 _NUM_RE = re.compile(r"(\d+)")
+_OPC_CASE_RE = re.compile(r"(?<![a-zA-Z])(?:case|案例)[\s_-]*(\d+)(?!\d)", re.IGNORECASE)
 _EXCLUDED_AGENT_REPOS = frozenset(
     {
         "openai/codex",
@@ -229,9 +230,19 @@ def build_opc_case(
         return None, count
     case = selected.candidate
     images = _image_attachments(digest)
-    indexed = _attachments_by_index(digest)
-    attachment = indexed.get(case.index)
-    if not indexed and len(images) == 2 and all(
+    indexed: dict[int, Attachment] = {}
+    ambiguous = False
+    for image in images:
+        markers = _OPC_CASE_RE.findall(image.filename)
+        if len(markers) > 1:
+            ambiguous = True
+        elif markers:
+            index = int(markers[0])
+            if index not in {1, 2} or index in indexed:
+                ambiguous = True
+            indexed[index] = image
+    attachment = None if ambiguous else indexed.get(case.index)
+    if not ambiguous and not indexed and len(images) == 2 and all(
         _is_usable_header_image(image.data, image.content_type) for image in images
     ):
         attachment = images[case.index - 1]

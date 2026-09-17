@@ -54,7 +54,13 @@ class GmailDigestAdapter:
         requested = brief_date.isoformat()
         digests: dict[DigestKind, DigestEnvelope | None] = {}
         for kind, prefix in _SUBJECT_PREFIXES.items():
-            email = self._fetcher(self._sender, prefix, requested)
+            email = (
+                self._fetcher(
+                    self._sender, prefix, requested, exact_subject=f"{prefix} {requested}"
+                )
+                if kind == "opc"
+                else self._fetcher(self._sender, prefix, requested)
+            )
             used_fallback = False
             if email is None and self._allow_fallback and kind in _FALLBACK_KINDS:
                 email = self._fetcher(

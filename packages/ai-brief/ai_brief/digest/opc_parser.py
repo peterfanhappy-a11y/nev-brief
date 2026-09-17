@@ -11,10 +11,11 @@ from selectolax.parser import HTMLParser, Node
 from ai_brief.digest.models import OpcCaseCandidate, Revenue
 
 _HEADER_RE = re.compile(r"^案例\s*(\d+)\s*·\s*([^：]+?)\s*：\s*(.+)$")
+_INCOME_LABEL_RE = re.compile(r"^收入\s*[:：]\s*")
 _REVENUE_RE = re.compile(
     r"^(?P<currency>US\$|USD|美元|\$|EUR|欧元|€|GBP|英镑|£|CNY|RMB|人民币|JPY|日元|[A-Z]{3})\s*"
     r"(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*"
-    r"(?P<unit>[KMB])?\+?\s*(?P<period>MRR|ARR)$",
+    r"(?P<unit>[KMB])?\+?\s*(?P<period>MRR|ARR|月度营收|年度营收)$",
     re.IGNORECASE,
 )
 _MULTIPLIERS = {
@@ -48,6 +49,7 @@ def parse_revenue(text: str) -> Revenue | None:
         currency_code = _CURRENCY_CODES.get(currency, currency.upper())
     unit = (match.group("unit") or "").upper()
     period = match.group("period").upper()
+    period = {"月度营收": "MRR", "年度营收": "ARR"}.get(period, period)
     return Revenue(
         amount=Decimal(match.group("amount").replace(",", "")) * _MULTIPLIERS[unit],
         currency=currency_code,
@@ -84,8 +86,8 @@ def parse_opc_digest(html: str) -> list[OpcCaseCandidate]:
         url = ""
         for sibling in _element_siblings_after(h3):
             text = _clean(sibling.text())
-            if sibling.tag == "p" and "收入" in text:
-                income_text = re.sub(r"^.*?收入\s*[:：]\s*", "", text)
+            if sibling.tag == "p" and _INCOME_LABEL_RE.match(text):
+                income_text = _INCOME_LABEL_RE.sub("", text, count=1)
                 revenue = parse_revenue(income_text)
             elif sibling.tag == "p" and not body and sibling.css_first("a") is None:
                 body = text

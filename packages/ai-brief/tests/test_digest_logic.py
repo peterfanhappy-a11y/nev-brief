@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 from dataclasses import replace
 from datetime import UTC, date, datetime
+from email.message import EmailMessage
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -17,7 +18,7 @@ from ai_brief.digest.generate import (
     _today_ai_image_candidates,
 )
 from ai_brief.digest.image_judge import _parse_index
-from ai_brief.digest.imap_client import Attachment
+from ai_brief.digest.imap_client import Attachment, parse_message
 from ai_brief.digest.input import DigestEnvelope
 from ai_brief.digest.models import (
     AgentTool,
@@ -131,6 +132,56 @@ def test_opc_does_not_rebind_indexed_or_invalid_images_positionally() -> None:
             result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(images))
         assert result is not None
         assert result.header_image == ""
+
+
+@pytest.mark.parametrize("count", [2, 3])
+def test_opc_mime_unnamed_images_are_only_positional(count: int) -> None:
+    message = EmailMessage()
+    message.set_content("OPC")
+    for color in ["red", "blue", "green"][:count]:
+        message.add_attachment(_opc_image("", color).data, maintype="image", subtype="png")
+    parsed = parse_message(message.as_bytes(), received_at=datetime(2026, 8, 4, tzinfo=UTC))
+    with patch.object(
+        uploader, "upload_image", return_value="https://example.com/opc.png"
+    ) as upload:
+        result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(tuple(parsed.attachments)))
+    assert result is not None
+    assert bool(result.header_image) is (count == 2)
+    assert upload.call_count == (1 if count == 2 else 0)
+
+
+@pytest.mark.parametrize("names", [
+    ("2026-09-14-case1.png", "2026-09-14-case2.png", "logo2.png"),
+    ("案例1.png", "案例2.png", "logo2.png"),
+])
+def test_opc_explicit_markers_win_over_arbitrary_filename_digits(names: tuple[str, ...]) -> None:
+    images = tuple(
+        _opc_image(name, color) for name, color in zip(names, ["red", "blue", "green"], strict=True)
+    )
+    with patch.object(
+        uploader, "upload_image", return_value="https://example.com/opc.png"
+    ) as upload:
+        result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(images))
+    assert result is not None and result.header_image
+    pixel = Image.open(io.BytesIO(upload.call_args.args[0])).getpixel((10, 10))
+    assert isinstance(pixel, tuple)
+    assert pixel[2] > 200 and pixel[0] < 20
+
+
+@pytest.mark.parametrize("names", [
+    ("case1.png", "case2.png", "case2-copy.png"),
+    ("case1.png", "case2-case1.png"),
+    ("case1.png", "case2-case2.png"),
+    ("photo1.png", "photo2.png", "photo3.png"),
+])
+def test_opc_ambiguous_or_unindexed_extra_images_do_not_upload(names: tuple[str, ...]) -> None:
+    images = tuple(_opc_image(name, "blue") for name in names)
+    with patch.object(
+        uploader, "upload_image", return_value="https://example.com/opc.png"
+    ) as upload:
+        result, _ = generate.build_opc_case("2026-08-04", _opc_envelope(images))
+    assert result is not None and result.header_image == ""
+    upload.assert_not_called()
 
 
 def test_opc_upload_and_exchange_rate_failures_propagate() -> None:

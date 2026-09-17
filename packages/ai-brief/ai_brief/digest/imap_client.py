@@ -224,6 +224,7 @@ def _fetch_latest_once(
     mailbox: str = "INBOX",
     timeout: float = 30.0,
     within_hours: float | None = None,
+    exact_subject: str | None = None,
 ) -> DigestEmail | None:
     """取 from=sender、subject 以 subject_prefix 开头、且日期匹配 date_str 的最新一封。
 
@@ -267,6 +268,8 @@ def _fetch_latest_once(
             hdr = email.message_from_bytes(header_data)
             subj = _decode(hdr.get("Subject")).strip()
             if not subj.startswith(subject_prefix):
+                continue
+            if exact_subject is not None and " ".join(subj.split()) != exact_subject:
                 continue
             if target is not None and _date_key(subj) != target:
                 continue
@@ -317,6 +320,7 @@ def fetch_latest(
     mailbox: str = "INBOX",
     timeout: float = 30.0,
     within_hours: float | None = None,
+    exact_subject: str | None = None,
 ) -> DigestEmail | None:
     """Fetch one digest, retrying up to two transient IMAP connection losses."""
     host = host or config.imap_host()
@@ -337,6 +341,7 @@ def fetch_latest(
                 mailbox=mailbox,
                 timeout=timeout,
                 within_hours=within_hours,
+                exact_subject=exact_subject,
             )
         except (imaplib.IMAP4.abort, OSError):
             if attempt == 2:
