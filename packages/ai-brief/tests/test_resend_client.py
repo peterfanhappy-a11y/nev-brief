@@ -26,6 +26,10 @@ def test_send_email_separates_body_confirmation_link_from_one_click_header() -> 
 
     assert email_id == "re_abc123"
     payload = mock_send.call_args.args[0]
+    assert len(mock_send.call_args.args) == 2
+    assert mock_send.call_args.args[1] == {
+        "idempotency_key": "aivizens-2026-07-02-sub-1",
+    }
     assert payload["html"] == f'<a href="{page_url}">unsubscribe</a>'
     assert payload["text"] == f"unsubscribe: {page_url}"
     assert payload["headers"]["List-Unsubscribe"] == f"<{api_url}>"

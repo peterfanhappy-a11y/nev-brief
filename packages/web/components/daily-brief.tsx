@@ -92,7 +92,7 @@ function DigestBlock({
           src={section.header_image}
           alt={imageAlt}
           loading="lazy"
-          className="mt-4 aspect-[16/9] w-full object-cover"
+          className="mt-4 block h-auto w-full"
         />
       )}
       {section.subtitle && (
@@ -156,7 +156,7 @@ function OpcBlock({ opc }: { opc: NonNullable<AiBriefContent["opc_case"]> }) {
         src={opc.header_image}
         alt={opc.header_image_alt}
         loading="lazy"
-        className="mt-4 aspect-[16/9] w-full object-cover"
+        className="mt-4 block h-auto w-full"
       />
       <div className="p-5">
         <h3 className="text-lg font-semibold text-gray-900">{opc.headline}</h3>

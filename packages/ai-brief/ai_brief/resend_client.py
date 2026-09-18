@@ -83,7 +83,10 @@ def send_email(
     }
     try:
         with no_proxy_env():  # resend SDK 走 requests，无 trust_env，需临时清代理
-            result = resend.Emails.send(params)
+            result = resend.Emails.send(
+                params,
+                {"idempotency_key": idempotency_key},
+            )
     except resend_exc.ResendError as e:
         _classify_and_raise(e)
         raise  # unreachable
