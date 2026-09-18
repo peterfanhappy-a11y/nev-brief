@@ -354,9 +354,9 @@ describe("DailyBrief", () => {
     expect(todayAiImage).toHaveAttribute("src", "https://cdn.example.com/today.png");
     expect(todayAiImage).toHaveClass("block", "h-auto", "w-full");
     expect(todayAiImage).not.toHaveClass("aspect-[16/9]", "object-cover");
-    expect(
-      screen.getByRole("img", { name: "企业发布 AI 治理指南 配图" }),
-    ).toHaveAttribute("src", "https://cdn.example.com/featured.png");
+    const featuredImage = screen.getByRole("img", { name: "企业发布 AI 治理指南 配图" });
+    expect(featuredImage).toHaveAttribute("src", "https://cdn.example.com/featured.png");
+    expect(featuredImage).toHaveClass("aspect-[16/9]", "object-cover");
     expect(screen.getByRole("link", { name: "阅读原文" })).toHaveAttribute(
       "href",
       "https://example.com/today",
