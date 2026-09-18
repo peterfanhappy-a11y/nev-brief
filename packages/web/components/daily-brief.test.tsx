@@ -1,12 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import DailyBrief, {
-  estimateBriefReadMinutes,
-  estimateChineseReadMinutes,
-} from "@/components/daily-brief";
+import DailyBrief from "@/components/daily-brief";
 import type { AiPublishedBrief } from "@/lib/ai-briefs";
+import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
 
 const COMPLETE_BRIEF: AiPublishedBrief = {
   briefDate: "2026-08-03",
@@ -125,6 +123,7 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
       headline: "昨日最受关注：本地模型部署",
       url: "https://example.com/yesterday",
     },
+    opc_case: null,
     model: "test-model",
     stage1_stats: { candidates: 24, dupe_groups: 3 },
   },
@@ -161,66 +160,77 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("estimateChineseReadMinutes", () => {
-  it.each([
-    ["", 1],
-    ["字".repeat(400), 1],
-    ["字".repeat(401), 2],
-  ])("estimates %s characters deterministically", (text, expected) => {
-    expect(estimateChineseReadMinutes(text)).toBe(expected);
-  });
-
-  it("counts representative digest and legacy prose across a minute boundary", () => {
-    // Hand count: base 280 + digest 80 + legacy featured 41 = 401.
-    const boundaryContent: AiPublishedBrief["content"] = {
-      ...COMPLETE_BRIEF.content,
-      subject: "主".repeat(40),
-      editorial: "编".repeat(200),
-      intro_bullets: ["引".repeat(40)],
-      today_ai: {
-        ...COMPLETE_BRIEF.content.today_ai!,
-        subtitle: "",
-        stories: [
-          {
-            headline: "研".repeat(40),
-            summary: "摘".repeat(40),
-            url: "",
-            label: "",
-          },
-        ],
-      },
-      ai_masters: null,
-      ai_research: null,
-      ai_engineering: null,
-      agent_tools: null,
-      featured: [
-        {
-          ...COMPLETE_BRIEF.content.featured[0],
-          theme_label: "",
-          headline: "精".repeat(20),
-          details: ["细".repeat(10)],
-          significance: "义".repeat(10),
-          source_name: "源",
-          og_image: null,
-        },
-      ],
-      tools: [],
-      daily_tip: null,
-      quick_hits: [],
-      yesterday_top: null,
-    };
-
-    expect(estimateBriefReadMinutes(boundaryContent)).toBe(2);
-    expect(
-      estimateBriefReadMinutes({ ...boundaryContent, today_ai: null }),
-    ).toBe(1);
-    expect(
-      estimateBriefReadMinutes({ ...boundaryContent, featured: [] }),
-    ).toBe(1);
-  });
-});
-
 describe("DailyBrief", () => {
+  it("renders the complete v3 OPC case before the four numbered digest modules", () => {
+    render(
+      <DailyBrief
+        brief={{
+          briefDate: PUBLISHED_BRIEF_V3_RENDERING_CONTENT.brief_date,
+          publishedAt: "2026-08-01T01:00:00.000Z",
+          content: PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("5 分钟阅读")).toBeInTheDocument();
+    const greeting = screen.getByText(
+      "早上好，AI科技爱好者们！以下是今天最值得关注的 AI 洞察，5 分钟带你看懂全局。",
+    );
+    expect(greeting).toHaveClass("font-bold");
+    expect(screen.getByRole("heading", { level: 1 }).nextElementSibling).toBe(greeting);
+    expect(greeting.nextElementSibling).toHaveTextContent(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.editorial);
+
+    const titles = [
+      "OPC分享",
+      "一、OPC案例",
+      "今日精选",
+      "二、今日AI",
+      "三、AI大神",
+      "工具学习",
+      "四、AI研究",
+      "五、Agent工具",
+    ];
+    for (const title of titles) {
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    }
+    expect(
+      screen.getAllByRole("heading")
+        .map((heading) => heading.textContent)
+        .filter((title) => titles.includes(title!)),
+    ).toEqual(titles);
+
+    const opc = screen.getByRole("region", { name: "一、OPC案例" });
+    expect(opc).toHaveClass("border-2", "border-gray-900");
+    const image = within(opc).getByRole("img", { name: "Ruslan 的 Zipchat 案例" });
+    expect(image).toHaveAttribute("src", "https://cdn.example.com/opc.png");
+    expect(image).toHaveClass("aspect-[16/9]", "w-full", "object-cover");
+    expect(opc).toHaveTextContent("Ruslan");
+    expect(opc).toHaveTextContent("$167K 美元月度营收");
+    expect(within(opc).getByRole("heading", {
+      name: "$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+    })).toBeInTheDocument();
+    expect(opc).toHaveTextContent(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.summary);
+    expect(within(opc).getByRole("link")).toHaveAttribute(
+      "href", "https://www.indiehackers.com/post/example",
+    );
+    const fieldOrder = [
+      within(opc).getByText("分享者：Ruslan"),
+      image,
+      within(opc).getByRole("heading", { name: PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.headline }),
+      within(opc).getByText(PUBLISHED_BRIEF_V3_RENDERING_CONTENT.opc_case!.summary),
+      within(opc).getByText("$167K 美元月度营收"),
+      within(opc).getByRole("link"),
+    ];
+    for (let index = 1; index < fieldOrder.length; index++) {
+      expect(fieldOrder[index - 1].compareDocumentPosition(fieldOrder[index])
+        & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+    expect(screen.getByRole("region", { name: "概览" }).querySelectorAll("li")).toHaveLength(4);
+    for (const bullet of PUBLISHED_BRIEF_V3_RENDERING_CONTENT.intro_bullets) {
+      expect(screen.getByText(bullet)).toBeInTheDocument();
+    }
+  });
+
   it("groups v2 content like the email and frames every primary module", () => {
     vi.stubGlobal("React", React);
     render(<DailyBrief brief={V2_BRIEF} />);
@@ -249,7 +259,7 @@ describe("DailyBrief", () => {
     }
   });
 
-  it("uses the stored v2 four-module content for displayed reading time", () => {
+  it("keeps the fixed reading time for a short v2 issue", () => {
     vi.stubGlobal("React", React);
     const brief: AiPublishedBrief = {
       ...V2_BRIEF,
@@ -278,12 +288,15 @@ describe("DailyBrief", () => {
 
     render(<DailyBrief brief={brief} />);
 
-    expect(screen.getByText(/\d+ 分钟阅读/)).toHaveTextContent("1 分钟阅读");
+    expect(screen.getByText("5 分钟阅读")).toBeInTheDocument();
   });
 
   it("renders four numbered v2 modules and all five Today AI stories", () => {
     vi.stubGlobal("React", React);
     render(<DailyBrief brief={V2_BRIEF} />);
+
+    expect(screen.queryByRole("heading", { name: "OPC分享" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "一、OPC案例" })).not.toBeInTheDocument();
 
     for (const title of [
       "一、今日AI",
@@ -359,7 +372,7 @@ describe("DailyBrief", () => {
       "dateTime",
       "2026-08-03",
     );
-    expect(screen.getByText(/\d+ 分钟阅读/)).toHaveTextContent("2 分钟阅读");
+    expect(screen.getByText("5 分钟阅读")).toBeInTheDocument();
   });
 
   it("omits absent optional sections without losing the rest of the issue", () => {

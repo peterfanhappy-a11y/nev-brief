@@ -12,6 +12,7 @@ from ai_brief.schema import (
     DigestSection,
     DigestStory,
     FeaturedItem,
+    OpcCase,
     QuickHit,
     Theme,
     Tool,
@@ -120,6 +121,72 @@ def test_render_text_digest_sections() -> None:
     assert "https://www.anthropic.com/news/claude-sonnet-5" in text
     assert "\n   原文：https://www.anthropic.com/news/claude-sonnet-5" in text
     assert "product=ai" in text
+
+
+def test_render_v3_opc_sharing_before_digest_modules() -> None:
+    brief = _brief(
+        version=3,
+        intro_bullets=["v3 intro 1", "v3 intro 2", "v3 intro 3", "v3 intro 4"],
+        opc_case=OpcCase(
+            sharer="Ruslan",
+            headline="Zipchat 再冲到 $2M ARR",
+            summary="从产品定位到销售增长的完整复盘。",
+            original_revenue="$167K",
+            monthly_revenue_usd=167000,
+            revenue_display="$167K 美元月度营收",
+            url="https://www.indiehackers.com/post/zipchat",
+            header_image="https://img/opc.png",
+            header_image_alt="Zipchat OPC 案例",
+        ),
+        ai_research=DigestSection(
+            theme=Theme.AI_RESEARCH,
+            stories=[DigestStory(headline="研究标题", summary="研究摘要")],
+        ),
+        agent_tools=DigestSection(
+            theme=Theme.AGENT_TOOLS,
+            stories=[DigestStory(headline="工具标题", summary="工具摘要")],
+        ),
+    )
+
+    html, text = render(
+        brief,
+        date(2026, 7, 6),
+        delivery_id="v3-d",
+        unsubscribe_token="v3-t",  # noqa: S106 - inert test value
+        email="peter.fan@example.com",
+    )
+
+    for fragment in (
+        "OPC分享",
+        "一、OPC案例",
+        "二、今日AI",
+        "三、AI大神",
+        "四、AI研究",
+        "五、Agent工具",
+        "Ruslan",
+        "$167K 美元月度营收",
+        "阅读原文",
+        "https://img/opc.png",
+        "https://www.indiehackers.com/post/zipchat",
+    ):
+        assert fragment in html
+        assert fragment in text
+
+    assert html.index("OPC分享") < html.index("今日精选") < html.index("工具学习")
+    assert text.index("OPC分享") < text.index("今日精选") < text.index("工具学习")
+    field_order = [
+        "Ruslan", "https://img/opc.png", "Zipchat 再冲到 $2M ARR",
+        "从产品定位到销售增长的完整复盘。", "$167K 美元月度营收",
+        "https://www.indiehackers.com/post/zipchat",
+    ]
+    for rendered in (html, text):
+        positions = [rendered.index(field) for field in field_order]
+        assert positions == sorted(positions)
+    assert html.count("v3 intro ") == 4
+    assert text.count("v3 intro ") == 4
+    assert "早上好，Peter！" in html
+    assert "5 分钟阅读" in html
+    assert "5 分钟阅读" in text
 
 
 def test_render_omits_missing_ai_masters() -> None:

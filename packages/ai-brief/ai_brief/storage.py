@@ -53,8 +53,8 @@ _ALLOWED_ERROR_CODES = frozenset(
 )
 
 
-def _normalize_v2_content(content: dict[str, Any]) -> dict[str, Any]:
-    if content.get("version") != 2:
+def _normalize_current_content(content: dict[str, Any]) -> dict[str, Any]:
+    if content.get("version") not in (2, 3):
         return content
     return AiBriefContent.model_validate(content).model_dump(mode="json")
 
@@ -383,11 +383,25 @@ def save_generated_brief(
     status: Literal["blocked", "awaiting_approval"],
 ) -> None:
     """Finalize generated content only while the claimed row remains mutable."""
-    content = _normalize_v2_content(content)
     safe_sources, _parse_counts = _safe_digest_run_payloads(digest_sources)
     safe_report = _safe_quality_report(quality_report)
     if safe_report is None or safe_report.get("passed") is not (status == "awaiting_approval"):
         raise ValueError("workflow status must match the stored quality report")
+    if status == "blocked" and content.get("version") == 3:
+        # Keep rejected model output auditable without making it publishable.
+        content = {
+            key: value for key, value in content.items() if key in AiBriefContent.model_fields
+        }
+        content.update(
+            ai_engineering=None,
+            featured=[],
+            tools=[],
+            daily_tip=None,
+            quick_hits=[],
+            yesterday_top=None,
+        )
+    else:
+        content = _normalize_current_content(content)
     sql = """
         UPDATE ai_daily_briefs
         SET content = %s::jsonb,
@@ -554,7 +568,7 @@ def upsert_daily_brief(
     model: str | None,
 ) -> BriefWriteResult:
     """Write a draft unless the date is already approved or published."""
-    content = _normalize_v2_content(content)
+    content = _normalize_current_content(content)
     sql = """
         INSERT INTO ai_daily_briefs (brief_date, content, model, generated_at)
         VALUES (%s, %s, %s, NOW())

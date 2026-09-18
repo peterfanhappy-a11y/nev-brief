@@ -15,7 +15,7 @@ from nev_shared.logger import get_logger
 from pydantic import ValidationError
 
 from ai_brief import composer, config, storage
-from ai_brief.digest.generate import DigestBundle, build_digest_modules
+from ai_brief.digest.generate import DigestBundle, build_digest_modules, build_editorial
 from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.digest.input import DigestEnvelope, DigestInputAdapter, DigestKind
 from ai_brief.quality import QualityReport, validate_brief
@@ -102,6 +102,7 @@ def _module_count(bundle: DigestBundle) -> int:
         for section in (
             bundle.today_ai,
             bundle.ai_masters,
+            bundle.opc_case,
             bundle.ai_research,
             bundle.ai_engineering,
             bundle.agent_tools,
@@ -126,8 +127,11 @@ def _digest_sources(
             result[kind] = None
             continue
         metadata = envelope.metadata()
-        section = section_by_kind[kind]
-        metadata["parse_count"] = len(section.stories) if section is not None else 0
+        if kind == "opc":
+            metadata["parse_count"] = bundle.opc_candidate_count
+        else:
+            section = section_by_kind[kind]
+            metadata["parse_count"] = len(section.stories) if section is not None else 0
         result[kind] = metadata
     return result
 
@@ -247,6 +251,7 @@ async def generate_for_review(
                 qwen_complete=bundle.qwen_complete,
                 now=datetime.now(UTC),
                 primary_digest_max_age_hours=backfill_age_limit,
+                opc_candidate_count=bundle.opc_candidate_count,
             )
         else:
             report = validate_brief(
@@ -256,6 +261,7 @@ async def generate_for_review(
                 deepseek_complete=bundle.deepseek_complete,
                 qwen_complete=bundle.qwen_complete,
                 now=datetime.now(UTC),
+                opc_candidate_count=bundle.opc_candidate_count,
             )
         status: Literal["blocked", "awaiting_approval"] = (
             "awaiting_approval" if report.passed else "blocked"
@@ -267,7 +273,7 @@ async def generate_for_review(
         storage.save_generated_brief(
             conn,
             brief_date=brief_date,
-            content=brief.model_dump(mode="json"),
+            content=brief.model_dump(mode="json", warnings=False),
             model=brief.model,
             digest_sources=sources,
             quality_report=report_payload,
@@ -348,25 +354,32 @@ def _build_brief_without_lookup(
     bundle: DigestBundle,
     yesterday_top: YesterdayTop | None,
 ) -> AiBriefContent:
-    intro = bundle.intro_bullets or (
-        [story.headline for story in bundle.today_ai.stories]
-        if bundle.today_ai is not None
-        else []
+    intro = (
+        list(bundle.intro_bullets)
+        if isinstance(bundle.intro_bullets, list)
+        else bundle.intro_bullets
     )
+    if isinstance(intro, list) and bundle.agent_tools is not None and bundle.agent_tools.stories:
+        intro.append(f"🧰 {bundle.agent_tools.stories[0].headline}")
     subject = bundle.subject or (
         bundle.today_ai.stories[0].headline
         if bundle.today_ai is not None and bundle.today_ai.stories
         else ""
     )
     payload: dict[str, Any] = {
-        "version": 2,
+        "version": 3,
         "brief_date": brief_date.isoformat(),
         "subject": subject[:44],
         "preheader": bundle.preheader[:60],
-        "editorial": bundle.editorial[:220],
-        "intro_bullets": intro[:4],
+        "editorial": (
+            build_editorial(bundle.editorial, bundle.opc_case)
+            if bundle.opc_case is not None
+            else bundle.editorial[:220]
+        ),
+        "intro_bullets": intro,
         "today_ai": bundle.today_ai,
         "ai_masters": bundle.ai_masters,
+        "opc_case": bundle.opc_case,
         "ai_research": bundle.ai_research,
         "ai_engineering": None,
         "agent_tools": bundle.agent_tools,

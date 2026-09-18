@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
+from typing import Literal
 
 
 @dataclass
@@ -87,3 +89,25 @@ class AgentTool:
     stars: str               # 「10,983」本周 star 数（展示用字符串）
     points: list[str]        # 3 要点总结
     url: str                 # GitHub 仓库链接
+
+
+@dataclass
+class Revenue:
+    """OPC 案例中明确披露的收入。"""
+
+    amount: Decimal
+    currency: str
+    period: Literal["MRR", "ARR"]
+    raw: str
+
+
+@dataclass
+class OpcCaseCandidate:
+    """OPC Daily Sharing 中结构完整的一条案例。"""
+
+    index: int
+    sharer: str
+    headline: str
+    body: str
+    revenue: Revenue
+    url: str

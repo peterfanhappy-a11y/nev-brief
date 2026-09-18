@@ -19,6 +19,8 @@ import {
   listPublishedBriefs,
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
+import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
+import opcUnicode from "../../../tests/fixtures/opc-unicode-contract.json";
 
 type QueryResponse = {
   data: unknown;
@@ -135,13 +137,67 @@ describe("isBriefDate", () => {
 });
 
 describe("AiBriefContentSchema", () => {
+  it.each(opcUnicode.bounded_strings)("counts $field by Unicode code points", ({ field, max }) => {
+    for (const boundary of opcUnicode.string_boundaries) {
+      const length = { empty: 0, one: 1, max, over: max + 1 }[boundary.length]!;
+      const value = length ? "题".repeat(length - 1) + "🚀" : "";
+      const parsed = AiBriefContentSchema.safeParse({
+        ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+        opc_case: { ...opcUnicode.opc_case, [field]: value },
+      });
+      expect(parsed.success).toBe(boundary.valid);
+      if (parsed.success) expect(parsed.data.opc_case).toHaveProperty(field, value);
+    }
+  });
+
+  it.each(opcUnicode.unbounded_urls)("preserves unbounded Unicode %s", (field) => {
+    const value = "https://aivizens.com/" + "🚀".repeat(2048);
+    const parsed = AiBriefContentSchema.parse({
+      ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT, opc_case: { ...opcUnicode.opc_case, [field]: value },
+    });
+    expect(parsed.opc_case).toHaveProperty(field, value);
+  });
+
+  it.each(opcUnicode.monthly_revenue_usd)("shares monthly revenue boundary $value", ({ value, valid }) => {
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+      opc_case: { ...opcUnicode.opc_case, monthly_revenue_usd: value },
+    }).success).toBe(valid);
+  });
+
   it("accepts both historical v1 and four-module v2 content", () => {
-    expect(AiBriefContentSchema.parse(content()).version).toBe(1);
+    const v1 = AiBriefContentSchema.parse(content());
+
+    expect(v1.version).toBe(1);
+    expect(v1.opc_case).toBeNull();
+    expect(Object.hasOwn(v1, "opc_case")).toBe(true);
     expect(
       AiBriefContentSchema.parse(
         content({ version: 2, ai_engineering: null }),
       ).version,
     ).toBe(2);
+  });
+
+  it("accepts complete v3 OPC content and rejects an absent OPC case", () => {
+    const v3Content = content({
+      version: 3,
+      opc_case: {
+        sharer: "Ruslan",
+        headline: "$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+        summary: "他重建电商 AI 销售代理并恢复增长。",
+        original_revenue: "$167K MRR",
+        monthly_revenue_usd: 167_000,
+        revenue_display: "$167K 美元月度营收",
+        url: "https://www.indiehackers.com/post/example",
+        header_image: "https://cdn.example.com/opc.png",
+        header_image_alt: "Ruslan 的 Zipchat 案例",
+      },
+    });
+
+    expect(AiBriefContentSchema.safeParse(v3Content).success).toBe(true);
+    const missingOpcCase: Record<string, unknown> = { ...v3Content };
+    delete missingOpcCase.opc_case;
+    expect(AiBriefContentSchema.safeParse(missingOpcCase).success).toBe(false);
   });
 
   it("rejects v2 content that still contains engineering data", () => {
@@ -216,6 +272,21 @@ describe("AiBriefContentSchema", () => {
 });
 
 describe("published brief queries", () => {
+  it.each(opcUnicode.bounded_strings)("keeps a published row with boundary emoji in $field", async ({ field, max }) => {
+    const value = "题".repeat(max - 1) + "🚀";
+    const stored = {
+      ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+      opc_case: { ...opcUnicode.opc_case, [field]: value },
+      editorial: "文".repeat(219) + "🚀",
+    };
+    useQueries(new QueryBuilder({
+      data: row(stored.brief_date, "2026-08-01T01:00:00.000Z", stored), error: null,
+    }));
+    const published = await getPublishedBrief(stored.brief_date);
+    expect(published?.content.opc_case).toHaveProperty(field, value);
+    expect(published?.content.editorial).toBe(stored.editorial);
+  });
+
   beforeEach(() => {
     mocks.getSupabaseAdmin.mockReturnValue({ from: mocks.from });
   });
@@ -292,6 +363,21 @@ describe("published brief queries", () => {
 
     await expect(listPublishedBriefs()).resolves.toMatchObject([
       { modules: ["今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
+  });
+
+  it("lists the v3 OPC case before all four digest module labels", async () => {
+    useQueries(new QueryBuilder({
+      data: [row(
+        PUBLISHED_BRIEF_V3_RENDERING_CONTENT.brief_date,
+        "2026-08-01T01:00:00.000Z",
+        PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+      )],
+      error: null,
+    }));
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { modules: ["OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具"] },
     ]);
   });
 

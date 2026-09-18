@@ -1,17 +1,61 @@
 """AiBriefContent schema 回环 + 校验测试。"""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+
 import pytest
 from ai_brief.schema import (
     AiBriefContent,
     DailyTip,
     FeaturedItem,
+    OpcCase,
     QuickHit,
     Theme,
     Tool,
     YesterdayTop,
 )
 from pydantic import ValidationError
+
+OPC_UNICODE = json.loads(
+    (Path(__file__).resolve().parents[3] / "tests/fixtures/opc-unicode-contract.json").read_text()
+)
+
+
+@pytest.mark.parametrize("field", OPC_UNICODE["bounded_strings"])
+@pytest.mark.parametrize("boundary", OPC_UNICODE["string_boundaries"])
+def test_opc_unicode_code_point_boundaries(
+    field: dict[str, Any], boundary: dict[str, Any],
+) -> None:
+    length = {"empty": 0, "one": 1, "max": field["max"], "over": field["max"] + 1}[
+        boundary["length"]
+    ]
+    value = "题" * (length - 1) + "🚀" if length else ""
+    payload = {**OPC_UNICODE["opc_case"], field["field"]: value}
+    if boundary["valid"]:
+        parsed = OpcCase.model_validate(payload)
+        assert parsed.model_dump()[field["field"]] == value
+    else:
+        with pytest.raises(ValidationError):
+            OpcCase.model_validate(payload)
+
+
+@pytest.mark.parametrize("field", OPC_UNICODE["unbounded_urls"])
+def test_opc_unicode_urls_have_no_character_limit(field: str) -> None:
+    value = "https://aivizens.com/" + "🚀" * 2048
+    parsed = OpcCase.model_validate({**OPC_UNICODE["opc_case"], field: value})
+    assert parsed.model_dump()[field] == value
+
+
+@pytest.mark.parametrize("boundary", OPC_UNICODE["monthly_revenue_usd"])
+def test_opc_shared_positive_integer_boundaries(boundary: dict[str, Any]) -> None:
+    payload = {**OPC_UNICODE["opc_case"], "monthly_revenue_usd": boundary["value"]}
+    if boundary["valid"]:
+        assert OpcCase.model_validate(payload).monthly_revenue_usd == boundary["value"]
+    else:
+        with pytest.raises(ValidationError):
+            OpcCase.model_validate(payload)
 
 
 def _minimal_featured() -> FeaturedItem:
@@ -32,6 +76,52 @@ def _engineering_featured() -> FeaturedItem:
     return _minimal_featured().model_copy(
         update={"theme": Theme.AI_ENGINEERING, "theme_label": "AI工程"},
     )
+
+
+def _opc_case() -> OpcCase:
+    return OpcCase(
+        sharer="Ruslan",
+        headline="$8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+        summary="他重建电商 AI 销售代理并恢复增长。",
+        original_revenue="$167K MRR",
+        monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收",
+        url="https://www.indiehackers.com/post/example",
+        header_image="https://cdn.example.com/opc.png",
+        header_image_alt="Ruslan 的 Zipchat 案例",
+    )
+
+
+def _v2_contract_brief() -> AiBriefContent:
+    return AiBriefContent(
+        version=2,
+        brief_date="2026-09-14",
+        subject="AI 日报",
+        preheader="今天最值得关注的 AI 动态",
+        editorial="今天的核心判断。",
+        intro_bullets=["要点一"],
+    )
+
+
+def test_v3_requires_a_complete_opc_case() -> None:
+    valid = _v2_contract_brief().model_copy(
+        update={
+            "version": 3,
+            "opc_case": _opc_case(),
+            "intro_bullets": ["一", "二", "三", "🧰 工具"],
+        }
+    )
+    assert AiBriefContent.model_validate(valid.model_dump()).version == 3
+
+    with pytest.raises(ValidationError):
+        AiBriefContent.model_validate(
+            valid.model_dump(exclude={"opc_case"})
+        )
+
+
+def test_v2_remains_valid_without_opc_case() -> None:
+    brief = _v2_contract_brief().model_copy(update={"version": 2, "opc_case": None})
+    assert AiBriefContent.model_validate(brief.model_dump()).opc_case is None
 
 
 def test_minimal_valid_brief() -> None:

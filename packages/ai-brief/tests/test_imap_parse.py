@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import imaplib
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from unittest.mock import patch
 
 import ai_brief.digest.imap_client as imap_client
 import pytest
+from ai_brief import config
+from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.digest.imap_client import fetch_latest, parse_message
 
 
@@ -59,6 +61,50 @@ class _FakeIMAP:
 
     def logout(self) -> None:
         return None
+
+
+@pytest.mark.parametrize("has_exact", [True, False])
+@pytest.mark.parametrize("invalid_subject", [
+    "ai-opc-sharing-test 2026-09-14",
+    "ai-opc-sharing extra 2026-09-14",
+    "ai-opc-sharing 2026-09-14 test",
+    "ai-opc-sharing2026-09-14",
+    "ai-opc-sharing 2026-9-14",
+])
+def test_opc_selection_excludes_newer_non_exact_subjects(
+    has_exact: bool, invalid_subject: str,
+) -> None:
+    now = datetime.now(UTC)
+    records = [(now, _raw_email(
+        subject=invalid_subject, message_id="<test-mail>", date_header=None,
+    ))]
+    if has_exact:
+        records.append((now - timedelta(hours=1), _raw_email(
+            subject=" ai-opc-sharing\t 2026-09-14 ", message_id="<exact-mail>", date_header=None,
+        )))
+    with (
+        patch.object(imap_client, "_connect", return_value=_FakeIMAP(records)),
+        patch.object(config, "imap_user", return_value="test-user"),
+        patch.object(config, "imap_password", return_value="test-password"),
+    ):
+        result = GmailDigestAdapter(sender="digest@example.test").fetch(date(2026, 9, 14))["opc"]
+    if has_exact:
+        assert result is not None
+        assert result.message_id == "<exact-mail>"
+    else:
+        assert result is None
+
+
+def test_other_digest_kinds_keep_prefix_and_unpadded_date_tolerance() -> None:
+    fake = _FakeIMAP([(datetime.now(UTC), _raw_email(
+        subject="ai-events-digest-test 2026-9-14", message_id="<events-test>", date_header=None,
+    ))])
+    with patch.object(imap_client, "_connect", return_value=fake):
+        result = fetch_latest(
+            "digest@example.test", "ai-events-digest-", "2026-09-14",
+            user="test-user", password="test-password",  # noqa: S106
+        )
+    assert result is not None and result.message_id == "<events-test>"
 
 
 def _build_raw() -> bytes:

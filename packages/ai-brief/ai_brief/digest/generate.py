@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import io
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -24,15 +25,22 @@ from ai_brief.digest.agent_parser import parse_agent_digest
 from ai_brief.digest.builder_parser import parse_builder_digest
 from ai_brief.digest.engineering_parser import parse_engineering_digest
 from ai_brief.digest.events_parser import parse_events_digest
+from ai_brief.digest.exchange_rates import (
+    RevenueConversionError,
+    fetch_ecb_rates,
+    select_highest_case,
+)
 from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.digest.models import AgentTool, EventItem
+from ai_brief.digest.opc_parser import parse_opc_digest
 from ai_brief.digest.research_parser import parse_research_digest
-from ai_brief.schema import DigestSection, DigestStory, Theme
+from ai_brief.schema import DigestSection, DigestStory, OpcCase, Theme
 
 log = get_logger("ai_brief.digest.generate")
 
 _NUM_RE = re.compile(r"(\d+)")
+_OPC_CASE_RE = re.compile(r"(?<![a-zA-Z])(?:case|案例)[\s_-]*(\d+)(?!\d)", re.IGNORECASE)
 _EXCLUDED_AGENT_REPOS = frozenset(
     {
         "openai/codex",
@@ -82,12 +90,14 @@ class DigestBundle:
     subject: str
     preheader: str
     editorial: str
-    intro_bullets: list[str]
+    intro_bullets: object
     today_ai: DigestSection | None
     ai_masters: DigestSection | None
     ai_research: DigestSection | None = None
     ai_engineering: DigestSection | None = None
     agent_tools: DigestSection | None = None
+    opc_case: OpcCase | None = None
+    opc_candidate_count: int = 0
     deepseek_complete: bool = True
     qwen_complete: bool = True
 
@@ -197,6 +207,77 @@ def _attachments_by_index(digest: DigestEnvelope) -> dict[int, Attachment]:
         if idx is not None:
             out[idx] = a
     return out
+
+
+def build_opc_case(
+    brief_date: str,
+    digest: DigestEnvelope | None,
+    rates_loader: Callable[[], Mapping[str, Decimal]] = fetch_ecb_rates,
+) -> tuple[OpcCase | None, int]:
+    if digest is None or not digest.html:
+        return None, 0
+    cases = parse_opc_digest(digest.html)
+    count = len(cases)
+    if count != 2:
+        return None, count
+    # Keep network failures outside the invalid-revenue guard for durable handling.
+    rates = rates_loader() if any(case.revenue.currency != "USD" for case in cases) else {}
+    try:
+        selected = select_highest_case(cases, lambda: rates)
+    except RevenueConversionError:
+        return None, count
+    if selected.monthly_revenue_usd <= 0:
+        return None, count
+    case = selected.candidate
+    images = _image_attachments(digest)
+    indexed: dict[int, Attachment] = {}
+    ambiguous = False
+    for image in images:
+        markers = _OPC_CASE_RE.findall(image.filename)
+        if len(markers) > 1:
+            ambiguous = True
+        elif markers:
+            index = int(markers[0])
+            if index not in {1, 2} or index in indexed:
+                ambiguous = True
+            indexed[index] = image
+    attachment = None if ambiguous else indexed.get(case.index)
+    if not ambiguous and not indexed and len(images) == 2 and all(
+        _is_usable_header_image(image.data, image.content_type) for image in images
+    ):
+        attachment = images[case.index - 1]
+    header_image = ""
+    if attachment is not None and _is_usable_header_image(attachment.data, attachment.content_type):
+        data, content_type = _find_hero_band(attachment.data, config.TODAY_AI_BANNER_ASPECT)
+        path = uploader.image_path(brief_date, "opc-case", data, content_type)
+        uploaded = uploader.upload_image(data, content_type, path=path)
+        if uploaded is None:
+            raise RuntimeError("OPC image upload failed")
+        header_image = uploaded
+    return OpcCase(
+        sharer=case.sharer,
+        headline=case.headline,
+        summary=case.body,
+        original_revenue=case.revenue.raw,
+        monthly_revenue_usd=int(selected.monthly_revenue_usd),
+        revenue_display=selected.revenue_display,
+        url=case.url,
+        header_image=header_image,
+        header_image_alt=case.headline,
+    ), count
+
+
+def build_editorial(editorial: str, opc_case: OpcCase) -> str:
+    lead = editorial.partition("与此同时，")[0].strip()
+    recommendation = (
+        f"今日给大家分享一个来自“{opc_case.sharer}”的"
+        f"“{opc_case.headline}”OPC案例。"
+    )
+    if len(recommendation) > 220:
+        raise ValueError("OPC recommendation exceeds editorial limit")
+    room = max(0, 220 - len(recommendation))
+    clipped_lead = condenser._clip_sentence(lead, room).strip() if room else ""
+    return f"{clipped_lead}{recommendation}"
 
 
 def _today_ai_image_candidates(
@@ -470,6 +551,7 @@ async def build_digest_modules(
     ai_masters, masters_deepseek, masters_qwen = await _build_ai_masters(
         date_str, digests.get("builder")
     )
+    opc_case, opc_candidate_count = build_opc_case(date_str, digests.get("opc"))
     ai_research, research_deepseek, research_qwen = await _build_research(
         date_str, digests.get("research")
     )
@@ -485,6 +567,8 @@ async def build_digest_modules(
         ai_research=ai_research,
         ai_engineering=None,
         agent_tools=agent_tools,
+        opc_case=opc_case,
+        opc_candidate_count=opc_candidate_count,
         deepseek_complete=all(
             (today_deepseek, masters_deepseek, research_deepseek, agent_deepseek)
         ),

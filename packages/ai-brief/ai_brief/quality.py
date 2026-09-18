@@ -20,6 +20,7 @@ from ai_brief.schema import (
     BriefStatus,
     DigestSection,
     DigestStory,
+    OpcCase,
     quality_path_is_allowed,
 )
 
@@ -53,6 +54,7 @@ _FRESHNESS_METRIC_KEYS: dict[DigestKind, str] = {
     "research": "research_freshness_hours",
     "engineering": "engineering_freshness_hours",
     "agent": "agent_freshness_hours",
+    "opc": "opc_freshness_hours",
 }
 _KNOWN_SOURCE_DOMAINS = frozenset(
     {
@@ -64,6 +66,7 @@ _KNOWN_SOURCE_DOMAINS = frozenset(
         "huggingface.co",
         "huxiu.com",
         "infoq.cn",
+        "indiehackers.com",
         "jiqizhixin.com",
         "openai.com",
         "qbitai.com",
@@ -159,6 +162,8 @@ def _story_items(section: DigestSection | None) -> tuple[tuple[int, DigestStory]
 
 
 def _required_digest_kinds(brief: AiBriefContent) -> tuple[DigestKind, ...]:
+    if brief.version == 3:
+        return ("opc", "events", "builder", "research", "agent")
     required: list[DigestKind] = ["events", "builder"]
     tool_sections = (
         ("ai_research", "agent_tools")
@@ -393,7 +398,9 @@ def _validate_digests(
     for kind in required_kinds:
         envelope = digests.get(kind)
         limit = (
-            primary_digest_max_age_hours
+            _PRIMARY_DIGEST_MAX_AGE_HOURS
+            if kind == "opc"
+            else primary_digest_max_age_hours
             if primary_digest_max_age_hours is not None
             else _PRIMARY_DIGEST_MAX_AGE_HOURS
             if kind in {"events", "builder"}
@@ -411,6 +418,20 @@ def _validate_digests(
             continue
         if kind in future_kinds:
             continue
+        if kind == "opc" and (
+            envelope.matched_date is None
+            or envelope.matched_date.isoformat() != brief.brief_date
+            or envelope.used_fallback
+        ):
+            required_fresh = False
+            blockers.append(
+                _issue(
+                    "required_digest_stale",
+                    "OPC Digest must match the brief date without fallback.",
+                    "digests.opc.used_fallback"
+                    if envelope.used_fallback else "digests.opc.matched_date",
+                )
+            )
         if _raw_freshness_hours(envelope, now) > limit:
             required_fresh = False
             blockers.append(
@@ -434,6 +455,7 @@ def validate_brief(
     qwen_complete: bool,
     now: datetime,
     primary_digest_max_age_hours: float | None = None,
+    opc_candidate_count: int | None = None,
 ) -> QualityReport:
     """Validate a generated brief without I/O or ambient clock access."""
     blockers: list[QualityIssue] = []
@@ -450,7 +472,7 @@ def validate_brief(
     agent_count = _story_count(_section(brief, "agent_tools"))
     required_tool_sections = (
         ("ai_research", "agent_tools")
-        if brief.version == 2
+        if brief.version in (2, 3)
         else _TOOL_SECTIONS
     )
     tool_counts = tuple(
@@ -460,7 +482,7 @@ def validate_brief(
     tool_module_count = sum(count > 0 for count in tool_counts)
     missing_tool_count = len(required_tool_sections) - tool_module_count
 
-    if brief.version == 2:
+    if brief.version in (2, 3):
         labels = [
             story.label
             for _, story in _story_items(_section(brief, "today_ai"))
@@ -501,7 +523,7 @@ def validate_brief(
                 "agent_tools",
             )
         )
-    if brief.version == 2 and missing_tool_count:
+    if brief.version in (2, 3) and missing_tool_count:
         missing_section = next(
             section_name
             for section_name in required_tool_sections
@@ -514,7 +536,7 @@ def validate_brief(
                 missing_section,
             )
         )
-    elif brief.version != 2 and tool_module_count < _TOOL_MODULE_MINIMUM:
+    elif brief.version not in (2, 3) and tool_module_count < _TOOL_MODULE_MINIMUM:
         blockers.append(
             _issue(
                 "tool_module_count_below_minimum",
@@ -547,6 +569,64 @@ def validate_brief(
 
     unknown_domain_count = _validate_urls(brief, digests, blockers, warnings)
     summary_near_limit_count = _validate_summaries(brief, warnings)
+    opc_case = brief.opc_case if isinstance(brief.opc_case, OpcCase) else None
+    if brief.version == 3:
+        if type(opc_candidate_count) is not int or opc_candidate_count != 2:
+            blockers.append(_issue(
+                "opc_candidate_count_invalid", "OPC requires exactly two candidates.",
+                "digests.opc",
+            ))
+        if opc_case is None:
+            blockers.append(_issue(
+                "opc_case_missing", "One frozen OPC case is required.", "opc_case",
+            ))
+        else:
+            image = opc_case.header_image if isinstance(opc_case.header_image, str) else ""
+            if _url_problem(image)[0] is not None:
+                blockers.append(_issue(
+                    "opc_image_missing", "OPC requires a non-empty HTTPS header image.",
+                    "opc_case.header_image",
+                ))
+            url = opc_case.url if isinstance(opc_case.url, str) else ""
+            problem, host = _url_problem(url)
+            if problem is not None:
+                blockers.append(_issue(problem, "OPC source URL is invalid.", "opc_case.url"))
+            elif url.strip() not in _source_urls(digests.get("opc")):
+                blockers.append(_issue(
+                    "critical_url_missing", "OPC source URL is absent from its trusted Digest.",
+                    "opc_case.url",
+                ))
+            elif host is not None and not _host_is_known(host):
+                unknown_domain_count += 1
+                warnings.append(_issue(
+                    "source_domain_unknown", "OPC source domain is outside the reviewed set.",
+                    "opc_case.url",
+                ))
+            if isinstance(opc_case.summary, str) and len(opc_case.summary) >= 450:
+                summary_near_limit_count += 1
+                warnings.append(_issue(
+                    "summary_near_limit", "OPC summary is near its character limit.",
+                    "opc_case.summary",
+                ))
+        if len(intro) != 4:
+            blockers.append(_issue(
+                "intro_bullet_count_invalid", "V3 requires exactly four intro bullets.",
+                "intro_bullets",
+            ))
+        if any(not isinstance(bullet, str) or not bullet.strip() for bullet in intro):
+            blockers.append(_issue(
+                "intro_bullet_invalid", "Every V3 intro bullet must be a nonblank string.",
+                "intro_bullets",
+            ))
+        agent_stories = _story_items(_section(brief, "agent_tools"))
+        if len(intro) == 4 and (
+            not agent_stories or intro[3] != f"🧰 {agent_stories[0][1].headline}"
+        ):
+            blockers.append(_issue(
+                "intro_agent_topic_mismatch",
+                "Fourth intro bullet must match the first Agent headline.",
+                "intro_bullets",
+            ))
 
     stage1_stats = getattr(brief, "stage1_stats", None)
     raw_filtered_count = getattr(stage1_stats, "filtered_non_core_items", 0)
@@ -608,6 +688,13 @@ def validate_brief(
         "tool_module_count": tool_module_count,
         "unknown_source_domain_count": unknown_domain_count,
     }
+    if brief.version == 3:
+        metrics["opc_candidate_count"] = (
+            opc_candidate_count if type(opc_candidate_count) is int else 0
+        )
+        metrics["opc_case_count"] = int(opc_case is not None)
+        if opc_case is not None and schema_valid:
+            metrics["opc_monthly_revenue_usd"] = opc_case.monthly_revenue_usd
     required_fresh, fallback_used = _validate_digests(
         brief,
         digests,

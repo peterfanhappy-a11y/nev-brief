@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
@@ -11,18 +12,62 @@ from uuid import UUID, uuid4
 
 import ai_brief.composer as composer
 import ai_brief.config as config
+import ai_brief.deliverer as deliverer
 import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
 import pytest
+from ai_brief.digest import condenser, generate
 from ai_brief.digest.generate import DigestBundle
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
-from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, Theme
+from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, OpcCase, Theme
 from ai_brief.storage import DigestRunStatus
 
 BRIEF_DATE = date(2026, 8, 4)
 RUN_ID = UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690")
+
+
+def _opc_case() -> OpcCase:
+    return OpcCase(
+        sharer="Ruslan", headline="Zipchat 再冲到 $2M ARR", summary="A useful case.",
+        original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收", url="https://example.com/opc",
+        header_image="https://img.test/opc.jpg", header_image_alt="Zipchat",
+    )
+
+
+@pytest.mark.parametrize(
+    "lead", ["安全叙事成为资本变量。与此同时，旧的后半段。", "安全叙事成为资本变量。"]
+)
+def test_editorial_keeps_lead_and_replaces_transition_with_opc(lead: str) -> None:
+    assert generate.build_editorial(lead, _opc_case()) == (
+        "安全叙事成为资本变量。今日给大家分享一个来自“Ruslan”的“Zipchat 再冲到 $2M ARR”OPC案例。"
+    )
+
+
+def test_editorial_clips_long_lead_at_sentence_boundary_without_losing_recommendation() -> None:
+    recommendation = "今日给大家分享一个来自“Ruslan”的“Zipchat 再冲到 $2M ARR”OPC案例。"
+    editorial = generate.build_editorial("安全叙事成为资本变量。" * 30, _opc_case())
+    assert editorial.endswith(recommendation)
+    assert editorial.removesuffix(recommendation).endswith("。")
+    assert len(editorial) <= 220
+
+
+def test_editorial_without_sentence_boundary_still_respects_limit() -> None:
+    editorial = generate.build_editorial("长" * 300, _opc_case())
+    assert editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
+    assert len(editorial) <= 220
+
+
+def test_sentence_clipper_reserves_room_for_ellipsis() -> None:
+    assert len(condenser._clip_sentence("长" * 300, 10)) <= 10
+
+
+def test_editorial_rejects_recommendation_that_cannot_fit() -> None:
+    case = _opc_case().model_copy(update={"sharer": "R" * 80, "headline": "H" * 120})
+    with pytest.raises(ValueError, match="OPC recommendation exceeds editorial limit"):
+        generate.build_editorial("安全叙事。", case)
 
 
 def _section(theme: Theme, *, header_image: str | None = "https://img.test/x.jpg") -> DigestSection:
@@ -45,7 +90,9 @@ def _bundle() -> DigestBundle:
         subject="A safe review candidate",
         preheader="Three important updates",
         editorial="A concise editorial for human review.",
-        intro_bullets=["One", "Two"],
+        intro_bullets=["One", "Two", "Three"],
+        opc_case=_opc_case(),
+        opc_candidate_count=2,
         today_ai=_section(Theme.MODEL_RESEARCH),
         ai_masters=_section(Theme.PRODUCT_TOOLS),
         ai_research=_section(Theme.AI_RESEARCH),
@@ -56,7 +103,7 @@ def _bundle() -> DigestBundle:
     )
 
 
-def _v2_bundle() -> DigestBundle:
+def _v3_bundle() -> DigestBundle:
     def stories(prefix: str, count: int, *, labels: list[str] | None = None) -> list[DigestStory]:
         return [
             DigestStory(
@@ -72,7 +119,9 @@ def _v2_bundle() -> DigestBundle:
         subject="A safe review candidate",
         preheader="Five region-balanced updates",
         editorial="A concise editorial for human review.",
-        intro_bullets=["One", "Two"],
+        intro_bullets=["One", "Two", "Three"],
+        opc_case=_opc_case(),
+        opc_candidate_count=2,
         today_ai=DigestSection(
             theme=Theme.MODEL_RESEARCH,
             header_image="https://img.test/x.jpg",
@@ -113,14 +162,191 @@ def _quality(*, passed: bool) -> QualityReport:
     )
 
 
-def test_new_generation_builds_a_four_module_v2_brief(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_new_generation_builds_a_five_module_v3_brief(monkeypatch: pytest.MonkeyPatch) -> None:
     """New candidates must omit engineering while retained v1 reads stay untouched."""
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
-    brief = runner._build_brief_without_lookup(BRIEF_DATE, _bundle(), None)
+    bundle = _v3_bundle()
+    assert bundle.agent_tools is not None
+    bundle.agent_tools.stories[0].headline = "spec-kit — 规范先行的 AI 编码流程"
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
 
-    assert brief.version == 2
+    assert brief.version == 3
     assert brief.ai_engineering is None
+    assert brief.opc_case == _opc_case()
+    assert brief.intro_bullets == ["One", "Two", "Three", "🧰 spec-kit — 规范先行的 AI 编码流程"]
+    assert bundle.intro_bullets == ["One", "Two", "Three"]
+    assert brief.editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
+    assert runner._module_count(bundle) == 5
+
+
+@pytest.mark.parametrize(
+    "bullets", [[], ["One"], ["One", "Two"], ["One", "Two", "Three", "Four", "Five"]]
+)
+def test_v3_generation_preserves_invalid_model_bullet_counts(bullets: list[str]) -> None:
+    bundle = _v3_bundle()
+    bundle.intro_bullets = bullets
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.intro_bullets == bullets + ["🧰 Agents 1"]
+
+
+@pytest.mark.parametrize("absent", [True, False])
+def test_v3_generation_does_not_invent_agent_bullet_when_no_first_story(absent: bool) -> None:
+    bundle = _v3_bundle()
+    bundle.agent_tools = (
+        None if absent else DigestSection.model_construct(theme=Theme.AGENT_TOOLS, stories=[])
+    )
+    brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.intro_bullets == ["One", "Two", "Three"]
+
+
+def test_v3_missing_opc_preserves_lead_for_structured_quality_blocker() -> None:
+    bundle = _v3_bundle()
+    bundle.opc_case = None
+    with patch.object(
+        runner, "build_editorial", side_effect=AssertionError("no OPC recommendation")
+    ):
+        brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
+    assert brief.version == 3
+    assert brief.opc_case is None
+    assert brief.editorial == bundle.editorial
+
+
+def test_opc_digest_sources_records_parsed_candidate_count() -> None:
+    envelope = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE, used_fallback=False,
+        text=None, html="<p>source</p>", attachments=(),
+    )
+    sources = runner._digest_sources({"opc": envelope}, _v3_bundle())
+    assert sources["opc"] is not None
+    assert sources["opc"]["parse_count"] == 2
+    assert "source</p>" not in repr(sources)
+
+
+async def test_digest_generation_includes_opc_case_and_candidate_count() -> None:
+    envelope = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE, used_fallback=False, text=None,
+        html=(
+            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
+            '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
+            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
+            '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
+        ),
+        attachments=(),
+    )
+    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": envelope})
+    assert bundle.opc_case is not None
+    assert bundle.opc_case.sharer == "Ruslan"
+    assert bundle.opc_case.header_image == ""
+    assert bundle.opc_candidate_count == 2
+
+
+@pytest.mark.parametrize("bullets", [
+    [], ["One", "Two"], ["One", "Two", "Three"],
+    ["One", "Two", "Three", "Four", "Five"], ["One", "", "Three"],
+    ["", "", ""], [" ", "\t", "\n"], [None, None, None],
+    ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
+])
+async def test_condenser_preserves_model_bullet_count_and_values(bullets: Any) -> None:
+    from ai_brief.digest.models import EventItem
+
+    item = EventItem(
+        index=1, category="海外", value_tag="", headline="Title",
+        url="https://example.com", body="Body", image_note="",
+    )
+    with patch.object(condenser, "extract_json_with_retry", new=AsyncMock(return_value={
+        "subject": "Subject", "preheader": "Preheader", "editorial": "Lead.",
+        "intro_bullets": bullets, "summaries": [{"index": 1, "summary": "Summary"}],
+    })):
+        result = await condenser.condense_today_ai([item])
+    assert result is not None
+    assert result.value.intro_bullets == bullets
+    assert result.complete is (
+        isinstance(bullets, list) and len(bullets) == 3
+        and all(isinstance(bullet, str) and bool(bullet.strip()) for bullet in bullets)
+    )
+
+
+@pytest.mark.parametrize("bullets", [
+    [], ["", "", ""], [" ", "\t", "\n"], [None, None, None],
+    ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
+    ["One", "Two", "Three", "Four"],
+])
+async def test_invalid_model_intro_reaches_real_runner_quality_and_blocked_storage(
+    bullets: Any,
+) -> None:
+    bundle = _v3_bundle()
+    assert bundle.opc_case is not None and bundle.today_ai is not None
+    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
+    digests: dict[DigestKind, DigestEnvelope | None] = {}
+    for kind, section in (
+        ("events", bundle.today_ai), ("builder", bundle.ai_masters),
+        ("research", bundle.ai_research), ("agent", bundle.agent_tools),
+    ):
+        assert section is not None
+        html = "".join(
+            f'<div class="item"><div class="label">{story.label}</div>'
+            f'<div class="title">{index}. {story.headline}</div>'
+            '<div class="summary">Source body.</div>'
+            f'<div class="meta"><a href="{story.url}">原文</a></div></div>'
+            for index, story in enumerate(section.stories, 1)
+        )
+        source_kind = cast(DigestKind, kind)
+        digests[source_kind] = DigestEnvelope(
+            kind=source_kind, message_id=f"<{kind}@test>", subject=f"{kind}-{BRIEF_DATE}",
+            received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+            used_fallback=False, text=None, html=html, attachments=(),
+        )
+    digests["opc"] = DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject=f"ai-opc-sharing {BRIEF_DATE}",
+        received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+        used_fallback=False, text=bundle.opc_case.url, html=None, attachments=(),
+    )
+    connection = _connection()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (RUN_ID,)
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(condenser, "extract_json_with_retry", AsyncMock(return_value={
+            "subject": "Subject", "preheader": "Preheader", "editorial": "Lead.",
+            "intro_bullets": bullets,
+            "summaries": [{"index": i, "summary": "Summary."} for i in range(1, 6)],
+        })),
+        patch.object(
+            generate, "_pick_and_upload", return_value=("https://img.test/x.jpg", "", True)
+        ),
+        patch.object(generate, "_build_ai_masters", return_value=(bundle.ai_masters, True, True)),
+        patch.object(generate, "_build_research", return_value=(bundle.ai_research, True, True)),
+        patch.object(generate, "_build_agent", return_value=(bundle.agent_tools, True)),
+        patch.object(generate, "build_opc_case", return_value=(bundle.opc_case, 2)),
+        patch.object(runner, "_alert"),
+        patch.object(composer, "compose_frozen_brief") as compose,
+        patch.object(deliverer, "send_pending") as deliver,
+    ):
+        result = await runner.generate_for_review(
+            connection, BRIEF_DATE, SimpleNamespace(fetch=lambda _date: digests),
+        )
+        assert result.status == "blocked"
+        saved = [call.args[1] for call in cursor.execute.call_args_list
+                 if "SET content = %s::jsonb" in call.args[0]]
+        assert len(saved) == 1
+        candidate, report = json.loads(saved[0][0]), json.loads(saved[0][3])
+        assert candidate["intro_bullets"] == (
+            bullets + ["🧰 Agents 1"] if isinstance(bullets, list) else bullets
+        )
+        assert report["passed"] is False
+        assert any(issue["code"] == "deepseek_incomplete" for issue in report["blockers"])
+        cursor.fetchone.return_value = ("blocked", candidate, report, RUN_ID)
+        assert not runner.approve_brief(connection, BRIEF_DATE, approved_by="test").changed
+        assert not runner.release_approved(connection, BRIEF_DATE).released
+        compose.assert_not_called()
+        deliver.assert_not_called()
 
 
 def _connection() -> MagicMock:
@@ -140,6 +366,7 @@ class _Adapter:
         return {
             "events": None,
             "builder": None,
+            "opc": None,
             "research": None,
             "engineering": None,
             "agent": None,
@@ -186,13 +413,13 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_called_once()
 
 
-async def test_v2_generation_stops_at_review_without_composing_or_delivering(
+async def test_v3_generation_stops_at_review_without_composing_or_delivering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A balanced v2 candidate is stored for review only, never released or sent."""
+    """A balanced v3 candidate is stored for review only, never released or sent."""
     connection = _connection()
     adapter = _Adapter()
-    bundle = _v2_bundle()
+    bundle = _v3_bundle()
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     with (
@@ -211,7 +438,9 @@ async def test_v2_generation_stops_at_review_without_composing_or_delivering(
     saved_content = save.call_args.kwargs["content"]
     assert result.status == "awaiting_approval"
     assert result.exit_code == 0
-    assert saved_content["version"] == 2
+    assert saved_content["version"] == 3
+    assert saved_content["opc_case"] == _opc_case().model_dump(mode="json")
+    assert saved_content["intro_bullets"] == ["One", "Two", "Three", "🧰 Agents 1"]
     assert saved_content["ai_engineering"] is None
     assert saved_content["featured"] == []
     assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
@@ -225,7 +454,8 @@ async def test_v2_generation_stops_at_review_without_composing_or_delivering(
     deliver.assert_not_called()
 
 
-async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> None:
+@pytest.mark.parametrize("backfill", [False, True])
+async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfill: bool) -> None:
     connection = _connection()
     adapter = _Adapter()
     bundle = _bundle()
@@ -242,10 +472,112 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate() -> No
         patch.object(runner, "validate_brief", validate),
         patch.object(runner, "_alert"),
     ):
-        await runner.generate_for_review(connection, BRIEF_DATE, adapter)
+        await runner.generate_for_review(connection, BRIEF_DATE, adapter, backfill=backfill)
 
     assert validate.call_args.kwargs["deepseek_complete"] is False
     assert validate.call_args.kwargs["qwen_complete"] is False
+    assert validate.call_args.kwargs["opc_candidate_count"] == 2
+
+
+@pytest.mark.parametrize("backfill", [False, True])
+@pytest.mark.parametrize(
+    ("mutation", "expected_status", "issue"),
+    [
+        ("valid", "awaiting_approval", None),
+        ("missing_opc", "blocked", ("opc_case_missing", "opc_case")),
+        ("overlong_bullets", "blocked", ("intro_bullet_count_invalid", "intro_bullets")),
+        ("empty_image", "blocked", ("opc_image_missing", "opc_case.header_image")),
+    ],
+)
+async def test_generation_retains_quality_rejected_v3_through_real_storage(
+    backfill: bool,
+    mutation: str,
+    expected_status: str,
+    issue: tuple[str, str] | None,
+) -> None:
+    """Schema-invalid output must remain an auditable quality block, not a storage failure."""
+    bundle = _v3_bundle()
+    assert bundle.opc_case is not None
+    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
+    bundle.opc_case.header_image = "https://aivizens.com/images/opc.png"
+    if mutation == "missing_opc":
+        bundle.opc_case = None
+        bundle.opc_candidate_count = 0
+    elif mutation == "overlong_bullets":
+        bundle.intro_bullets = ["One", "Two", "Three", "Four", "Five"]
+    elif mutation == "empty_image":
+        bundle.opc_case.header_image = ""
+
+    digests: dict[DigestKind, DigestEnvelope | None] = {}
+    for kind, section in (
+        ("events", bundle.today_ai), ("builder", bundle.ai_masters),
+        ("research", bundle.ai_research), ("agent", bundle.agent_tools),
+    ):
+        assert section is not None
+        source_kind = cast(DigestKind, kind)
+        digests[source_kind] = DigestEnvelope(
+            kind=source_kind, message_id=f"<{kind}@test>", subject=f"{kind}-{BRIEF_DATE}",
+            received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+            used_fallback=False, text="\n".join(story.url for story in section.stories),
+            html="<p>private-source-body</p>", attachments=(),
+        )
+    digests["opc"] = None if bundle.opc_case is None else DigestEnvelope(
+        kind="opc", message_id="<opc@test>", subject=f"opc-{BRIEF_DATE}",
+        received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
+        used_fallback=False, text=bundle.opc_case.url, html="<p>private-opc-body</p>",
+        attachments=(),
+    )
+    adapter = SimpleNamespace(fetch=lambda _date: digests)
+    connection = _connection()
+    cursor = connection.cursor.return_value.__enter__.return_value
+    cursor.fetchone.return_value = (RUN_ID,)
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
+        patch.object(runner, "_alert"),
+    ):
+        result = await runner.generate_for_review(
+            connection, BRIEF_DATE, adapter, backfill=backfill,
+        )
+
+    assert result.status == expected_status
+    assert result.quality_report is not None
+    saved = [call.args[1] for call in cursor.execute.call_args_list
+             if "SET content = %s::jsonb" in call.args[0]]
+    finished = [call.args[1] for call in cursor.execute.call_args_list
+                if "UPDATE ai_digest_runs AS run" in call.args[0]]
+    assert len(saved) == len(finished) == 1
+    candidate = json.loads(saved[0][0])
+    report = json.loads(saved[0][3])
+    assert saved[0][2] == finished[0][0] == expected_status
+    assert json.loads(finished[0][3]) == report
+    assert report["passed"] is (expected_status == "awaiting_approval")
+    assert finished[0][4] == ("quality" if issue else None)
+    assert "private-" not in str(saved + finished)
+    assert all("message" not in entry for entry in report["blockers"])
+    assert isinstance(bundle.intro_bullets, list)
+    assert candidate["intro_bullets"] == bundle.intro_bullets + ["🧰 Agents 1"]
+    assert candidate["opc_case"] == (
+        None if bundle.opc_case is None else bundle.opc_case.model_dump(mode="json")
+    )
+    assert candidate["ai_engineering"] is None
+    assert candidate["yesterday_top"] is None
+    assert candidate["featured"] == candidate["tools"] == candidate["quick_hits"] == []
+    assert candidate["daily_tip"] is None
+    if mutation == "missing_opc":
+        assert candidate["editorial"] == bundle.editorial
+    if issue is not None:
+        assert {"code": issue[0], "path": issue[1]} in report["blockers"]
+        cursor.fetchone.return_value = (saved[0][2], candidate, report, RUN_ID)
+        with patch.object(runner, "_alert"):
+            approval = runner.approve_brief(connection, BRIEF_DATE, approved_by="test-operator")
+            release = runner.release_approved(connection, BRIEF_DATE)
+        assert (approval.status, approval.changed, approval.reason) == (
+            "blocked", False, "not_approvable",
+        )
+        assert (release.status, release.released, release.composed) == ("blocked", False, 0)
 
 
 def test_generation_claim_binds_owner_and_rejects_an_active_generating_row() -> None:
@@ -540,6 +872,7 @@ async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed()
     invalid_bundle = _bundle()
     invalid_bundle.intro_bullets = []
     invalid_bundle.today_ai = None
+    invalid_bundle.agent_tools = None
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
         patch.object(storage, "claim_brief_generation", return_value="started"),
@@ -739,6 +1072,7 @@ def _seed_generated_brief(
     brief_date: date,
     *,
     passed: bool,
+    content: dict[str, Any] | None = None,
 ) -> UUID:
     run_id = storage.start_digest_run(conn, brief_date, "integration-test")
     conn.commit()
@@ -748,7 +1082,7 @@ def _seed_generated_brief(
     storage.save_generated_brief(
         conn,
         brief_date=brief_date,
-        content=_brief_content(brief_date),
+        content=_brief_content(brief_date) if content is None else content,
         model="integration-model",
         digest_sources={},
         quality_report=report,
@@ -796,6 +1130,53 @@ def _cleanup_workflow_fixtures(
         cur.execute("DELETE FROM ai_digest_runs WHERE brief_date = ANY(%s::date[]);", (dates,))
         cur.execute("DELETE FROM ai_subscribers WHERE email = ANY(%s::text[]);", (emails,))
     conn.commit()
+
+
+@pytest.mark.integration
+def test_postgres_v3_publishes_but_does_not_send_when_email_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief_date = date(2096, 9, 14)
+    email = "opc-v3-disabled-send@example.test"
+    monkeypatch.setenv("AI_EMAIL_SEND_ENABLED", "false")
+    conn = _postgres_connection()
+    try:
+        _cleanup_workflow_fixtures(conn, [brief_date], [email])
+        _insert_active_subscriber(conn, email)
+        bundle = _v3_bundle()
+        assert bundle.agent_tools is not None
+        v3 = AiBriefContent(
+            version=3, brief_date=brief_date.isoformat(),
+            subject="Frozen V3 candidate", preheader="OPC acceptance",
+            editorial="核心判断。今日给大家分享一个来自“Ruslan”的“Zipchat”OPC案例。",
+            intro_bullets=["一", "二", "三", f"🧰 {bundle.agent_tools.stories[0].headline}"],
+            opc_case=OpcCase(
+                sharer="Ruslan", headline="Zipchat", summary="案例正文",
+                original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+                revenue_display="$167K 美元月度营收",
+                url="https://www.indiehackers.com/post/case-two",
+                header_image="https://aivizens.com/images/opc.png", header_image_alt="Zipchat 案例",
+            ),
+            today_ai=bundle.today_ai, ai_masters=bundle.ai_masters,
+            ai_research=bundle.ai_research, ai_engineering=None,
+            agent_tools=bundle.agent_tools, model="integration-model",
+        ).model_dump(mode="json")
+        _seed_generated_brief(conn, brief_date, passed=True, content=v3)
+        assert runner.approve_brief(conn, brief_date, approved_by="integration-operator").changed
+        released = runner.release_approved(conn, brief_date, only_email=email)
+        result = deliverer.send_pending(conn, brief_date=brief_date)
+
+        assert (released.status, released.released, released.composed) == ("published", True, 1)
+        assert (result.attempted, result.sent, result.failed) == (0, 0, 0)
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status, count(*) FROM ai_deliveries "
+                "WHERE brief_date = %s GROUP BY status;", (brief_date,),
+            )
+            assert cur.fetchone() == ("pending", 1)
+    finally:
+        _cleanup_workflow_fixtures(conn, [brief_date], [email])
+        conn.close()
 
 
 @pytest.mark.integration

@@ -35,6 +35,12 @@ QUALITY_ISSUE_CODES = frozenset(
         "digest_date_fallback",
         "editorial_blank",
         "intro_blank",
+        "intro_bullet_count_invalid",
+        "intro_bullet_invalid",
+        "intro_agent_topic_mismatch",
+        "opc_case_missing",
+        "opc_candidate_count_invalid",
+        "opc_image_missing",
         "non_core_items_filtered",
         "parse_failed",
         "placeholder_url",
@@ -69,6 +75,10 @@ QUALITY_METRIC_KEYS = frozenset(
         "intro_bullet_count",
         "max_digest_freshness_hours",
         "missing_tool_module_count",
+        "opc_candidate_count",
+        "opc_case_count",
+        "opc_monthly_revenue_usd",
+        "opc_freshness_hours",
         "parsed_items",
         "quality_passed",
         "qwen_complete",
@@ -86,7 +96,7 @@ QUALITY_METRIC_KEYS = frozenset(
     }
 )
 QUALITY_BRIEF_PATHS = frozenset(
-    {"editorial", "intro_bullets", "preheader", "subject"}
+    {"editorial", "intro_bullets", "preheader", "subject", "opc_case"}
 )
 QUALITY_DIGEST_SECTION_ROOTS = frozenset(
     {"agent_tools", "ai_engineering", "ai_masters", "ai_research", "today_ai"}
@@ -96,7 +106,7 @@ QUALITY_DIGEST_SECTION_FIELDS = frozenset(
 )
 QUALITY_DIGEST_STORY_FIELDS = frozenset({"headline", "label", "summary", "url"})
 QUALITY_DIGEST_SOURCE_KINDS = frozenset(
-    {"agent", "builder", "engineering", "events", "research"}
+    {"agent", "builder", "engineering", "events", "research", "opc"}
 )
 QUALITY_DIGEST_SOURCE_FIELDS = frozenset(
     {"matched_date", "received_at", "requested_date", "used_fallback"}
@@ -114,6 +124,8 @@ def quality_path_is_allowed(path: str) -> bool:
     root, separator, remainder = path.partition(".")
     if not separator:
         return False
+    if root == "opc_case":
+        return remainder in {"url", "header_image", "summary"}
     if root == "digests":
         kind, field_separator, field = remainder.partition(".")
         return kind in QUALITY_DIGEST_SOURCE_KINDS and (
@@ -194,6 +206,18 @@ class YesterdayTop(BaseModel):
     url: str
 
 
+class OpcCase(BaseModel):
+    sharer: str = Field(min_length=1, max_length=80)
+    headline: str = Field(min_length=1, max_length=120)
+    summary: str = Field(min_length=1, max_length=500)
+    original_revenue: str = Field(min_length=1, max_length=80)
+    monthly_revenue_usd: int = Field(gt=0)
+    revenue_display: str = Field(min_length=1, max_length=80)
+    url: str
+    header_image: str
+    header_image_alt: str = Field(min_length=1, max_length=160)
+
+
 class Stage1Stats(BaseModel):
     candidates: int = 0
     dupe_groups: int = 0
@@ -203,7 +227,7 @@ class Stage1Stats(BaseModel):
 class AiBriefContent(BaseModel):
     """完整简报文档。存 ai_daily_briefs.content。"""
 
-    version: Literal[1, 2] = SCHEMA_VERSION
+    version: Literal[1, 2, 3] = SCHEMA_VERSION
     brief_date: str  # YYYY-MM-DD
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
@@ -222,16 +246,19 @@ class AiBriefContent(BaseModel):
     daily_tip: DailyTip | None = None
     quick_hits: list[QuickHit] = Field(default_factory=list, max_length=6)
     yesterday_top: YesterdayTop | None = None
+    opc_case: OpcCase | None = None
     model: str | None = None
     stage1_stats: Stage1Stats | None = None
 
     @model_validator(mode="after")
-    def remove_v2_engineering_content(self) -> AiBriefContent:
-        if self.version == 2:
+    def remove_frozen_content(self) -> AiBriefContent:
+        if self.version in (2, 3):
             self.ai_engineering = None
             self.featured = []
             self.tools = []
             self.daily_tip = None
             self.quick_hits = []
             self.yesterday_top = None
+        if self.version == 3 and self.opc_case is None:
+            raise ValueError("v3 content requires opc_case")
         return self

@@ -144,6 +144,57 @@ def test_finish_digest_run_rejects_duplicate_completion() -> None:
     cursor.execute.assert_called_once()
 
 
+def test_finish_digest_run_keeps_only_safe_opc_metadata_and_numeric_metrics() -> None:
+    run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")
+    connection, cursor = _connection(fetchone=(run_id,))
+    storage.finish_digest_run(
+        connection, run_id, status="awaiting_approval", stage=None, error_summary=None,
+        digest_sources={"opc": {
+            "kind": "opc", "message_id": "<opc@gmail.test>",
+            "subject": "opc-digest-2026-08-04",
+            "received_at": "2026-08-04T08:00:00+00:00",
+            "requested_date": "2026-08-04", "matched_date": "2026-08-04",
+            "used_fallback": False, "parse_count": 2,
+            "attachments": [{"filename": "opc.png", "content_type": "image/png",
+                             "size_bytes": 5, "data": b"private-image"}],
+            "html": "<p>private-html</p>", "text": "private-body",
+            "exchange_response": "<xml>private-exchange</xml>",
+            "credentials": {"password": "private-password"},
+            "unsubscribe": "private-unsubscribe", "unknown": "private-unknown",
+        }},
+        quality_report={
+            "passed": True, "blockers": [], "warnings": [],
+            "metrics": {"opc_candidate_count": 2, "opc_case_count": 1,
+                        "opc_monthly_revenue_usd": 167_000, "opc_freshness_hours": 2.5,
+                        "unknown": 123, "html": "private-html"},
+        },
+    )
+    params = cursor.execute.call_args.args[1]
+    assert json.loads(params[1]) == {"opc": {
+        "kind": "opc", "message_id": "<opc@gmail.test>",
+        "subject": "opc-digest-2026-08-04", "received_at": "2026-08-04T08:00:00+00:00",
+        "requested_date": "2026-08-04", "matched_date": "2026-08-04",
+        "used_fallback": False,
+        "attachments": [{"filename": "opc.png", "content_type": "image/png", "size_bytes": 5}],
+    }}
+    assert json.loads(params[2]) == {"opc": 2}
+    assert json.loads(params[3])["metrics"] == {
+        "opc_candidate_count": 2, "opc_case_count": 1,
+        "opc_monthly_revenue_usd": 167_000, "opc_freshness_hours": 2.5,
+    }
+    assert "private-" not in str(params)
+
+
+@pytest.mark.parametrize(
+    "value", ["private-text", {"html": "private-html"}, b"private-bytes", float("inf")],
+)
+def test_opc_metrics_reject_non_numeric_or_non_finite_values(value: Any) -> None:
+    assert storage._safe_quality_report({"metrics": {
+        "opc_candidate_count": value, "opc_case_count": value,
+        "opc_monthly_revenue_usd": value, "opc_freshness_hours": value,
+    }}) == {"metrics": {}}
+
+
 def test_finish_digest_run_redacts_credential_shaped_error_details() -> None:
     """Persisting multiline exception details could turn the summary into a raw trace."""
     run_id = UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30")

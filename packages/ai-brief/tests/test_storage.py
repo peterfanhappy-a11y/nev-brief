@@ -2,15 +2,19 @@
 真实 DB 往返在 T12 E2E 验证。"""
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import date
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import UUID
 
+import pytest
 from ai_brief import storage
 from ai_brief.storage import AiArticle
 from psycopg._queries import PostgresQuery
 from psycopg.adapt import Transformer
+from pydantic import ValidationError
 
 
 def _mock_conn(
@@ -118,3 +122,93 @@ def test_fetch_previous_brief_returns_content() -> None:
 def test_fetch_previous_brief_none_on_first_day() -> None:
     conn, cur = _mock_conn(fetch_rows=[])
     assert storage.fetch_previous_brief(conn, date(2026, 7, 2)) is None
+
+
+@pytest.mark.parametrize("version", [2, 3])
+@pytest.mark.parametrize("operation", ["save", "upsert", "blocked"])
+def test_current_content_normalization_preserves_opc_and_clears_legacy_fields(
+    version: int, operation: str,
+) -> None:
+    opc_case = {
+        "sharer": "Ruslan", "headline": "Zipchat", "summary": "案例正文",
+        "original_revenue": "$167K MRR", "monthly_revenue_usd": 167_000,
+        "revenue_display": "$167K 美元月度营收",
+        "url": "https://www.indiehackers.com/post/case-two",
+        "header_image": "https://aivizens.com/images/opc.png", "header_image_alt": "Zipchat 案例",
+    }
+    content = {
+        "version": version, "brief_date": "2026-09-14", "subject": "Frozen candidate",
+        "preheader": "OPC", "intro_bullets": ["一", "二", "三", "🧰 Agent 0"],
+        "opc_case": opc_case if version == 3 else None,
+        "ai_engineering": {"theme": "ai_engineering", "stories": [
+            {"headline": "Old story", "summary": "Old summary"},
+        ]},
+        "featured": [{"theme": "model_research", "theme_label": "Old",
+                      "headline": "Old feature", "details": ["Old detail"],
+                      "significance": "Old significance", "url": "https://openai.com/old",
+                      "source_name": "OpenAI"}],
+        "tools": [{"name": "Old tool", "one_liner": "Old tool summary", "url": "https://openai.com"}],
+        "quick_hits": [{"text": "Old quick hit", "url": "https://openai.com"}],
+        "daily_tip": {"title": "Legacy tip", "body": "Legacy body"},
+        "yesterday_top": {"headline": "Legacy top", "url": "https://openai.com/old"},
+        "unknown": "private-unknown",
+    }
+    if operation == "blocked" and version == 3:
+        content["intro_bullets"] = ["One", "Two", "Three", "Four", "Five"]
+    conn, cur = _mock_conn(fetch_rows=[("awaiting_approval",)])
+    if operation in ("save", "blocked"):
+        storage.save_generated_brief(
+            conn, brief_date=date(2026, 9, 14), content=content, model=None,
+            digest_sources={}, quality_report={"passed": operation == "save"},
+            source_run_id=UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30"),
+            status="awaiting_approval" if operation == "save" else "blocked",
+        )
+        persisted = json.loads(cur.execute.call_args.args[1][0])
+    else:
+        storage.upsert_daily_brief(conn, brief_date=date(2026, 9, 14), content=content, model=None)
+        persisted = json.loads(cur.execute.call_args.args[1][1])
+    assert persisted["opc_case"] == (opc_case if version == 3 else None)
+    assert persisted["intro_bullets"] == content["intro_bullets"]
+    assert "unknown" not in persisted
+    assert persisted["ai_engineering"] is None
+    assert persisted["daily_tip"] is None
+    assert persisted["yesterday_top"] is None
+    assert persisted["featured"] == persisted["tools"] == persisted["quick_hits"] == []
+
+
+@pytest.mark.parametrize("operation", ["save", "upsert"])
+@pytest.mark.parametrize("bullet_count", [4, 5])
+def test_publishable_and_draft_v3_still_reject_schema_invalid_content(
+    operation: str, bullet_count: int,
+) -> None:
+    conn, cur = _mock_conn()
+    content = {
+        "version": 3, "brief_date": "2026-09-14", "subject": "Invalid candidate",
+        "preheader": "Missing OPC", "intro_bullets": ["Bullet"] * bullet_count,
+        "opc_case": None,
+    }
+    with pytest.raises(ValidationError):
+        if operation == "save":
+            storage.save_generated_brief(
+                conn, brief_date=date(2026, 9, 14), content=content, model=None,
+                digest_sources={}, quality_report={"passed": True},
+                source_run_id=UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30"),
+                status="awaiting_approval",
+            )
+        else:
+            storage.upsert_daily_brief(
+                conn, brief_date=date(2026, 9, 14), content=content, model=None,
+            )
+    cur.execute.assert_not_called()
+
+
+@pytest.mark.parametrize("passed", [True, None, 0, "false"])
+def test_rejected_candidate_path_requires_boolean_false_quality_report(passed: Any) -> None:
+    conn, cur = _mock_conn()
+    with pytest.raises(ValueError, match="workflow status must match the stored quality report"):
+        storage.save_generated_brief(
+            conn, brief_date=date(2026, 9, 14), content={"version": 3, "opc_case": None},
+            model=None, digest_sources={}, quality_report={"passed": passed},
+            source_run_id=UUID("31a9cf25-51f4-4e83-9c77-5574d8d6bc30"), status="blocked",
+        )
+    cur.execute.assert_not_called()

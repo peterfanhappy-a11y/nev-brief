@@ -110,17 +110,39 @@ const YesterdayTopSchema = z.object({
   url: HttpsUrlSchema,
 });
 
+// Match Pydantic's Unicode code-point limits, including supplementary characters.
+function codePointString(min: number, max: number) {
+  return z.string().refine((value) => {
+    const length = Array.from(value).length;
+    return length >= min && length <= max;
+  }, `Expected ${min}-${max} Unicode code points`);
+}
+
+const OpcCaseSchema = z
+  .object({
+    sharer: codePointString(1, 80),
+    headline: codePointString(1, 120),
+    summary: codePointString(1, 500),
+    original_revenue: codePointString(1, 80),
+    monthly_revenue_usd: z.number().int().positive(),
+    revenue_display: codePointString(1, 80),
+    url: HttpsUrlSchema,
+    header_image: HttpsUrlSchema,
+    header_image_alt: codePointString(1, 160),
+  })
+  .strict();
+
 const Stage1StatsSchema = z.object({
   candidates: z.number().int().default(0),
   dupe_groups: z.number().int().default(0),
 });
 
 export const AiBriefContentSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]).default(1),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
-  editorial: z.string().max(220).default(""),
+  editorial: codePointString(0, 220).default(""),
   intro_bullets: z.array(z.string()).min(1).max(4),
   today_ai: OptionalDigestSectionSchema,
   ai_masters: OptionalDigestSectionSchema,
@@ -134,23 +156,31 @@ export const AiBriefContentSchema = z.object({
   yesterday_top: YesterdayTopSchema.nullish().transform(
     (value) => value ?? null,
   ),
+  opc_case: OpcCaseSchema.nullish().transform((value) => value ?? null),
   model: z.string().nullish().transform((value) => value ?? null),
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
   ),
 }).superRefine((content, context) => {
-  if (content.version !== 2) return;
+  if (content.version === 3 && !content.opc_case) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v3 content requires opc_case",
+      path: ["opc_case"],
+    });
+  }
+  if (content.version !== 2 && content.version !== 3) return;
   if (content.ai_engineering) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include AI engineering",
+      message: `v${content.version} content cannot include AI engineering`,
       path: ["ai_engineering"],
     });
   }
   if (content.featured.length > 0) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include featured items",
+      message: `v${content.version} content cannot include featured items`,
       path: ["featured"],
     });
   }
@@ -162,7 +192,7 @@ export const AiBriefContentSchema = z.object({
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "v2 content cannot include legacy auxiliary sections",
+      message: `v${content.version} content cannot include legacy auxiliary sections`,
       path: ["tools"],
     });
   }
@@ -219,8 +249,9 @@ function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
 }
 
 function moduleLabels(content: AiBriefContent): string[] {
-  const labels = (content.version === 2
+  const labels = (content.version === 2 || content.version === 3
     ? [
+        content.version === 3 && content.opc_case && "OPC案例",
         content.today_ai && "今日AI",
         content.ai_masters && "AI大神",
         content.ai_research && "AI研究",
