@@ -58,14 +58,13 @@ class TodayAIResult:
 _TODAY_AI_SYSTEM = """你是 AIVIZENS 的 AI 行业主编，为中文读者写每日 AI 简报，文风参考 The Rundown AI：专业、精炼、有洞见。
 给你今天 5 条最重要的 AI 新闻（已带标题与长正文）。请：
 1) 把每条正文压缩成 ≤150 字的精炼中文摘要，保留关键数字、结论与「为什么重要」，去掉冗余。公司/产品/模型名保留英文原名（Claude、GPT-5、OpenAI）。
-2) 基于这 5 条生成邮件的 subject / preheader / editorial / intro_bullets。
+2) 基于这 5 条生成邮件的 subject / preheader / editorial。概览条目由代码从冻结模块确定性生成，不要输出 intro_bullets。
 
 只输出严格 JSON：
 {
   "subject": "邮件主题：3条里最重磅那条改写成最抓眼球的中文标题，≤22字",
   "preheader": "以「另外：」开头 + 第二重磅新闻吸睛短标题，≤28字",
   "editorial": "编辑导语：用1-2句简短开篇概括今天最重要的AI动向，专业有洞见，≤80字，不写后半段推荐，别用「今天」「以下」套话开头",
-  "intro_bullets": ["每条一句话导读，emoji开头，≤20字（必须恰好3条，按给定顺序；不要添加Agent工具导读）"],
   "summaries": [ {"index": 1, "summary": "≤150字压缩摘要"} ]
 }
 summaries 必须含全部 5 条、index 用给定编号。只输出 JSON。"""
@@ -121,9 +120,6 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
         and bool(subject)
         and bool(preheader)
         and bool(editorial)
-        and isinstance(intro, list)
-        and len(intro) == 3
-        and all(isinstance(bullet, str) and bool(bullet.strip()) for bullet in intro)
     )
     return ModelOutcome(
         value=TodayAIResult(

@@ -167,37 +167,46 @@ def test_new_generation_builds_a_five_module_v3_brief(monkeypatch: pytest.Monkey
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     bundle = _v3_bundle()
-    assert bundle.agent_tools is not None
-    bundle.agent_tools.stories[0].headline = "spec-kit — 规范先行的 AI 编码流程"
     brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
 
     assert brief.version == 3
     assert brief.ai_engineering is None
     assert brief.opc_case == _opc_case()
-    assert brief.intro_bullets == ["One", "Two", "Three", "🧰 spec-kit — 规范先行的 AI 编码流程"]
+    assert brief.intro_bullets == [
+        "💡 Zipchat 再冲到 $2M ARR",
+        "📰 Today 1",
+        "📰 Today 2",
+        "📰 Today 4",
+        "👤 Masters 1",
+    ]
     assert bundle.intro_bullets == ["One", "Two", "Three"]
     assert brief.editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
     assert runner._module_count(bundle) == 5
 
 
-@pytest.mark.parametrize(
-    "bullets", [[], ["One"], ["One", "Two"], ["One", "Two", "Three", "Four", "Five"]]
-)
-def test_v3_generation_preserves_invalid_model_bullet_counts(bullets: list[str]) -> None:
+@pytest.mark.parametrize("bullets", [None, [], ["One"], ["One"] * 6])
+def test_v3_generation_ignores_model_intro_bullets(bullets: Any) -> None:
     bundle = _v3_bundle()
     bundle.intro_bullets = bullets
     brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
-    assert brief.intro_bullets == bullets + ["🧰 Agents 1"]
+    assert brief.intro_bullets == [
+        "💡 Zipchat 再冲到 $2M ARR",
+        "📰 Today 1",
+        "📰 Today 2",
+        "📰 Today 4",
+        "👤 Masters 1",
+    ]
 
 
 @pytest.mark.parametrize("absent", [True, False])
-def test_v3_generation_does_not_invent_agent_bullet_when_no_first_story(absent: bool) -> None:
+def test_v3_overview_does_not_depend_on_agent_tools(absent: bool) -> None:
     bundle = _v3_bundle()
     bundle.agent_tools = (
         None if absent else DigestSection.model_construct(theme=Theme.AGENT_TOOLS, stories=[])
     )
     brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
-    assert brief.intro_bullets == ["One", "Two", "Three"]
+    assert brief.intro_bullets[-1] == "👤 Masters 1"
+    assert all("Agents" not in bullet for bullet in brief.intro_bullets)
 
 
 def test_v3_missing_opc_preserves_lead_for_structured_quality_blocker() -> None:
@@ -265,10 +274,7 @@ async def test_condenser_preserves_model_bullet_count_and_values(bullets: Any) -
         result = await condenser.condense_today_ai([item])
     assert result is not None
     assert result.value.intro_bullets == bullets
-    assert result.complete is (
-        isinstance(bullets, list) and len(bullets) == 3
-        and all(isinstance(bullet, str) and bool(bullet.strip()) for bullet in bullets)
-    )
+    assert result.complete is True
 
 
 @pytest.mark.parametrize("bullets", [
@@ -276,12 +282,13 @@ async def test_condenser_preserves_model_bullet_count_and_values(bullets: Any) -
     ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
     ["One", "Two", "Three", "Four"],
 ])
-async def test_invalid_model_intro_reaches_real_runner_quality_and_blocked_storage(
+async def test_model_intro_cannot_block_deterministic_v3_overview(
     bullets: Any,
 ) -> None:
     bundle = _v3_bundle()
     assert bundle.opc_case is not None and bundle.today_ai is not None
     bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
+    bundle.opc_case.header_image = "https://aivizens.com/images/opc.png"
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     for kind, section in (
         ("events", bundle.today_ai), ("builder", bundle.ai_masters),
@@ -332,19 +339,20 @@ async def test_invalid_model_intro_reaches_real_runner_quality_and_blocked_stora
         result = await runner.generate_for_review(
             connection, BRIEF_DATE, SimpleNamespace(fetch=lambda _date: digests),
         )
-        assert result.status == "blocked"
+        assert result.status == "awaiting_approval", result.quality_report
         saved = [call.args[1] for call in cursor.execute.call_args_list
                  if "SET content = %s::jsonb" in call.args[0]]
         assert len(saved) == 1
         candidate, report = json.loads(saved[0][0]), json.loads(saved[0][3])
-        assert candidate["intro_bullets"] == (
-            bullets + ["🧰 Agents 1"] if isinstance(bullets, list) else bullets
-        )
-        assert report["passed"] is False
-        assert any(issue["code"] == "deepseek_incomplete" for issue in report["blockers"])
-        cursor.fetchone.return_value = ("blocked", candidate, report, RUN_ID)
-        assert not runner.approve_brief(connection, BRIEF_DATE, approved_by="test").changed
-        assert not runner.release_approved(connection, BRIEF_DATE).released
+        assert candidate["intro_bullets"] == [
+            "💡 Zipchat 再冲到 $2M ARR",
+            "📰 Today 1",
+            "📰 Today 2",
+            "📰 Today 4",
+            "👤 Masters 1",
+        ]
+        assert report["passed"] is True
+        assert not any(issue["code"] == "deepseek_incomplete" for issue in report["blockers"])
         compose.assert_not_called()
         deliver.assert_not_called()
 
@@ -440,7 +448,13 @@ async def test_v3_generation_stops_at_review_without_composing_or_delivering(
     assert result.exit_code == 0
     assert saved_content["version"] == 3
     assert saved_content["opc_case"] == _opc_case().model_dump(mode="json")
-    assert saved_content["intro_bullets"] == ["One", "Two", "Three", "🧰 Agents 1"]
+    assert saved_content["intro_bullets"] == [
+        "💡 Zipchat 再冲到 $2M ARR",
+        "📰 Today 1",
+        "📰 Today 2",
+        "📰 Today 4",
+        "👤 Masters 1",
+    ]
     assert saved_content["ai_engineering"] is None
     assert saved_content["featured"] == []
     assert [story["label"] for story in saved_content["today_ai"]["stories"]] == [
@@ -485,7 +499,7 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfil
     [
         ("valid", "awaiting_approval", None),
         ("missing_opc", "blocked", ("opc_case_missing", "opc_case")),
-        ("overlong_bullets", "blocked", ("intro_bullet_count_invalid", "intro_bullets")),
+        ("short_today_ai", "blocked", ("intro_bullet_count_invalid", "intro_bullets")),
         ("empty_image", "blocked", ("opc_image_missing", "opc_case.header_image")),
     ],
 )
@@ -503,8 +517,9 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
     if mutation == "missing_opc":
         bundle.opc_case = None
         bundle.opc_candidate_count = 0
-    elif mutation == "overlong_bullets":
-        bundle.intro_bullets = ["One", "Two", "Three", "Four", "Five"]
+    elif mutation == "short_today_ai":
+        assert bundle.today_ai is not None
+        bundle.today_ai.stories = bundle.today_ai.stories[:3]
     elif mutation == "empty_image":
         bundle.opc_case.header_image = ""
 
@@ -557,8 +572,17 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
     assert finished[0][4] == ("quality" if issue else None)
     assert "private-" not in str(saved + finished)
     assert all("message" not in entry for entry in report["blockers"])
-    assert isinstance(bundle.intro_bullets, list)
-    assert candidate["intro_bullets"] == bundle.intro_bullets + ["🧰 Agents 1"]
+    expected_intro = [
+        "💡 Zipchat 再冲到 $2M ARR",
+        "📰 Today 1",
+        "📰 Today 2",
+    ]
+    if mutation != "short_today_ai":
+        expected_intro.append("📰 Today 4")
+    expected_intro.append("👤 Masters 1")
+    if mutation == "missing_opc":
+        expected_intro.pop(0)
+    assert candidate["intro_bullets"] == expected_intro
     assert candidate["opc_case"] == (
         None if bundle.opc_case is None else bundle.opc_case.model_dump(mode="json")
     )
@@ -871,7 +895,9 @@ async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed()
     adapter = _Adapter()
     invalid_bundle = _bundle()
     invalid_bundle.intro_bullets = []
+    invalid_bundle.opc_case = None
     invalid_bundle.today_ai = None
+    invalid_bundle.ai_masters = None
     invalid_bundle.agent_tools = None
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
@@ -1144,12 +1170,17 @@ def test_postgres_v3_publishes_but_does_not_send_when_email_is_disabled(
         _cleanup_workflow_fixtures(conn, [brief_date], [email])
         _insert_active_subscriber(conn, email)
         bundle = _v3_bundle()
-        assert bundle.agent_tools is not None
         v3 = AiBriefContent(
             version=3, brief_date=brief_date.isoformat(),
             subject="Frozen V3 candidate", preheader="OPC acceptance",
             editorial="核心判断。今日给大家分享一个来自“Ruslan”的“Zipchat”OPC案例。",
-            intro_bullets=["一", "二", "三", f"🧰 {bundle.agent_tools.stories[0].headline}"],
+            intro_bullets=[
+                "💡 Zipchat",
+                "📰 Today 1",
+                "📰 Today 2",
+                "📰 Today 4",
+                "👤 Masters 1",
+            ],
             opc_case=OpcCase(
                 sharer="Ruslan", headline="Zipchat", summary="案例正文",
                 original_revenue="$167K MRR", monthly_revenue_usd=167_000,
