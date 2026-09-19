@@ -203,7 +203,8 @@ describe("DailyBrief", () => {
     expect(opc).toHaveClass("border-2", "border-gray-900");
     const image = within(opc).getByRole("img", { name: "Ruslan 的 Zipchat 案例" });
     expect(image).toHaveAttribute("src", "https://cdn.example.com/opc.png");
-    expect(image).toHaveClass("aspect-[16/9]", "w-full", "object-cover");
+    expect(image).toHaveClass("block", "h-auto", "w-full");
+    expect(image).not.toHaveClass("aspect-[16/9]", "object-cover");
     expect(opc).toHaveTextContent("Ruslan");
     expect(opc).toHaveTextContent("$167K 美元月度营收");
     expect(within(opc).getByRole("heading", {
@@ -349,13 +350,13 @@ describe("DailyBrief", () => {
       expect(screen.getByRole("heading", { name: section })).toBeInTheDocument();
     }
 
-    expect(screen.getByRole("img", { name: "今日 AI 头图" })).toHaveAttribute(
-      "src",
-      "https://cdn.example.com/today.png",
-    );
-    expect(
-      screen.getByRole("img", { name: "企业发布 AI 治理指南 配图" }),
-    ).toHaveAttribute("src", "https://cdn.example.com/featured.png");
+    const todayAiImage = screen.getByRole("img", { name: "今日 AI 头图" });
+    expect(todayAiImage).toHaveAttribute("src", "https://cdn.example.com/today.png");
+    expect(todayAiImage).toHaveClass("block", "h-auto", "w-full");
+    expect(todayAiImage).not.toHaveClass("aspect-[16/9]", "object-cover");
+    const featuredImage = screen.getByRole("img", { name: "企业发布 AI 治理指南 配图" });
+    expect(featuredImage).toHaveAttribute("src", "https://cdn.example.com/featured.png");
+    expect(featuredImage).toHaveClass("aspect-[16/9]", "object-cover");
     expect(screen.getByRole("link", { name: "阅读原文" })).toHaveAttribute(
       "href",
       "https://example.com/today",
