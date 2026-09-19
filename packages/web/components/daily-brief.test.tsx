@@ -226,7 +226,7 @@ describe("DailyBrief", () => {
       expect(fieldOrder[index - 1].compareDocumentPosition(fieldOrder[index])
         & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
-    expect(screen.getByRole("region", { name: "概览" }).querySelectorAll("li")).toHaveLength(4);
+    expect(screen.getByRole("region", { name: "概览" }).querySelectorAll("li")).toHaveLength(5);
     for (const bullet of PUBLISHED_BRIEF_V3_RENDERING_CONTENT.intro_bullets) {
       expect(screen.getByText(bullet)).toBeInTheDocument();
     }

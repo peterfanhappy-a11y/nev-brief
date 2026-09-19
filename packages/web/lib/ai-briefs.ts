@@ -143,7 +143,7 @@ export const AiBriefContentSchema = z.object({
   subject: z.string().max(44),
   preheader: z.string().max(60),
   editorial: codePointString(0, 220).default(""),
-  intro_bullets: z.array(z.string()).min(1).max(4),
+  intro_bullets: z.array(z.string()).min(1).max(5),
   today_ai: OptionalDigestSectionSchema,
   ai_masters: OptionalDigestSectionSchema,
   ai_research: OptionalDigestSectionSchema,

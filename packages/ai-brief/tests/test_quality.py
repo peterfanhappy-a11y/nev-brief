@@ -206,19 +206,27 @@ def _report(
 
 def _v3_brief() -> AiBriefContent:
     brief = _v2_brief()
-    assert brief.agent_tools is not None
+    assert brief.opc_case is None
+    assert brief.today_ai is not None
+    assert brief.ai_masters is not None
+    opc_case = OpcCase(
+        sharer="Ruslan", headline="Zipchat 再冲到 $2M ARR", summary="案例二正文",
+        original_revenue="$167K MRR", monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收",
+        url="https://www.indiehackers.com/post/case-two",
+        header_image="https://aivizens.com/images/opc.png",
+        header_image_alt="Ruslan 的 Zipchat 案例",
+    )
     return brief.model_copy(update={
         "version": 3,
-        "opc_case": OpcCase(
-            sharer="Ruslan", headline="Zipchat 再冲到 $2M ARR", summary="案例二正文",
-            original_revenue="$167K MRR", monthly_revenue_usd=167_000,
-            revenue_display="$167K 美元月度营收",
-            url="https://www.indiehackers.com/post/case-two",
-            header_image="https://aivizens.com/images/opc.png",
-            header_image_alt="Ruslan 的 Zipchat 案例",
-        ),
-        "intro_bullets": ["Models improve", "Tools mature", "Agents ship",
-                          f"🧰 {brief.agent_tools.stories[0].headline}"],
+        "opc_case": opc_case,
+        "intro_bullets": [
+            f"💡 {opc_case.headline}",
+            f"📰 {brief.today_ai.stories[0].headline}",
+            f"📰 {brief.today_ai.stories[1].headline}",
+            f"📰 {brief.today_ai.stories[3].headline}",
+            f"👤 {brief.ai_masters.stories[0].headline}",
+        ],
     })
 
 
@@ -260,8 +268,10 @@ def test_generated_emoji_boundary_case_survives_quality_and_frozen_storage() -> 
     ):
         opc, count = build_opc_case(BRIEF_DATE.isoformat(), envelope)
     assert opc is not None
+    base = _v3_brief()
     brief = _v3_brief().model_copy(update={
         "opc_case": opc, "editorial": build_editorial("文" * 300, opc),
+        "intro_bullets": [f"💡 {opc.headline}", *base.intro_bullets[1:]],
     })
     assert len(brief.editorial) == 220
     assert _report(brief, _fresh_v3_digests(), opc_candidate_count=count).passed
@@ -298,9 +308,8 @@ def test_v3_blocks_missing_or_non_https_opc_image(image: str) -> None:
 
 
 @pytest.mark.parametrize(("bullets", "code"), [
-    (["一", "二", "三"], "intro_bullet_count_invalid"),
-    (["一", "二", "三", "🧰 错误工具"], "intro_agent_topic_mismatch"),
-    (["一", "二", "三", "Agent 1"], "intro_agent_topic_mismatch"),
+    (["一", "二", "三", "四"], "intro_bullet_count_invalid"),
+    (["一", "二", "三", "四", "五"], "intro_topic_mismatch"),
 ])
 def test_v3_blocks_invalid_intro(bullets: list[str], code: str) -> None:
     brief = _v3_brief().model_copy(update={"intro_bullets": bullets})

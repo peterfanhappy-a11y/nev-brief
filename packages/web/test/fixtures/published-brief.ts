@@ -134,10 +134,11 @@ export const PUBLISHED_BRIEF_V3_RENDERING_CONTENT: AiBriefContent = {
   ...PUBLISHED_BRIEF_CONTENT,
   version: 3,
   intro_bullets: [
-    "OPC 案例：从失败中重建电商 AI 产品",
-    "今日 AI：智能体走入实际工作流",
-    "AI 大神：分享可复用的实践经验",
-    "工具学习：论文方法与 Agent 工具",
+    "💡 $8M 产品一夜归零，Zipchat 再冲到 $2M ARR",
+    "📰 OpenAI 推出下一代智能体",
+    "📰 AI 工作流进入团队协作",
+    "📰 国内大模型加速应用落地",
+    "👤 AI 大神分享可复用实践",
   ],
   opc_case: {
     sharer: "Ruslan",

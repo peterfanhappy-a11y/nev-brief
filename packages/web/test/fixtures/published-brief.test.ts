@@ -14,7 +14,7 @@ describe("published brief fixtures", () => {
     const v3 = AiBriefContentSchema.parse(PUBLISHED_BRIEF_V3_RENDERING_CONTENT);
     expect(v3.version).toBe(3);
     expect(v3.opc_case?.sharer).toBe("Ruslan");
-    expect(v3.intro_bullets).toHaveLength(4);
+    expect(v3.intro_bullets).toHaveLength(5);
     expect([v3.today_ai, v3.ai_masters, v3.ai_research, v3.agent_tools])
       .not.toContain(null);
 

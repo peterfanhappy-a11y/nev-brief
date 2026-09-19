@@ -38,6 +38,7 @@ QUALITY_ISSUE_CODES = frozenset(
         "intro_bullet_count_invalid",
         "intro_bullet_invalid",
         "intro_agent_topic_mismatch",
+        "intro_topic_mismatch",
         "opc_case_missing",
         "opc_candidate_count_invalid",
         "opc_image_missing",
@@ -218,6 +219,26 @@ class OpcCase(BaseModel):
     header_image_alt: str = Field(min_length=1, max_length=160)
 
 
+def build_v3_intro_bullets(
+    opc_case: OpcCase | None,
+    today_ai: DigestSection | None,
+    ai_masters: DigestSection | None,
+) -> list[str]:
+    """Build the fixed V3 overview from frozen module headlines."""
+    bullets: list[str] = []
+    if opc_case is not None:
+        bullets.append(f"💡 {opc_case.headline}")
+    if today_ai is not None:
+        bullets.extend(
+            f"📰 {today_ai.stories[index].headline}"
+            for index in (0, 1, 3)
+            if index < len(today_ai.stories)
+        )
+    if ai_masters is not None and ai_masters.stories:
+        bullets.append(f"👤 {ai_masters.stories[0].headline}")
+    return bullets
+
+
 class Stage1Stats(BaseModel):
     candidates: int = 0
     dupe_groups: int = 0
@@ -232,7 +253,7 @@ class AiBriefContent(BaseModel):
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
     editorial: str = Field(default="", max_length=220)  # 编辑导语：2-3 句讲清当天头条
-    intro_bullets: list[str] = Field(min_length=1, max_length=4)
+    intro_bullets: list[str] = Field(min_length=1, max_length=5)
     # 今日精选模块①今日AI ②AI大神：digest 驱动（从 Gmail digest 邮件生成）
     today_ai: DigestSection | None = None
     ai_masters: DigestSection | None = None

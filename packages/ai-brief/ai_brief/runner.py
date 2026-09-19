@@ -19,7 +19,13 @@ from ai_brief.digest.generate import DigestBundle, build_digest_modules, build_e
 from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.digest.input import DigestEnvelope, DigestInputAdapter, DigestKind
 from ai_brief.quality import QualityReport, validate_brief
-from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, YesterdayTop
+from ai_brief.schema import (
+    AiBriefContent,
+    BriefStatus,
+    DigestSection,
+    YesterdayTop,
+    build_v3_intro_bullets,
+)
 
 log = get_logger("ai_brief.runner")
 
@@ -354,13 +360,7 @@ def _build_brief_without_lookup(
     bundle: DigestBundle,
     yesterday_top: YesterdayTop | None,
 ) -> AiBriefContent:
-    intro = (
-        list(bundle.intro_bullets)
-        if isinstance(bundle.intro_bullets, list)
-        else bundle.intro_bullets
-    )
-    if isinstance(intro, list) and bundle.agent_tools is not None and bundle.agent_tools.stories:
-        intro.append(f"🧰 {bundle.agent_tools.stories[0].headline}")
+    intro = build_v3_intro_bullets(bundle.opc_case, bundle.today_ai, bundle.ai_masters)
     subject = bundle.subject or (
         bundle.today_ai.stories[0].headline
         if bundle.today_ai is not None and bundle.today_ai.stories
