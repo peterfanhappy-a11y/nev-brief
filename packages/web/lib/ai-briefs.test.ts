@@ -200,7 +200,11 @@ describe("AiBriefContentSchema", () => {
     expect(AiBriefContentSchema.safeParse(missingOpcCase).success).toBe(false);
   });
 
-  it("accepts five V3 overview bullets and rejects six", () => {
+  it("accepts historical four and current five V3 overview bullets and rejects six", () => {
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+      intro_bullets: ["一", "二", "三", "四"],
+    }).success).toBe(true);
     expect(AiBriefContentSchema.safeParse({
       ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
       intro_bullets: ["一", "二", "三", "四", "五"],

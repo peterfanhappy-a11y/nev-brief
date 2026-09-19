@@ -112,6 +112,9 @@ def test_v3_requires_a_complete_opc_case() -> None:
         }
     )
     assert AiBriefContent.model_validate(valid.model_dump()).version == 3
+    assert AiBriefContent.model_validate(
+        valid.model_copy(update={"intro_bullets": ["一", "二", "三", "四"]}).model_dump()
+    ).version == 3
 
     with pytest.raises(ValidationError):
         AiBriefContent.model_validate(
