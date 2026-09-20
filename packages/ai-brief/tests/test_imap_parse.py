@@ -4,7 +4,7 @@ from __future__ import annotations
 import imaplib
 from datetime import UTC, date, datetime, timedelta, timezone
 from email.message import EmailMessage
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import ai_brief.digest.imap_client as imap_client
 import pytest
@@ -315,10 +315,13 @@ def test_fetch_latest_retries_one_imap_abort_then_returns_email() -> None:
         ]
     )
 
-    with patch.object(
-        imap_client,
-        "_connect",
-        side_effect=[imaplib.IMAP4.abort("socket error: EOF"), fake],
+    with (
+        patch.object(imap_client.log, "warning") as warning,
+        patch.object(
+            imap_client,
+            "_connect",
+            side_effect=[imaplib.IMAP4.abort("socket error:\nEOF"), fake],
+        ),
     ):
         result = fetch_latest(
             "digest@example.test",
@@ -330,6 +333,12 @@ def test_fetch_latest_retries_one_imap_abort_then_returns_email() -> None:
 
     assert result is not None
     assert result.message_id == "<retry@gmail.test>"
+    warning.assert_called_once_with(
+        "ai_imap.retrying_connection",
+        attempt=1,
+        error_type="abort",
+        error="IMAP connection aborted",
+    )
 
 
 def test_fetch_latest_retries_transient_connection_failures_before_returning_email() -> None:
@@ -347,14 +356,18 @@ def test_fetch_latest_retries_transient_connection_failures_before_returning_ema
         ]
     )
 
-    with patch.object(
-        imap_client,
-        "_connect",
-        side_effect=[
-            imaplib.IMAP4.abort("socket error: EOF"),
-            OSError("TLS connection reset"),
-            fake,
-        ],
+    sensitive_text = "password=fake-secret\nemail body " + ("x" * 300)
+    with (
+        patch.object(imap_client.log, "warning") as warning,
+        patch.object(
+            imap_client,
+            "_connect",
+            side_effect=[
+                imaplib.IMAP4.abort(sensitive_text),
+                OSError(sensitive_text),
+                fake,
+            ],
+        ),
     ):
         result = fetch_latest(
             "digest@example.test",
@@ -366,3 +379,23 @@ def test_fetch_latest_retries_transient_connection_failures_before_returning_ema
 
     assert result is not None
     assert result.message_id == "<third-attempt@gmail.test>"
+    assert warning.call_args_list == [
+        call(
+            "ai_imap.retrying_connection",
+            attempt=1,
+            error_type="abort",
+            error="IMAP connection aborted",
+        ),
+        call(
+            "ai_imap.retrying_connection",
+            attempt=2,
+            error_type="OSError",
+            error="OS connection error",
+        ),
+    ]
+    for logged in warning.call_args_list:
+        summary = logged.kwargs["error"]
+        assert "fake-secret" not in summary
+        assert "email body" not in summary
+        assert "\n" not in summary
+        assert len(summary) <= 200

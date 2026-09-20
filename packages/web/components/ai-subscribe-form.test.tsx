@@ -114,7 +114,14 @@ describe("AI subscription form", () => {
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
-    expect(await screen.findByText("订阅请求已收到")).toBeInTheDocument();
+    expect(
+      await screen.findByText("订阅请求已收到，请您到邮箱点击确认"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "我们会立即向您的邮箱发送确认链接，若几分钟内未收到，请检查垃圾邮件或稍后重试",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("cancels a verification hold when the reader releases early", async () => {
@@ -197,7 +204,9 @@ describe("AI subscription form", () => {
     });
     vi.useRealTimers();
     expect(await screen.findByText("rate_limited")).toBeInTheDocument();
-    expect(screen.queryByText("订阅请求已收到")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("订阅请求已收到，请您到邮箱点击确认"),
+    ).not.toBeInTheDocument();
   });
 
 });
