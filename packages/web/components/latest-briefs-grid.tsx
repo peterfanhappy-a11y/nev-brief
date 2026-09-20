@@ -14,6 +14,7 @@ function BriefCard({ brief }: { brief: AiBriefSummary }) {
     <article className="h-full">
       <Link
         href={`/daily/${brief.briefDate}`}
+        prefetch={false}
         className="group flex h-full flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
       >
         <div

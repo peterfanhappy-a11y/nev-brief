@@ -226,6 +226,58 @@ const PublishedBriefRowSchema = z.object({
   published_at: z.string().datetime({ offset: true }),
 });
 
+const PublishedBriefSummaryRowSchema = z
+  .object({
+    brief_date: BriefDateSchema,
+    content_brief_date: BriefDateSchema,
+    published_at: z.string().datetime({ offset: true }),
+    version: z
+      .enum(["1", "2", "3"])
+      .nullish()
+      .transform((value) => Number(value ?? "1")),
+    subject: z.string().max(44),
+    preheader: z.string().max(60),
+    editorial: codePointString(0, 220)
+      .nullish()
+      .transform((value) => value ?? ""),
+    opc_case_headline: z.string().nullish(),
+    today_ai_theme: ThemeSchema.nullish(),
+    ai_masters_theme: ThemeSchema.nullish(),
+    ai_research_theme: ThemeSchema.nullish(),
+    ai_engineering_theme: ThemeSchema.nullish(),
+    agent_tools_theme: ThemeSchema.nullish(),
+    featured: z
+      .array(z.object({ theme_label: z.string() }))
+      .nullish()
+      .transform((value) => value ?? []),
+  })
+  .superRefine((row, context) => {
+    if (row.brief_date !== row.content_brief_date) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Summary date does not match content date",
+        path: ["content_brief_date"],
+      });
+    }
+    if (row.version === 3 && !row.opc_case_headline) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "V3 summary requires an OPC case",
+        path: ["opc_case_headline"],
+      });
+    }
+    if (
+      (row.version === 2 || row.version === 3) &&
+      (row.ai_engineering_theme || row.featured.length > 0)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `V${row.version} summary contains retired modules`,
+        path: ["ai_engineering_theme"],
+      });
+    }
+  });
+
 const NeighborRowSchema = z.object({
   brief_date: BriefDateSchema,
 });
@@ -248,25 +300,27 @@ function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
   };
 }
 
-function moduleLabels(content: AiBriefContent): string[] {
-  const labels = (content.version === 2 || content.version === 3
+function summaryModuleLabels(
+  summary: z.infer<typeof PublishedBriefSummaryRowSchema>,
+): string[] {
+  const labels = (summary.version === 2 || summary.version === 3
     ? [
-        content.version === 3 && content.opc_case && "OPC案例",
-        content.today_ai && "今日AI",
-        content.ai_masters && "AI大神",
-        content.ai_research && "AI研究",
-        content.agent_tools && "Agent工具",
+        summary.version === 3 && summary.opc_case_headline && "OPC案例",
+        summary.today_ai_theme && "今日AI",
+        summary.ai_masters_theme && "AI大神",
+        summary.ai_research_theme && "AI研究",
+        summary.agent_tools_theme && "Agent工具",
       ]
     : [
-        content.today_ai && "今日AI",
-        content.ai_masters && "AI大神",
-        content.ai_research && "AI研究",
-        content.ai_engineering && "AI工程",
-        content.agent_tools && "Agent工具",
+        summary.today_ai_theme && "今日AI",
+        summary.ai_masters_theme && "AI大神",
+        summary.ai_research_theme && "AI研究",
+        summary.ai_engineering_theme && "AI工程",
+        summary.agent_tools_theme && "Agent工具",
       ]).filter((label): label is string => Boolean(label));
 
-  if (content.version !== 2) {
-    for (const item of content.featured) {
+  if (summary.version === 1) {
+    for (const item of summary.featured) {
       if (!labels.includes(item.theme_label)) labels.push(item.theme_label);
     }
   }
@@ -284,7 +338,9 @@ export async function listPublishedBriefs(
 ): Promise<AiBriefSummary[]> {
   const { data, error } = await getSupabaseAdmin()
     .from("ai_daily_briefs")
-    .select("brief_date, content, published_at")
+    .select(
+      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
+    )
     .eq("status", "published")
     .order("brief_date", { ascending: false })
     .limit(listLimit(limit));
@@ -294,17 +350,18 @@ export async function listPublishedBriefs(
   }
 
   return data.flatMap((row) => {
-    const brief = parsePublishedBrief(row);
-    if (!brief) return [];
+    const parsed = PublishedBriefSummaryRowSchema.safeParse(row);
+    if (!parsed.success) return [];
+    const summary = parsed.data;
 
     return [
       {
-        briefDate: brief.briefDate,
-        subject: brief.content.subject,
-        preheader: brief.content.preheader,
-        editorial: brief.content.editorial,
-        modules: moduleLabels(brief.content),
-        publishedAt: brief.publishedAt,
+        briefDate: summary.brief_date,
+        subject: summary.subject,
+        preheader: summary.preheader,
+        editorial: summary.editorial,
+        modules: summaryModuleLabels(summary),
+        publishedAt: summary.published_at,
       },
     ];
   });

@@ -26,6 +26,7 @@ jobs:
           DEEPSEEK_API_KEY: test-key
           RESEND_API_KEY: test-key
           FEISHU_WEBHOOK_URL: https://test.feishu
+          ALLOW_UNAVAILABLE_HOMEPAGE_BUILD: 'true'
 
   integration:
     runs-on: ubuntu-latest

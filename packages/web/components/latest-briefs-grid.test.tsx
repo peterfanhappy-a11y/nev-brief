@@ -1,6 +1,26 @@
 import React from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/link", async () => {
+  const { createElement } = await import("react");
+  return {
+    default: ({
+      children,
+      prefetch,
+      ...props
+    }: React.AnchorHTMLAttributes<HTMLAnchorElement> & {
+      children: React.ReactNode;
+      href: string;
+      prefetch?: boolean;
+    }) =>
+      createElement(
+        "a",
+        { ...props, "data-prefetch": String(prefetch) },
+        children,
+      ),
+  };
+});
 
 import LatestBriefsGrid from "@/components/latest-briefs-grid";
 import type { AiBriefSummary } from "@/lib/ai-briefs";
@@ -107,6 +127,7 @@ describe("LatestBriefsGrid", () => {
     expect(within(newestCard!).getByText("Agent工具")).toBeInTheDocument();
     const cardLink = newestCard!.querySelector('a[href="/daily/2026-08-03"]');
     expect(cardLink).not.toBeNull();
+    expect(cardLink).toHaveAttribute("data-prefetch", "false");
     expect(cardLink).toContainElement(
       within(newestCard!).getByText(
         "今天值得关注的是智能体从演示走向真实团队协作。",
