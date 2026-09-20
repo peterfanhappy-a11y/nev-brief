@@ -974,7 +974,7 @@ gh pr create --base main --head codex/opc-sharing-v3 --title "feat(ai): add OPC 
 gh pr checks --watch --interval 10
 ```
 
-Expected: unit, integration, and web acceptance all pass. The repository's automatic GitHub-to-Vercel deployment is intentionally disconnected, so do not require a Vercel Preview check. Do not merge while any required GitHub check is pending or failed.
+Expected: unit, integration, web acceptance, and Vercel Preview all pass. The repository is connected to the canonical `peterfanhappy-a11y-nev-brief` Vercel project. Do not merge while any required check is pending or failed.
 
 - [ ] **Step 3: Merge and verify the remote main commit**
 
@@ -999,20 +999,16 @@ stat -f '%Sp %N' /Users/jack/nev-brief/ops/launchd/run-ai-generate.sh
 
 Expected: Mac Mini equals the merge commit and the active AIVIZENS launchd runner remains executable.
 
-- [ ] **Step 5: Deploy Vercel production explicitly with the configured token**
+- [ ] **Step 5: Verify the automatic Vercel production deployment**
 
-Because automatic GitHub deployment is disconnected, deploy from the synchronized production checkout. Load `/Users/jack/nev-brief/.env`, confirm the token authenticates, explicitly link the existing `nev-brief` project, and deploy production:
+GitHub `main` is the normal production deployment path. Confirm the synchronized checkout is linked to the canonical project before inspecting the automatic deployment:
 
 ```bash
-set -a
-source /Users/jack/nev-brief/.env
-set +a
-NODE_USE_ENV_PROXY=1 npx vercel@latest whoami --token "$VERCEL_TOKEN"
-NODE_USE_ENV_PROXY=1 npx vercel@latest link --yes --project nev-brief --token "$VERCEL_TOKEN"
-NODE_USE_ENV_PROXY=1 npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+cd /Users/jack/nev-brief
+make verify-vercel-target
 ```
 
-Expected: authentication succeeds, the linked project is `nev-brief`, and the deployment reaches `Ready`. Verify the returned production deployment and `https://www.aivizens.com/` both return HTTP 200 before touching the 2026-09-14 row. Never print or persist the token outside `.env` and Vercel's local link metadata.
+Expected: the target is `peterfanhappy-a11y-nev-brief`; its Production deployment reaches `READY`; the deployment SHA equals GitHub `main`; `https://aivizens.com/` returns HTTP 200; and `https://www.aivizens.com/` redirects to the canonical domain. If an explicitly authorized emergency CLI deployment is required, use `make deploy-web-production`; do not relink or invoke bare `vercel --prod` commands.
 
 - [ ] **Step 6: Build the temporary dry-run backfill tool**
 

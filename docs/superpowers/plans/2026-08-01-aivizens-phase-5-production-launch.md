@@ -128,10 +128,10 @@ Required keys include Supabase, Resend, Turnstile, `WEB_BASE_URL=https://aivizen
 
 - [ ] **Step 2: Deploy the tagged commit**
 
-Use the established connected Vercel project. If the repository is Git-connected, promote the deployment built from the recorded commit; otherwise run:
+Use the established connected Vercel project. If the repository is Git-connected, promote the deployment built from the recorded commit. If an explicitly authorized emergency CLI deployment is required, run the guarded repository target:
 
 ```bash
-npx vercel deploy --prod --yes
+make deploy-web-production
 ```
 
 Record deployment ID, commit SHA, project, and domain.
