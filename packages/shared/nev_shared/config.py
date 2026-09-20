@@ -44,7 +44,7 @@ class Settings(BaseSettings):
 
     # Behavior
     crawl_max_qps_per_domain: float = 1.0
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-flash"
     log_level: str = "INFO"
 
 

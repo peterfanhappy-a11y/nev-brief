@@ -141,7 +141,7 @@ def test_root_env_example_constructs_settings_with_code_defaults(
         ai_settings = ai_config.AiSettings(_env_file=env_example)
 
         assert settings.deepseek_base_url == "https://api.deepseek.com"
-        assert settings.deepseek_model == "deepseek-chat"
+        assert settings.deepseek_model == "deepseek-flash"
         assert settings.crawl_max_qps_per_domain == 1.0
         assert settings.log_level == "INFO"
         assert ai_settings.qwen_vl_model == "qwen3.7-plus"

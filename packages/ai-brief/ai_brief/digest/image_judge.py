@@ -1,4 +1,4 @@
-"""Qwen 选图 —— deepseek-chat 是纯文本，判不了图，故这一步用 Qwen 多模态模型。
+"""Qwen 选图 —— DeepSeek 文本模型判不了图，故这一步用 Qwen 多模态模型。
 模型由 QWEN_VL_MODEL 配置（默认 qwen3.7-plus）；须为支持视觉输入的模型，否则回退第0张。
 
 DashScope OpenAI 兼容端点。给候选图 + 各自标题，让模型按标准挑 1 张：
