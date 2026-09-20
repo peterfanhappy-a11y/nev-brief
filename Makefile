@@ -1,4 +1,4 @@
-.PHONY: help install dev down test-unit test-web test-integration lint typecheck verify format clean
+.PHONY: help install dev down test-unit test-web test-integration lint typecheck verify verify-vercel-target deploy-web-production format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
@@ -10,6 +10,8 @@ help:
 	@echo "make lint      # ruff + web eslint"
 	@echo "make typecheck # scoped mypy + web TypeScript"
 	@echo "make verify    # unit tests + lint + typecheck + web production build"
+	@echo "make verify-vercel-target # confirm the local Vercel link is production"
+	@echo "make deploy-web-production # guarded emergency Vercel production deploy"
 	@echo "make format    # ruff format"
 	@echo "make clean     # 清理缓存"
 
@@ -44,6 +46,12 @@ typecheck:
 
 verify: test-unit test-web lint typecheck
 	npm --workspace @nev/web run build
+
+verify-vercel-target:
+	uv run python scripts/ci/verify_vercel_project.py
+
+deploy-web-production: verify-vercel-target
+	npx vercel@latest --prod
 
 format:
 	uv run ruff format packages/

@@ -6,7 +6,7 @@ This inventory records ownership roles and lookup locations only. It must never 
 
 | System | Accountable owner | Authoritative location and lookup procedure |
 | --- | --- | --- |
-| Vercel project | Web production operator | Open the Vercel dashboard project connected to this repository and verify **Settings → General** and **Settings → Environment Variables**. If the checkout has been linked, `.vercel/project.json` is a local lookup aid only and must not be committed. The project name and ID are intentionally not guessed here. |
+| Vercel project | Web production operator | The canonical project is `peterfanhappy-a11y-nev-brief`, connected to this repository with production branch `main`. Before any explicit CLI deploy, run `make verify-vercel-target`; `.vercel/project.json` is local-only and must not be committed. |
 | Supabase project | Data/platform operator | Open the Supabase dashboard project used by the production Vercel deployment and verify **Project Settings → General** and **Database**. Resolve the project reference from the dashboard at launch time; do not copy it or a connection URL into this file. |
 | Resend domain | Email delivery operator | In Resend **Domains**, verify `aivizens.com` is the production domain and that its DNS checks pass. In the sending configuration, verify the sender is `AIVIZENS 趋势 <aivizens.daily@aivizens.com>`. |
 | Gmail digest account | Content-ingestion operator | The exact mailbox is held in the Mac Mini secret store under `AI_GMAIL_IMAP_USER`; its app password is stored separately under `AI_GMAIL_IMAP_PASSWORD`. Manage both through Google Account security and verify read-only ingestion without recording the account identity here. |
@@ -41,6 +41,15 @@ Values live only in the relevant provider secret store, Vercel Production enviro
 | Proxy fallback | `HTTPS_PROXY`, `HTTP_PROXY` | Optional IMAP proxy fallback when `AI_IMAP_PROXY` is unset; managed by the host environment rather than checked-in examples. |
 
 The web deployment uses `packages/web/.env.local.example` as its key-name template. The Mac Mini and Python services use the repository-root `.env.example`. Compare these templates with static code reads before every launch; report key names only.
+
+## Vercel deployment ownership
+
+- Normal production deployment is GitHub-driven: merge a reviewed PR into `main`, wait for Vercel Production to become `READY`, then verify its Git SHA and the live domains.
+- `aivizens.com` is the canonical domain. `www.aivizens.com` must remain on the same project and redirect to the canonical domain.
+- Explicit CLI deployment is an emergency path. Run `make deploy-web-production` from the Mac Mini production checkout; its prerequisite refuses a missing, malformed, or non-production `.vercel/project.json`.
+- Do not run bare `vercel --prod` or `npx vercel --prod`, because they bypass the repository target guard.
+- Roll back within the canonical project to a previously verified deployment. Do not move domains to a legacy project as a rollback mechanism.
+- The former duplicate project is retained as `nev-brief-legacy-do-not-deploy` during a 3–7 day observation period. It must remain disconnected from Git, custom domains, and environment variables. Deletion requires separate explicit authorization after the observation period.
 
 ## Emergency contact and containment
 
