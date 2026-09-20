@@ -40,7 +40,14 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
   await page.mouse.down();
   await page.waitForTimeout(2_100);
   await page.mouse.up();
-  await expect(page.getByRole("heading", { name: "订阅请求已收到" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "订阅请求已收到，请您到邮箱点击确认" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "我们会立即向您的邮箱发送确认链接，若几分钟内未收到，请检查垃圾邮件或稍后重试",
+    ),
+  ).toBeVisible();
 
   await expect
     .poll(async () => (await capturedMessages(request)).length)
@@ -110,6 +117,8 @@ test.describe("touch verification", () => {
       pointerId: 7,
       pointerType: "touch",
     });
-    await expect(page.getByRole("heading", { name: "订阅请求已收到" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "订阅请求已收到，请您到邮箱点击确认" }),
+    ).toBeVisible();
   });
 });

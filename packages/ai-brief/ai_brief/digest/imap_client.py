@@ -91,6 +91,23 @@ def _connect(host: str, port: int, timeout: float) -> imaplib.IMAP4_SSL:
     return imaplib.IMAP4_SSL(host, port, timeout=timeout)
 
 
+def _safe_connection_error(exc: imaplib.IMAP4.abort | OSError) -> str:
+    """Return an allowlisted diagnostic without logging server-controlled text."""
+    if isinstance(exc, imaplib.IMAP4.abort):
+        return "IMAP connection aborted"
+    if isinstance(exc, TimeoutError):
+        return "Connection timed out"
+    if isinstance(exc, socket.gaierror):
+        return "DNS resolution failed"
+    if isinstance(exc, ConnectionResetError):
+        return "Connection reset"
+    if isinstance(exc, ConnectionRefusedError):
+        return "Connection refused"
+    if exc.errno is not None:
+        return f"OS connection error (errno={exc.errno})"
+    return "OS connection error"
+
+
 @dataclass
 class Attachment:
     filename: str
@@ -343,9 +360,14 @@ def fetch_latest(
                 within_hours=within_hours,
                 exact_subject=exact_subject,
             )
-        except (imaplib.IMAP4.abort, OSError):
+        except (imaplib.IMAP4.abort, OSError) as exc:
             if attempt == 2:
                 raise
-            log.warning("ai_imap.retrying_connection", attempt=attempt + 1)
+            log.warning(
+                "ai_imap.retrying_connection",
+                attempt=attempt + 1,
+                error_type=type(exc).__name__,
+                error=_safe_connection_error(exc),
+            )
 
     raise AssertionError("unreachable")
