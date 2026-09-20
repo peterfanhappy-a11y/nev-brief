@@ -191,10 +191,8 @@ STAGE2_TEMPERATURE = 0.4
 CANDIDATE_WINDOW_HOURS = 24
 
 
-# DeepSeek 模型：deepseek-chat 是当前有效的通用模型。不用 settings.deepseek_model
-# （共享 .env 里可能是 NEV 用的别名 deepseek-v4-pro，AI 管线的 API 会拒绝）。
-# 需要覆盖时设 DEEPSEEK_MODEL_AI 环境变量。
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL_AI", "deepseek-chat")
+# DeepSeek 模型：默认使用 Flash，需要覆盖时设 DEEPSEEK_MODEL_AI 环境变量。
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL_AI", "deepseek-flash")
 
 
 def get_model() -> str:

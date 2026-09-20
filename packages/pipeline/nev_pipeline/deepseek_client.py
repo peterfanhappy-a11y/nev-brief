@@ -87,7 +87,7 @@ async def _call(
 async def extract_json_with_retry(
     system: str,
     user: str,
-    model: str = "deepseek-chat",
+    model: str | None = None,
     max_tokens: int = 400,
     temperature: float = 0.0,
 ) -> dict[str, Any] | None:
@@ -98,7 +98,8 @@ async def extract_json_with_retry(
     - Non-JSON response body (model ignored json_object mode)
     """
     try:
-        raw = await _call(system, user, model, max_tokens, temperature)
+        resolved_model = model or get_settings().deepseek_model
+        raw = await _call(system, user, resolved_model, max_tokens, temperature)
     except Exception as exc:  # noqa: BLE001
         log.warning("deepseek_call_failed", error=str(exc))
         return None
