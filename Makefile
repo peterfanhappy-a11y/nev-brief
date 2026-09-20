@@ -46,6 +46,7 @@ typecheck:
 
 verify: test-unit test-web lint typecheck
 	npm --workspace @nev/web run build
+	npm --workspace @nev/web run verify:homepage-isr
 
 verify-vercel-target:
 	uv run python scripts/ci/verify_vercel_project.py

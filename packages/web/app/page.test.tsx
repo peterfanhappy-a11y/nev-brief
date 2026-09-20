@@ -94,19 +94,19 @@ describe("AIVIZENS homepage", () => {
     ).toBeInTheDocument();
   });
 
-  it("fails closed with a distinct unavailable state and a safe diagnostic", async () => {
+  it("fails ISR regeneration without replacing the healthy page cache", async () => {
+    vi.stubEnv("ALLOW_UNAVAILABLE_HOMEPAGE_BUILD", "false");
     mocks.listPublishedBriefs.mockRejectedValueOnce(
       new Error("database failed with secret-token-123"),
     );
     const diagnostic = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    await renderHomepage();
+    const regeneration = AiTrendsHome();
 
-    expect(
-      screen.getByRole("heading", { name: "日报暂时无法加载" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/第一期日报正在准备中/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/secret-token-123/)).not.toBeInTheDocument();
+    await expect(regeneration).rejects.toThrow(
+      "Homepage published briefs unavailable",
+    );
+    await expect(regeneration).rejects.not.toThrow("secret-token-123");
     expect(diagnostic).toHaveBeenCalledTimes(1);
     expect(diagnostic).toHaveBeenCalledWith(
       "[homepage] published briefs unavailable",
@@ -114,5 +114,18 @@ describe("AIVIZENS homepage", () => {
     expect(JSON.stringify(diagnostic.mock.calls)).not.toContain(
       "secret-token-123",
     );
+  });
+
+  it("renders the unavailable state only for an explicit dependency-free build", async () => {
+    vi.stubEnv("ALLOW_UNAVAILABLE_HOMEPAGE_BUILD", "true");
+    mocks.listPublishedBriefs.mockRejectedValueOnce(new Error("offline"));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await renderHomepage();
+
+    expect(
+      screen.getByRole("heading", { name: "日报暂时无法加载" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/第一期日报正在准备中/)).not.toBeInTheDocument();
   });
 });

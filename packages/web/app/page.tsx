@@ -6,7 +6,7 @@ import { BrandIcon } from "@/components/brand-icon";
 import { listPublishedBriefs, type AiBriefSummary } from "@/lib/ai-briefs";
 import { subscriptionsEnabled } from "@/lib/feature-flags";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 const COMPANIES: { slug: string; name: string }[] = [
   { slug: "bytedance", name: "字节跳动" },
@@ -27,8 +27,11 @@ export default async function AiTrendsHome() {
   try {
     briefs = await listPublishedBriefs(1000);
   } catch {
-    briefsUnavailable = true;
     console.error("[homepage] published briefs unavailable");
+    if (process.env.ALLOW_UNAVAILABLE_HOMEPAGE_BUILD !== "true") {
+      throw new Error("Homepage published briefs unavailable");
+    }
+    briefsUnavailable = true;
   }
 
   return (

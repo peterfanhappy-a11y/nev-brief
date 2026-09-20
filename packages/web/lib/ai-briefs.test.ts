@@ -119,6 +119,44 @@ function row(
   };
 }
 
+function summaryRow(
+  briefDate: string,
+  publishedAt: string,
+  storedContent: Record<string, unknown> = content({ brief_date: briefDate }),
+) {
+  const sectionTheme = (key: string) => {
+    const value = storedContent[key];
+    if (!value || typeof value !== "object") return null;
+    const theme = (value as Record<string, unknown>).theme;
+    return typeof theme === "string" ? theme : null;
+  };
+  const opcCase = storedContent.opc_case;
+  const opcCaseHeadline =
+    opcCase && typeof opcCase === "object"
+      ? (opcCase as Record<string, unknown>).headline
+      : null;
+
+  return {
+    brief_date: briefDate,
+    content_brief_date: storedContent.brief_date,
+    published_at: publishedAt,
+    version: String(storedContent.version ?? 1),
+    subject: storedContent.subject,
+    preheader: storedContent.preheader,
+    editorial: storedContent.editorial,
+    opc_case_headline:
+      typeof opcCaseHeadline === "string" ? opcCaseHeadline : null,
+    today_ai_theme: sectionTheme("today_ai"),
+    ai_masters_theme: sectionTheme("ai_masters"),
+    ai_research_theme: sectionTheme("ai_research"),
+    ai_engineering_theme: sectionTheme("ai_engineering"),
+    agent_tools_theme: sectionTheme("agent_tools"),
+    featured: Array.isArray(storedContent.featured)
+      ? storedContent.featured
+      : [],
+  };
+}
+
 describe("isBriefDate", () => {
   it.each(["2026-08-03", "2024-02-29"])("accepts canonical date %s", (value) => {
     expect(isBriefDate(value)).toBe(true);
@@ -314,8 +352,8 @@ describe("published brief queries", () => {
   it("orders validated summaries by brief date when an older issue is backfilled later", async () => {
     const query = new QueryBuilder({
       data: [
-        row("2026-08-03", "2026-08-03T00:00:00.000Z"),
-        row(
+        summaryRow("2026-08-03", "2026-08-03T00:00:00.000Z"),
+        summaryRow(
           "2026-08-02",
           "2026-08-04T00:00:00.000Z",
           content({
@@ -358,10 +396,91 @@ describe("published brief queries", () => {
     expect(query.limit).toHaveBeenCalledWith(6);
   });
 
+  it("loads archive summaries without selecting complete brief content", async () => {
+    const query = new QueryBuilder({
+      data: [
+        {
+          brief_date: "2026-08-03",
+          content_brief_date: "2026-08-03",
+          published_at: "2026-08-03T00:00:00.000Z",
+          version: "3",
+          subject: "Projected subject",
+          preheader: "Projected preheader",
+          editorial: "Projected editorial",
+          opc_case_headline: "Projected OPC case",
+          today_ai_theme: "model_research",
+          ai_masters_theme: "product_tools",
+          ai_research_theme: "ai_research",
+          ai_engineering_theme: null,
+          agent_tools_theme: "agent_tools",
+          featured: [],
+        },
+      ],
+      error: null,
+    });
+    useQueries(query);
+
+    await expect(listPublishedBriefs(1000)).resolves.toEqual([
+      {
+        briefDate: "2026-08-03",
+        subject: "Projected subject",
+        preheader: "Projected preheader",
+        editorial: "Projected editorial",
+        modules: ["OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具"],
+        publishedAt: "2026-08-03T00:00:00.000Z",
+      },
+    ]);
+    expect(query.select).toHaveBeenCalledWith(
+      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
+    );
+  });
+
+  it("keeps a summary whose editorial reaches the Unicode boundary with emoji", async () => {
+    const editorial = "文".repeat(219) + "🚀";
+    useQueries(
+      new QueryBuilder({
+        data: [
+          summaryRow(
+            "2026-08-03",
+            "2026-08-03T00:00:00.000Z",
+            content({ editorial }),
+          ),
+        ],
+        error: null,
+      }),
+    );
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { briefDate: "2026-08-03", editorial },
+    ]);
+  });
+
+  it("preserves a historical v1 module label supplied only by featured items", async () => {
+    useQueries(
+      new QueryBuilder({
+        data: [
+          summaryRow(
+            "2026-08-03",
+            "2026-08-03T00:00:00.000Z",
+            content({
+              today_ai: null,
+              featured: [{ theme_label: "历史精选" }],
+            }),
+          ),
+        ],
+        error: null,
+      }),
+    );
+
+    await expect(listPublishedBriefs()).resolves.toMatchObject([
+      { modules: ["历史精选"] },
+    ]);
+  });
+
   it("lists v2 summaries without the retired engineering module", async () => {
     const query = new QueryBuilder({
       data: [
-        row(
+        summaryRow(
           "2026-08-03",
           "2026-08-03T00:00:00.000Z",
           content({
@@ -383,7 +502,7 @@ describe("published brief queries", () => {
 
   it("lists the v3 OPC case before all four digest module labels", async () => {
     useQueries(new QueryBuilder({
-      data: [row(
+      data: [summaryRow(
         PUBLISHED_BRIEF_V3_RENDERING_CONTENT.brief_date,
         "2026-08-01T01:00:00.000Z",
         PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
@@ -399,12 +518,11 @@ describe("published brief queries", () => {
   it("caps an explicit archive limit at one thousand and drops malformed whole rows", async () => {
     const query = new QueryBuilder({
       data: [
-        row("2026-08-03", "2026-08-03T00:00:00.000Z"),
-        row(
-          "2026-08-02",
-          "2026-08-02T00:00:00.000Z",
-          content({ brief_date: "2026-08-02", intro_bullets: [] }),
-        ),
+        summaryRow("2026-08-03", "2026-08-03T00:00:00.000Z"),
+        {
+          ...summaryRow("2026-08-02", "2026-08-02T00:00:00.000Z"),
+          content_brief_date: "2026-08-01",
+        },
       ],
       error: null,
     });
