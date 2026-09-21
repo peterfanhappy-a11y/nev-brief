@@ -70,6 +70,21 @@ async def test_extract_json_success(respx_mock):
 
 @respx.mock(assert_all_called=False)
 @pytest.mark.asyncio
+async def test_extract_json_can_disable_thinking(respx_mock):
+    route = respx_mock.post("https://api.deepseek.com/chat/completions").mock(
+        return_value=_completion('{"ok":true}')
+    )
+
+    with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
+        result = await extract_json_with_retry("sys", "user", thinking=False)
+
+    assert result == {"ok": True}
+    request_body = json.loads(route.calls.last.request.content)
+    assert request_body["thinking"] == {"type": "disabled"}
+
+
+@respx.mock(assert_all_called=False)
+@pytest.mark.asyncio
 async def test_extract_json_invalid_returns_none(respx_mock):
     route = respx_mock.post("https://api.deepseek.com/chat/completions").mock(
         return_value=_completion("not valid json {{")

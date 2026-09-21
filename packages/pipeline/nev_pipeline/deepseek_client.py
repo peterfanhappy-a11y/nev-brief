@@ -77,7 +77,13 @@ async def _call(
     model: str,
     max_tokens: int,
     temperature: float,
+    thinking: bool | None,
 ) -> dict[str, Any]:
+    extra_body: dict[str, Any] | None = None
+    if thinking is not None:
+        extra_body = {
+            "thinking": {"type": "enabled" if thinking else "disabled"}
+        }
     resp = await _client().chat.completions.create(
         model=model,
         messages=[
@@ -87,6 +93,7 @@ async def _call(
         response_format={"type": "json_object"},
         max_tokens=max_tokens,
         temperature=temperature,
+        extra_body=extra_body,
     )
     choice = resp.choices[0]
     raw = choice.message.content or ""
@@ -112,6 +119,7 @@ async def extract_json_with_retry(
     model: str | None = None,
     max_tokens: int = 400,
     temperature: float = 0.0,
+    thinking: bool | None = None,
 ) -> dict[str, Any] | None:
     """Call DeepSeek with JSON mode. Returns parsed dict, or None on any failure.
 
@@ -122,7 +130,9 @@ async def extract_json_with_retry(
     """
     try:
         resolved_model = model or get_settings().deepseek_model
-        return await _call(system, user, resolved_model, max_tokens, temperature)
+        return await _call(
+            system, user, resolved_model, max_tokens, temperature, thinking
+        )
     except Exception as exc:  # noqa: BLE001
         log.warning("deepseek_call_failed", error=str(exc))
         return None
