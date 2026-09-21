@@ -29,13 +29,19 @@ from tenacity import (
     wait_exponential,
 )
 
-# Retry only transient errors. Auth / bad-request / quota errors fail fast
-# (no point waiting through exponential backoff when the key is wrong).
+
+class _RetryableResponseError(Exception):
+    """DeepSeek returned a successful HTTP response with unusable JSON content."""
+
+
+# Retry transient transport errors and unusable model responses. Auth / bad-request /
+# quota errors still fail fast (no point waiting when the request itself is invalid).
 _RETRYABLE = (
     APIConnectionError,
     APITimeoutError,
     InternalServerError,
     RateLimitError,
+    _RetryableResponseError,
 )
 
 log = get_logger("deepseek")
@@ -54,6 +60,7 @@ def _client() -> AsyncOpenAI:
     return AsyncOpenAI(
         api_key=s.deepseek_api_key,
         base_url=s.deepseek_base_url,
+        max_retries=0,
         http_client=httpx.AsyncClient(trust_env=False),
     )
 
@@ -70,7 +77,7 @@ async def _call(
     model: str,
     max_tokens: int,
     temperature: float,
-) -> str:
+) -> dict[str, Any]:
     resp = await _client().chat.completions.create(
         model=model,
         messages=[
@@ -81,7 +88,22 @@ async def _call(
         max_tokens=max_tokens,
         temperature=temperature,
     )
-    return resp.choices[0].message.content or ""
+    choice = resp.choices[0]
+    raw = choice.message.content or ""
+    if choice.finish_reason != "stop":
+        log.warning(
+            "deepseek_response_incomplete",
+            finish_reason=choice.finish_reason,
+            raw_preview=raw[:200],
+        )
+        raise _RetryableResponseError(
+            f"unexpected finish_reason: {choice.finish_reason}"
+        )
+    try:
+        return cast(dict[str, Any], json.loads(raw))
+    except json.JSONDecodeError as exc:
+        log.warning("deepseek_json_parse_failed", error=str(exc), raw_preview=raw[:200])
+        raise _RetryableResponseError("invalid JSON response") from exc
 
 
 async def extract_json_with_retry(
@@ -93,18 +115,14 @@ async def extract_json_with_retry(
 ) -> dict[str, Any] | None:
     """Call DeepSeek with JSON mode. Returns parsed dict, or None on any failure.
 
-    Failure modes that return None:
-    - API errors after retries (5xx, network, etc.)
-    - Non-JSON response body (model ignored json_object mode)
+    Failure modes that return None after three total attempts:
+    - Transient API errors (5xx, network, etc.)
+    - Empty, truncated, or otherwise non-JSON response content
+    - A non-stop finish reason such as ``length`` or ``content_filter``
     """
     try:
         resolved_model = model or get_settings().deepseek_model
-        raw = await _call(system, user, resolved_model, max_tokens, temperature)
+        return await _call(system, user, resolved_model, max_tokens, temperature)
     except Exception as exc:  # noqa: BLE001
         log.warning("deepseek_call_failed", error=str(exc))
-        return None
-    try:
-        return cast(dict[str, Any], json.loads(raw))
-    except json.JSONDecodeError as exc:
-        log.warning("deepseek_json_parse_failed", error=str(exc), raw_preview=raw[:200])
         return None

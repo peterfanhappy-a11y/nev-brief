@@ -17,6 +17,25 @@ def _settings() -> SimpleNamespace:
     )
 
 
+def _completion(content: str, *, finish_reason: str = "stop") -> Response:
+    return Response(
+        200,
+        json={
+            "id": "x",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-flash",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": finish_reason,
+                }
+            ],
+        },
+    )
+
+
 @respx.mock(assert_all_called=False)
 @pytest.mark.asyncio
 async def test_extract_json_success(respx_mock):
@@ -44,6 +63,7 @@ async def test_extract_json_success(respx_mock):
     with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
         result = await extract_json_with_retry("sys prompt", "user prompt")
     assert result == {"brands": ["BYD"], "topics": ["new_car"]}
+    assert len(route.calls) == 1
     request_body = json.loads(route.calls.last.request.content)
     assert request_body["model"] == "deepseek-flash"
 
@@ -52,27 +72,49 @@ async def test_extract_json_success(respx_mock):
 @pytest.mark.asyncio
 async def test_extract_json_invalid_returns_none(respx_mock):
     route = respx_mock.post("https://api.deepseek.com/chat/completions").mock(
-        return_value=Response(
-            200,
-            json={
-                "id": "x",
-                "object": "chat.completion",
-                "created": 0,
-                "model": "deepseek-flash",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {"role": "assistant", "content": "not valid json {{"},
-                        "finish_reason": "stop",
-                    }
-                ],
-            },
-        )
+        return_value=_completion("not valid json {{")
     )
     with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
         result = await extract_json_with_retry("sys", "user")
     assert result is None
-    assert route.called
+    assert len(route.calls) == 3
+
+
+@pytest.mark.parametrize("invalid_content", ['{"subject":"truncated', ""])
+@respx.mock(assert_all_called=False)
+@pytest.mark.asyncio
+async def test_extract_json_retries_invalid_content_then_recovers(
+    respx_mock, invalid_content: str
+):
+    route = respx_mock.post("https://api.deepseek.com/chat/completions").mock(
+        side_effect=[
+            _completion(invalid_content),
+            _completion('{"subject":"complete"}'),
+        ]
+    )
+
+    with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
+        result = await extract_json_with_retry("sys", "user")
+
+    assert result == {"subject": "complete"}
+    assert len(route.calls) == 2
+
+
+@respx.mock(assert_all_called=False)
+@pytest.mark.asyncio
+async def test_extract_json_retries_non_stop_finish_reason(respx_mock):
+    route = respx_mock.post("https://api.deepseek.com/chat/completions").mock(
+        side_effect=[
+            _completion('{"subject":"partial"}', finish_reason="length"),
+            _completion('{"subject":"complete"}'),
+        ]
+    )
+
+    with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
+        result = await extract_json_with_retry("sys", "user")
+
+    assert result == {"subject": "complete"}
+    assert len(route.calls) == 2
 
 
 @respx.mock(assert_all_called=False)
@@ -85,7 +127,7 @@ async def test_extract_json_api_error_returns_none(respx_mock):
     with patch("nev_pipeline.deepseek_client.get_settings", return_value=_settings()):
         result = await extract_json_with_retry("sys", "user")
     assert result is None
-    assert route.called
+    assert len(route.calls) == 3
 
 
 @pytest.mark.asyncio
