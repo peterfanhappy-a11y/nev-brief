@@ -368,6 +368,47 @@ async def test_agent_invalid_output_reports_incomplete_when_rank_fallback_builds
     assert [story.headline for story in result.value] == ["tool-1", "tool-2", "tool-3"]
 
 
+async def test_digest_deepseek_calls_use_non_thinking_mode_and_4096_tokens() -> None:
+    events = [
+        EventItem(
+            index=index,
+            category="海外新闻",
+            value_tag="",
+            headline=f"Headline {index}",
+            url=f"https://example.com/events/{index}",
+            body=f"Body {index}",
+            image_note="",
+        )
+        for index in range(1, 6)
+    ]
+    paper = ResearchPaper(
+        source_tag="Arxiv",
+        title="Research title",
+        takeaways=["Takeaway one"],
+        url="https://arxiv.org/abs/1234.5678",
+    )
+    tools = [
+        AgentTool(
+            rank=rank,
+            name=f"tool-{rank}",
+            stars="10",
+            points=[f"point-{rank}"],
+            url=f"https://github.com/example/tool-{rank}",
+        )
+        for rank in range(1, 4)
+    ]
+    deepseek = AsyncMock(side_effect=[{}, {}, {}, {}])
+
+    with patch.object(condenser, "extract_json_with_retry", new=deepseek):
+        await condenser.condense_today_ai(events)
+        await condenser.select_masters(list(_items().values()))
+        await condenser.condense_research(paper)
+        await condenser.select_agent_tools(tools)
+
+    assert [call.kwargs["max_tokens"] for call in deepseek.await_args_list] == [4096] * 4
+    assert [call.kwargs["thinking"] for call in deepseek.await_args_list] == [False] * 4
+
+
 def test_filter_agent_tools_excludes_requested_repositories() -> None:
     tools = [
         AgentTool(rank=1, name="openai/codex", stars="", points=[], url="https://github.com/openai/codex"),

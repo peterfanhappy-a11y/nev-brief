@@ -85,7 +85,8 @@ async def condense_today_ai(items: list[EventItem]) -> ModelOutcome[TodayAIResul
         return None
     raw = await extract_json_with_retry(
         _TODAY_AI_SYSTEM, _today_ai_prompt(items),
-        model=config.get_model(), max_tokens=2000, temperature=0.4,
+        model=config.get_model(), max_tokens=config.DIGEST_MAX_TOKENS,
+        temperature=0.4, thinking=False,
     )
     if raw is None:
         log.error("ai_condenser.today_ai_failed")
@@ -193,7 +194,8 @@ async def select_masters(
     by_idx = {it.index: it for it in items}
     raw = await extract_json_with_retry(
         _MASTERS_SYSTEM, _masters_prompt(items),
-        model=config.get_model(), max_tokens=2000, temperature=0.4,
+        model=config.get_model(), max_tokens=config.DIGEST_MAX_TOKENS,
+        temperature=0.4, thinking=False,
     )
     if raw is None:
         log.error("ai_condenser.masters_failed")
@@ -259,7 +261,8 @@ async def condense_research(paper: ResearchPaper) -> ModelOutcome[DigestStory] |
     joined = "\n".join(f"{i+1}) {t}" for i, t in enumerate(paper.takeaways))
     prompt = f"标题：{paper.title}\nCore Takeaways：\n{joined}"
     raw = await extract_json_with_retry(
-        _RESEARCH_SYSTEM, prompt, model=config.get_model(), max_tokens=1200, temperature=0.4,
+        _RESEARCH_SYSTEM, prompt, model=config.get_model(),
+        max_tokens=config.DIGEST_MAX_TOKENS, temperature=0.4, thinking=False,
     )
     summary = ""
     if raw is not None:
@@ -343,8 +346,9 @@ async def select_agent_tools(
         _AGENT_SYSTEM,
         _agent_prompt(tools),
         model=config.get_model(),
-        max_tokens=1500,
+        max_tokens=config.DIGEST_MAX_TOKENS,
         temperature=0.4,
+        thinking=False,
     )
     picks: list[tuple[int, str]] = []
     if raw is not None and isinstance(raw.get("picks"), list):
