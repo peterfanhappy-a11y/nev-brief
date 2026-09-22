@@ -96,12 +96,40 @@ export async function sendAiUnsubscribeEmail(
   const idempotencyKey = `ai-unsubscribe:${createHash("sha256")
     .update(unsubscribeToken)
     .digest("hex")}`;
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8" /></head>
+<body style="margin:0;padding:0;font-family:-apple-system,'PingFang SC',sans-serif;background:#f4f5f7;">
+<table align="center" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:24px auto;border-radius:8px;">
+  <tr><td style="background:#4F46E5;padding:24px;color:#ffffff;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;font-size:20px;">确认退订 AIVIZENS · AI 趋势</h2>
+  </td></tr>
+  <tr><td style="padding:24px;color:#333;font-size:15px;line-height:1.7;">
+    <p>我们收到了你的退订请求。只有点击下方按钮后，我们才会停止发送 AI 日报：</p>
+    <p style="margin:28px 0;text-align:center;">
+      <a href="${unsubscribeUrl}" style="display:inline-block;background:#4F46E5;color:#ffffff;text-decoration:none;font-weight:600;padding:12px 28px;border-radius:8px;">确认退订</a>
+    </p>
+    <p>如果不是你发起的退订请求，可以忽略此邮件，你的订阅不会受到影响。</p>
+  </td></tr>
+  <tr><td style="background:#f4f5f7;padding:16px 24px;color:#999;font-size:12px;text-align:center;border-radius:0 0 8px 8px;">
+    © 2026 AIVIZENS
+  </td></tr>
+</table>
+</body></html>`;
+
+  const text = `确认退订 AIVIZENS · AI 趋势
+
+我们收到了你的退订请求。只有打开以下链接确认后，我们才会停止发送 AI 日报：
+${unsubscribeUrl}
+
+如果不是你发起的退订请求，可以忽略此邮件，你的订阅不会受到影响。
+
+© 2026 AIVIZENS`;
   const message = {
     from: `AIVIZENS 趋势 <${fromEmail}>`,
     to,
     subject: "确认退订 AIVIZENS · AI 趋势",
-    html: `<p>请点击以下链接确认退订 AIVIZENS · AI 趋势：</p><p><a href="${unsubscribeUrl}">确认退订</a></p>`,
-    text: `请打开以下链接确认退订 AIVIZENS · AI 趋势：\n${unsubscribeUrl}`,
+    html,
+    text,
   };
   const resend = new Resend(apiKey);
 

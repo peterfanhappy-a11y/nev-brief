@@ -85,7 +85,7 @@ describe("AI subscription form", () => {
   it("automatically submits after a two-second verification hold", async () => {
     vi.useFakeTimers();
     vi.mocked(fetch).mockResolvedValue(
-      new Response(JSON.stringify({ ok: true, message: "check_email" }), {
+      new Response(JSON.stringify({ ok: true, message: "subscribed" }), {
         status: 202,
         headers: { "content-type": "application/json" },
       }),
@@ -115,11 +115,11 @@ describe("AI subscription form", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
     expect(
-      await screen.findByText("订阅请求已收到，请您到邮箱点击确认"),
+      await screen.findByText("恭喜您，您的订阅请求已经确认！"),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "我们会立即向您的邮箱发送确认链接，若几分钟内未收到，请检查垃圾邮件或稍后重试",
+        "我们每日将以aivizens.daily@aivizens.com邮箱给您发送邮件，如果您未收到，请检查是否被归类为垃圾邮件",
       ),
     ).toBeInTheDocument();
   });
@@ -205,7 +205,7 @@ describe("AI subscription form", () => {
     vi.useRealTimers();
     expect(await screen.findByText("rate_limited")).toBeInTheDocument();
     expect(
-      screen.queryByText("订阅请求已收到，请您到邮箱点击确认"),
+      screen.queryByText("恭喜您，您的订阅请求已经确认！"),
     ).not.toBeInTheDocument();
   });
 
