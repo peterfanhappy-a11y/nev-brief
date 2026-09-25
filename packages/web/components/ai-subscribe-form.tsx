@@ -158,10 +158,10 @@ export default function AiSubscribeForm({
     return (
       <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-6 text-center">
         <h3 className="mb-2 text-xl font-bold text-indigo-700">
-          订阅请求已收到，请您到邮箱点击确认
+          恭喜您，您的订阅请求已经确认！
         </h3>
         <p className="text-sm text-gray-700">
-          我们会立即向您的邮箱发送确认链接，若几分钟内未收到，请检查垃圾邮件或稍后重试
+          我们每日将以aivizens.daily@aivizens.com邮箱给您发送邮件，如果您未收到，请检查是否被归类为垃圾邮件
         </p>
       </div>
     );

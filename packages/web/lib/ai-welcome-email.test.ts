@@ -23,7 +23,7 @@ afterEach(() => {
 });
 
 describe("AI welcome email", () => {
-  it("sends a secure unsubscribe link", async () => {
+  it("sends a branded unsubscribe confirmation with a clear action and safety copy", async () => {
     vi.stubEnv("RESEND_API_KEY", "production-resend-key");
     const { sendAiUnsubscribeEmail } = await import("./ai-welcome-email");
 
@@ -33,10 +33,19 @@ describe("AI welcome email", () => {
     );
 
     const [message] = resendMocks.send.mock.calls[0];
-    expect(message.subject).toContain("退订");
+    expect(message.subject).toBe("确认退订 AIVIZENS · AI 趋势");
+    expect(message.html).toContain("<!DOCTYPE html>");
+    expect(message.html).toContain("确认退订 AIVIZENS · AI 趋势");
+    expect(message.html).toContain("只有点击下方按钮后，我们才会停止发送 AI 日报");
+    expect(message.html).toContain("如果不是你发起的退订请求，可以忽略此邮件，你的订阅不会受到影响");
+    expect(message.html).toContain("background:#4F46E5");
+    expect(message.html).toContain("© 2026 AIVIZENS");
     expect(message.html).toContain(
       "https://aivizens.test/unsubscribe?token=11111111-1111-4111-8111-111111111111&product=ai",
     );
+    expect(message.html).toContain(">确认退订</a>");
+    expect(message.text).toContain("只有打开以下链接确认后，我们才会停止发送 AI 日报");
+    expect(message.text).toContain("如果不是你发起的退订请求，可以忽略此邮件，你的订阅不会受到影响");
     expect(message.text).toContain(
       "https://aivizens.test/unsubscribe?token=11111111-1111-4111-8111-111111111111&product=ai",
     );

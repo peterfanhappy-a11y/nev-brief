@@ -23,7 +23,7 @@ function messageLink(message: CapturedEmail): string {
   return match![0];
 }
 
-test("fresh reader confirms and explicitly unsubscribes through the browser", async ({
+test("fresh reader subscribes immediately and explicitly unsubscribes through the browser", async ({
   page,
   request,
 }) => {
@@ -41,34 +41,26 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
   await page.waitForTimeout(2_100);
   await page.mouse.up();
   await expect(
-    page.getByRole("heading", { name: "订阅请求已收到，请您到邮箱点击确认" }),
+    page.getByRole("heading", { name: "恭喜您，您的订阅请求已经确认！" }),
   ).toBeVisible();
   await expect(
     page.getByText(
-      "我们会立即向您的邮箱发送确认链接，若几分钟内未收到，请检查垃圾邮件或稍后重试",
+      "我们每日将以aivizens.daily@aivizens.com邮箱给您发送邮件，如果您未收到，请检查是否被归类为垃圾邮件",
     ),
   ).toBeVisible();
 
   await expect
     .poll(async () => (await capturedMessages(request)).length)
     .toBeGreaterThanOrEqual(1);
-  const confirmation = (await capturedMessages(request)).find(
-    (message) => message.body.to === email && message.body.subject.includes("确认订阅"),
-  );
-  expect(confirmation).toBeDefined();
-
-  await page.goto(messageLink(confirmation!));
-  await expect(page.getByRole("heading", { name: "确认订阅" })).toBeVisible();
-  await page.getByRole("button", { name: "确认订阅" }).click();
-  await expect(page.getByRole("heading", { name: "订阅确认成功" })).toBeVisible();
-
-  await expect
-    .poll(async () => (await capturedMessages(request)).length)
-    .toBeGreaterThanOrEqual(2);
   const welcome = (await capturedMessages(request)).find(
     (message) => message.body.to === email && message.body.subject.includes("欢迎加入"),
   );
   expect(welcome).toBeDefined();
+  expect(
+    (await capturedMessages(request)).some(
+      (message) => message.body.to === email && message.body.subject.includes("确认订阅"),
+    ),
+  ).toBe(false);
 
   await page.goto("/unsubscribe");
   await page.getByLabel("订阅邮箱").fill(email);
@@ -77,7 +69,7 @@ test("fresh reader confirms and explicitly unsubscribes through the browser", as
 
   await expect
     .poll(async () => (await capturedMessages(request)).length)
-    .toBeGreaterThanOrEqual(3);
+    .toBeGreaterThanOrEqual(2);
   const unsubscribe = (await capturedMessages(request)).find(
     (message) => message.body.to === email && message.body.subject.includes("确认退订"),
   );
@@ -118,7 +110,7 @@ test.describe("touch verification", () => {
       pointerType: "touch",
     });
     await expect(
-      page.getByRole("heading", { name: "订阅请求已收到，请您到邮箱点击确认" }),
+      page.getByRole("heading", { name: "恭喜您，您的订阅请求已经确认！" }),
     ).toBeVisible();
   });
 });
