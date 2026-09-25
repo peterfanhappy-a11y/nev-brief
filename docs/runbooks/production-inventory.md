@@ -18,9 +18,9 @@ This inventory records ownership roles and lookup locations only. It must never 
 | --- | --- | --- |
 | Repository | Mac Mini operator | Canonical operational default: `$HOME/nev-brief` (equivalently `/Users/<operator>/nev-brief`). Confirm the resolved `PROJECT_ROOT` before installation or recovery; a different path must be supplied explicitly. |
 | Secret environment | Mac Mini operator | `$PROJECT_ROOT/.env`, mode `0600`, populated from the key contract below. Never print the file or its values during verification. |
-| Current AIVIZENS schedule | Mac Mini operator | launchd label `com.aivizens.ai-daily`; template `ops/launchd/com.aivizens.ai-daily.plist`; installed plist `$HOME/Library/LaunchAgents/com.aivizens.ai-daily.plist`. |
+| Current AIVIZENS schedule | Mac Mini operator | launchd label `com.aivizens.ai-generate`; template `ops/launchd/com.aivizens.ai-generate.plist`; installed plist `$HOME/Library/LaunchAgents/com.aivizens.ai-generate.plist`. |
 | Retained NEV schedule | Mac Mini operator | launchd label `com.nev.daily`; template `ops/launchd/com.nev.daily.plist`. Phase 0 retains this code and schedule contract. |
-| Logs | Mac Mini operator | `$PROJECT_ROOT/logs/`; AIVIZENS dated run logs use `ai-daily-YYYYMMDD.log`, with launchd stdout/stderr in `ai-daily.out.log` and `ai-daily.err.log`. NEV logs remain in the same directory during Phase 0. |
+| Logs | Mac Mini operator | `$PROJECT_ROOT/logs/`; AIVIZENS dated run logs use `ai-generate-YYYYMMDD.log`, with launchd stdout/stderr in `ai-generate.out.log` and `ai-generate.err.log`. NEV logs remain in the same directory during Phase 0. |
 
 ## Environment key contract
 
@@ -35,6 +35,7 @@ Values live only in the relevant provider secret store, Vercel Production enviro
 | Gmail IMAP | `AI_DIGEST_SENDER`, `AI_GMAIL_IMAP_HOST`, `AI_GMAIL_IMAP_USER`, `AI_GMAIL_IMAP_PASSWORD`, `AI_IMAP_PROXY` | Digest mailbox selection and network access. |
 | AI assets/delivery | `AI_IMAGE_BUCKET`, `AI_EMAIL_SEND_ENABLED` | Image storage and the explicit Resend send kill switch. Delivery idempotency is fixed as `aivizens-{brief_date}-{subscriber_id}`. |
 | Web | `WEB_BASE_URL`, `NEXT_PUBLIC_WEB_BASE_URL` | Server-side and browser-visible canonical web origins. |
+| Homepage cache refresh | `HOMEPAGE_REVALIDATE_SECRET`, `HOMEPAGE_REFRESH_BASE_URL` | Shared server-only Vercel/Mac Mini secret and the public `www` origin used for post-release cache invalidation, warming, and date verification. |
 | Subscription abuse limit | `SUBSCRIPTION_HASH_SECRET` | Server-only HMAC key for the AI subscription rate limiter. |
 | Monitoring/admin | `FEISHU_WEBHOOK_URL`, `SENTRY_DSN`, `HEALTHCHECKS_PING_URL`, `ADMIN_TOKEN` | Alerts, error reporting, health pings, and admin authentication. |
 | Runtime behavior | `CRAWL_MAX_QPS_PER_DOMAIN`, `LOG_LEVEL`, `RSSHUB_BASE_URL` | Crawl rate, logging level, and RSSHub endpoint. |
@@ -45,7 +46,7 @@ The web deployment uses `packages/web/.env.local.example` as its key-name templa
 ## Vercel deployment ownership
 
 - Normal production deployment is GitHub-driven: merge a reviewed PR into `main`, wait for Vercel Production to become `READY`, then verify its Git SHA and the live domains.
-- `aivizens.com` is the canonical domain. `www.aivizens.com` must remain on the same project and redirect to the canonical domain.
+- `aivizens.com` is the canonical domain. `www.aivizens.com` must remain on the same project and return the same application directly; canonical metadata continues to point to `aivizens.com`.
 - Explicit CLI deployment is an emergency path. Run `make deploy-web-production` from the Mac Mini production checkout; its prerequisite refuses a missing, malformed, or non-production `.vercel/project.json`.
 - Do not run bare `vercel --prod` or `npx vercel --prod`, because they bypass the repository target guard.
 - Roll back within the canonical project to a previously verified deployment. Do not move domains to a legacy project as a rollback mechanism.

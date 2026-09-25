@@ -44,7 +44,8 @@ rm ~/Library/LaunchAgents/com.aivizens.ai-generate.plist
 ## 文件说明
 
 - `com.aivizens.ai-generate.plist` — 08:10/09:10/10:10 三次幂等重试模板
-- `run-ai-generate.sh` — `generate → approve → release → deliver` 完整周期 runner
+- `run-ai-generate.sh` — `generate → approve → release → refresh homepage → deliver` 完整周期 runner
+- `refresh-ai-homepage.sh` — 发布后让 Vercel 首页缓存失效，预热并验证当天日报链接
 - `install-ai-daily.sh` — 一键安装 AIVIZENS 任务
 - `README.md` — 你正在看的这个
 
@@ -54,7 +55,10 @@ rm ~/Library/LaunchAgents/com.aivizens.ai-generate.plist
 - Sleep 时 launchd 不会主动唤醒 Mac，任务可能延迟到下次唤醒后运行；本次按运营约定暂不修改系统休眠设置。
 - 任务启动后由 `caffeinate -s` 保持系统唤醒，直到生成、审批、发布和投递全部结束。
 - `.env` 必须在 `PROJECT_ROOT` 根目录（orchestrator 通过 dotenv 加载）
+- `HOMEPAGE_REVALIDATE_SECRET` 必须与 Vercel Production 同名变量完全一致；使用随机 32 字节以上密钥，不得提交到仓库。
+- `HOMEPAGE_REFRESH_BASE_URL` 生产值为 `https://www.aivizens.com`；canonical 仍由网站配置保持为 `https://aivizens.com`。
 - 完整周期在 08:10、09:10、10:10 重试；每一步只有在上一步以 0 退出时才继续。
+- 发布成功后刷新器最多检查首页 3 次。刷新失败会写入当日日志但不会阻断邮件发送，并会在后续周期再次尝试。
 - 发布与投递不再依赖固定的 release 时刻；请确认 `PROJECT_ROOT/.env` 中 `AI_EMAIL_SEND_ENABLED=true` 才会实际发送。
 - 已发布日期会幂等跳过生成和发布；临时发送失败会在后续周期重新排队，最多重试 3 次。
 - 质量阻断或生成失败时不会审批、发布或发送；失败详情写入 `logs/ai-generate-YYYYMMDD.log`。

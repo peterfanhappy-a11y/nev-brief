@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 PROJECT_ROOT="${PROJECT_ROOT:-$HOME/nev-brief}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REFRESH_BIN="$SCRIPT_DIR/refresh-ai-homepage.sh"
 LOG_DIR="$PROJECT_ROOT/logs"
 LOG_FILE="$LOG_DIR/ai-generate-$(TZ=Asia/Shanghai date +%Y%m%d).log"
 mkdir -p "$LOG_DIR"
@@ -31,6 +33,12 @@ if [[ "$code" -eq 0 ]]; then
     TZ=Asia/Shanghai "$UV_BIN" run python -m ai_brief release --date "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE"
     code=${PIPESTATUS[0]}
     echo "[$(date -u +%FT%TZ)] release finished exit=$code" | tee -a "$LOG_FILE"
+fi
+if [[ "$code" -eq 0 ]]; then
+    echo "[$(date -u +%FT%TZ)] homepage refresh starting" | tee -a "$LOG_FILE"
+    refresh_code=0
+    "$REFRESH_BIN" "$RUN_DATE" 2>&1 | tee -a "$LOG_FILE" || refresh_code=${PIPESTATUS[0]}
+    echo "[$(date -u +%FT%TZ)] homepage refresh finished exit=$refresh_code" | tee -a "$LOG_FILE"
 fi
 if [[ "$code" -eq 0 ]]; then
     echo "[$(date -u +%FT%TZ)] deliver starting" | tee -a "$LOG_FILE"

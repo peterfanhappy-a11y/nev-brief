@@ -1,4 +1,4 @@
-.PHONY: help install dev down test-unit test-web test-integration lint typecheck verify verify-vercel-target deploy-web-production format clean
+.PHONY: help install dev down test-unit test-web test-ops test-integration lint typecheck verify verify-vercel-target deploy-web-production format clean
 
 help:
 	@echo "make install   # 安装所有依赖 (uv + npm)"
@@ -6,6 +6,7 @@ help:
 	@echo "make down      # 停止 docker-compose"
 	@echo "make test-unit        # 跑默认 Python 单元测试"
 	@echo "make test-web         # 跑 Web Vitest 单元测试"
+	@echo "make test-ops         # 跑发布后首页刷新契约测试"
 	@echo "make test-integration # 跑 Python 集成测试"
 	@echo "make lint      # ruff + web eslint"
 	@echo "make typecheck # scoped mypy + web TypeScript"
@@ -33,6 +34,9 @@ test-unit:
 test-web:
 	npm --workspace @nev/web run test
 
+test-ops:
+	bash ops/launchd/test-homepage-refresh.sh
+
 test-integration:
 	uv run pytest -c pyproject.toml packages tests -m integration -q
 
@@ -44,7 +48,7 @@ typecheck:
 	uv run mypy packages/ai-brief packages/shared
 	npm --workspace @nev/web run typecheck
 
-verify: test-unit test-web lint typecheck
+verify: test-unit test-web test-ops lint typecheck
 	npm --workspace @nev/web run build
 	npm --workspace @nev/web run verify:brand-assets
 	npm --workspace @nev/web run verify:homepage-isr
