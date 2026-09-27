@@ -11,7 +11,13 @@ from selectolax.parser import HTMLParser, Node
 from ai_brief.digest.models import OpcCaseCandidate, Revenue
 
 _HEADER_RE = re.compile(r"^案例\s*(\d+)\s*·\s*([^：]+?)\s*：\s*(.+)$")
-_INCOME_LABEL_RE = re.compile(r"^收入\s*[:：]\s*")
+_FIELD_RE = re.compile(r"^(案例背景|解决方案|案例启示|收入)\s*[:：]\s*(.*)$")
+_FIELD_NAMES = {
+    "案例背景": "background",
+    "解决方案": "solution",
+    "案例启示": "insight",
+    "收入": "revenue",
+}
 _REVENUE_RE = re.compile(
     r"^(?P<currency>US\$|USD|美元|\$|EUR|欧元|€|GBP|英镑|£|CNY|RMB|人民币|JPY|日元|[A-Z]{3})\s*"
     r"(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*"
@@ -81,24 +87,35 @@ def parse_opc_digest(html: str) -> list[OpcCaseCandidate]:
         if index not in {1, 2}:
             continue
         sharer, headline = header.group(2).strip(), header.group(3).strip()
-        body = ""
-        revenue: Revenue | None = None
+        fields: dict[str, list[str]] = {name: [] for name in _FIELD_NAMES.values()}
         url = ""
         for sibling in _element_siblings_after(h3):
             text = _clean(sibling.text())
-            if sibling.tag == "p" and _INCOME_LABEL_RE.match(text):
-                income_text = _INCOME_LABEL_RE.sub("", text, count=1)
-                revenue = parse_revenue(income_text)
-            elif sibling.tag == "p" and not body and sibling.css_first("a") is None:
-                body = text
+            if field_match := _FIELD_RE.fullmatch(text):
+                field_name = _FIELD_NAMES[field_match.group(1)]
+                fields[field_name].append(_clean(field_match.group(2)))
             if not url:
                 for anchor in sibling.css("a"):
                     href = (anchor.attributes.get("href") or "").strip()
                     if href.startswith("https://"):
                         url = href
                         break
-        if sharer and headline and body and revenue is not None and url:
-            candidates.append(OpcCaseCandidate(index, sharer, headline, body, revenue, url))
+        if not all(len(values) == 1 and values[0] for values in fields.values()):
+            continue
+        revenue = parse_revenue(fields["revenue"][0])
+        if sharer and headline and revenue is not None and url:
+            candidates.append(
+                OpcCaseCandidate(
+                    index=index,
+                    sharer=sharer,
+                    headline=headline,
+                    background=fields["background"][0],
+                    solution=fields["solution"][0],
+                    insight=fields["insight"][0],
+                    revenue=revenue,
+                    url=url,
+                )
+            )
 
     return sorted(
         (candidate for candidate in candidates if header_counts[candidate.index] == 1),
