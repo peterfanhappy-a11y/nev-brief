@@ -15,7 +15,7 @@ from nev_shared.logger import get_logger
 from pydantic import ValidationError
 
 from ai_brief import composer, config, storage
-from ai_brief.digest.generate import DigestBundle, build_digest_modules, build_editorial
+from ai_brief.digest.generate import DigestBundle, build_digest_modules, build_v4_editorial
 from ai_brief.digest.gmail_input import GmailDigestAdapter
 from ai_brief.digest.input import DigestEnvelope, DigestInputAdapter, DigestKind
 from ai_brief.quality import QualityReport, validate_brief
@@ -24,7 +24,7 @@ from ai_brief.schema import (
     BriefStatus,
     DigestSection,
     YesterdayTop,
-    build_v3_intro_bullets,
+    build_v4_intro_bullets,
 )
 
 log = get_logger("ai_brief.runner")
@@ -108,7 +108,7 @@ def _module_count(bundle: DigestBundle) -> int:
         for section in (
             bundle.today_ai,
             bundle.ai_masters,
-            bundle.opc_case,
+            bundle.opc_cases or None,
             bundle.ai_research,
             bundle.ai_engineering,
             bundle.agent_tools,
@@ -360,26 +360,23 @@ def _build_brief_without_lookup(
     bundle: DigestBundle,
     yesterday_top: YesterdayTop | None,
 ) -> AiBriefContent:
-    intro = build_v3_intro_bullets(bundle.opc_case, bundle.today_ai, bundle.ai_masters)
+    intro = build_v4_intro_bullets(bundle.opc_cases, bundle.today_ai, bundle.ai_masters)
     subject = bundle.subject or (
         bundle.today_ai.stories[0].headline
         if bundle.today_ai is not None and bundle.today_ai.stories
         else ""
     )
     payload: dict[str, Any] = {
-        "version": 3,
+        "version": 4,
         "brief_date": brief_date.isoformat(),
         "subject": subject[:44],
         "preheader": bundle.preheader[:60],
-        "editorial": (
-            build_editorial(bundle.editorial, bundle.opc_case)
-            if bundle.opc_case is not None
-            else bundle.editorial[:220]
-        ),
+        "editorial": build_v4_editorial(bundle.editorial),
         "intro_bullets": intro,
         "today_ai": bundle.today_ai,
         "ai_masters": bundle.ai_masters,
-        "opc_case": bundle.opc_case,
+        "opc_case": None,
+        "opc_cases": bundle.opc_cases,
         "ai_research": bundle.ai_research,
         "ai_engineering": None,
         "agent_tools": bundle.agent_tools,

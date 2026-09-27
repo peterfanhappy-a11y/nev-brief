@@ -79,6 +79,7 @@ QUALITY_METRIC_KEYS = frozenset(
         "opc_candidate_count",
         "opc_case_count",
         "opc_monthly_revenue_usd",
+        "opc_monthly_revenue_usd_total",
         "opc_freshness_hours",
         "parsed_items",
         "quality_passed",
@@ -97,7 +98,7 @@ QUALITY_METRIC_KEYS = frozenset(
     }
 )
 QUALITY_BRIEF_PATHS = frozenset(
-    {"editorial", "intro_bullets", "preheader", "subject", "opc_case"}
+    {"editorial", "intro_bullets", "preheader", "subject", "opc_case", "opc_cases"}
 )
 QUALITY_DIGEST_SECTION_ROOTS = frozenset(
     {"agent_tools", "ai_engineering", "ai_masters", "ai_research", "today_ai"}
@@ -115,12 +116,34 @@ QUALITY_DIGEST_SOURCE_FIELDS = frozenset(
 _QUALITY_INDEXED_STORY_PATH = re.compile(
     r"^stories\[(?:0|[1-9][0-9]*)\](?:\.([a-z_]+))?$"
 )
+_QUALITY_INDEXED_OPC_PATH = re.compile(
+    r"^opc_cases\[(0|1)\]\.([a-z_]+)$"
+)
+_QUALITY_OPC_FIELDS = frozenset(
+    {
+        "background",
+        "header_image",
+        "header_image_alt",
+        "headline",
+        "insight",
+        "monthly_revenue_usd",
+        "original_revenue",
+        "revenue_display",
+        "sharer",
+        "solution",
+        "url",
+    }
+)
 
 
 def quality_path_is_allowed(path: str) -> bool:
     """Return whether a structural issue path is safe for run persistence."""
     if path in QUALITY_BRIEF_PATHS or path in QUALITY_DIGEST_SECTION_ROOTS:
         return True
+
+    opc_match = _QUALITY_INDEXED_OPC_PATH.fullmatch(path)
+    if opc_match is not None:
+        return opc_match.group(2) in _QUALITY_OPC_FIELDS
 
     root, separator, remainder = path.partition(".")
     if not separator:

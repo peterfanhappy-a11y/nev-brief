@@ -166,6 +166,7 @@ def test_finish_digest_run_keeps_only_safe_opc_metadata_and_numeric_metrics() ->
             "passed": True, "blockers": [], "warnings": [],
             "metrics": {"opc_candidate_count": 2, "opc_case_count": 1,
                         "opc_monthly_revenue_usd": 167_000, "opc_freshness_hours": 2.5,
+                        "opc_monthly_revenue_usd_total": 250_000,
                         "unknown": 123, "html": "private-html"},
         },
     )
@@ -181,6 +182,7 @@ def test_finish_digest_run_keeps_only_safe_opc_metadata_and_numeric_metrics() ->
     assert json.loads(params[3])["metrics"] == {
         "opc_candidate_count": 2, "opc_case_count": 1,
         "opc_monthly_revenue_usd": 167_000, "opc_freshness_hours": 2.5,
+        "opc_monthly_revenue_usd_total": 250_000,
     }
     assert "private-" not in str(params)
 
@@ -192,6 +194,7 @@ def test_opc_metrics_reject_non_numeric_or_non_finite_values(value: Any) -> None
     assert storage._safe_quality_report({"metrics": {
         "opc_candidate_count": value, "opc_case_count": value,
         "opc_monthly_revenue_usd": value, "opc_freshness_hours": value,
+        "opc_monthly_revenue_usd_total": value,
     }}) == {"metrics": {}}
 
 
