@@ -138,6 +138,7 @@ function summaryRow(
     opcCase && typeof opcCase === "object"
       ? (opcCase as Record<string, unknown>).headline
       : null;
+  const opcCases = storedContent.opc_cases;
 
   return {
     brief_date: briefDate,
@@ -149,6 +150,7 @@ function summaryRow(
     editorial: storedContent.editorial,
     opc_case_headline:
       typeof opcCaseHeadline === "string" ? opcCaseHeadline : null,
+    opc_cases: Array.isArray(opcCases) ? opcCases : [],
     today_ai_theme: sectionTheme("today_ai"),
     ai_masters_theme: sectionTheme("ai_masters"),
     ai_research_theme: sectionTheme("ai_research"),
@@ -469,7 +471,7 @@ describe("published brief queries", () => {
       },
     ]);
     expect(query.select).toHaveBeenCalledWith(
-      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
+      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,opc_cases:content->opc_cases,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
     );
   });
 
@@ -550,6 +552,55 @@ describe("published brief queries", () => {
 
     await expect(listPublishedBriefs()).resolves.toMatchObject([
       { modules: ["OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
+  });
+
+  it("keeps valid mixed-version summaries and skips only malformed v4 OPC rows", async () => {
+    const malformedV4 = {
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      brief_date: "2026-08-04",
+      opc_cases: PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases.slice(0, 1),
+    };
+    useQueries(new QueryBuilder({
+      data: [
+        summaryRow(
+          "2026-08-05",
+          "2026-08-05T01:00:00.000Z",
+          { ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT, brief_date: "2026-08-05" },
+        ),
+        summaryRow("2026-08-04", "2026-08-04T01:00:00.000Z", malformedV4),
+        summaryRow(
+          "2026-08-03",
+          "2026-08-03T01:00:00.000Z",
+          { ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT, brief_date: "2026-08-03" },
+        ),
+        summaryRow("2026-08-02", "2026-08-02T01:00:00.000Z", content({
+          brief_date: "2026-08-02",
+          version: 2,
+          ai_masters: section("product_tools"),
+          ai_research: section("ai_research"),
+          agent_tools: section("agent_tools"),
+        })),
+        summaryRow("2026-08-01", "2026-08-01T01:00:00.000Z", content({
+          brief_date: "2026-08-01",
+        })),
+      ],
+      error: null,
+    }));
+
+    const result = await listPublishedBriefs();
+
+    expect(result.map((brief) => brief.briefDate)).toEqual([
+      "2026-08-05",
+      "2026-08-03",
+      "2026-08-02",
+      "2026-08-01",
+    ]);
+    expect(result[0].modules).toEqual([
+      "OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具",
+    ]);
+    expect(result[1].modules).toEqual([
+      "OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具",
     ]);
   });
 

@@ -10,7 +10,7 @@ type DigestSectionEntry = {
 };
 
 function visibleDigestSections(content: AiBriefContent): DigestSectionEntry[] {
-  if (content.version === 3) {
+  if (content.version === 3 || content.version === 4) {
     return [
       { slotId: "today-ai", title: "二、今日AI", section: content.today_ai },
       { slotId: "ai-masters", title: "三、AI大神", section: content.ai_masters },
@@ -172,6 +172,63 @@ function OpcBlock({ opc }: { opc: NonNullable<AiBriefContent["opc_case"]> }) {
   );
 }
 
+function OpcCasesBlock({ cases }: { cases: AiBriefContent["opc_cases"] }) {
+  return (
+    <section
+      className="mt-6 overflow-hidden rounded-xl border-2 border-gray-900 bg-white"
+      aria-labelledby="daily-section-opc-cases"
+    >
+      <h3
+        id="daily-section-opc-cases"
+        className="px-5 pt-4 text-sm font-extrabold tracking-wider text-indigo-600"
+      >
+        一、OPC案例
+      </h3>
+      <div className="mt-4 divide-y divide-gray-200 border-t border-gray-200">
+        {cases.map((opc, index) => (
+          <article key={opc.url} className="py-5">
+            <h4 className="px-5 text-base font-extrabold text-gray-900">
+              案例 {index + 1}
+            </h4>
+            <p className="mt-2 px-5 text-sm text-gray-500">分享者：{opc.sharer}</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={opc.header_image}
+              alt={opc.header_image_alt}
+              loading="lazy"
+              className="mt-4 block h-auto w-full"
+            />
+            <div className="px-5 pt-5">
+              <h5 className="text-lg font-semibold text-gray-900">{opc.headline}</h5>
+              <p className="mt-4 leading-relaxed text-gray-700">
+                <span className="font-semibold text-gray-900">案例背景：</span>
+                <br />
+                {opc.background}
+              </p>
+              <p className="mt-4 leading-relaxed text-gray-700">
+                <span className="font-semibold text-gray-900">解决方案：</span>
+                <br />
+                {opc.solution}
+              </p>
+              <p className="mt-4 leading-relaxed text-gray-700">
+                <span className="font-semibold text-gray-900">案例启示：</span>
+                <br />
+                {opc.insight}
+              </p>
+              <p className="mt-4 font-semibold text-gray-900">收入：{opc.revenue_display}</p>
+              <p className="mt-3 text-sm font-medium">
+                <ExternalLink href={opc.url}>
+                  阅读原文<span aria-hidden="true"> →</span>
+                </ExternalLink>
+              </p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SectionGroupTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="mt-10 bg-gray-950 px-4 py-3 text-center text-sm font-extrabold tracking-[0.35em] text-white">
@@ -232,6 +289,13 @@ export default function DailyBrief({ brief }: { brief: AiPublishedBrief }) {
         <>
           <SectionGroupTitle>OPC分享</SectionGroupTitle>
           <OpcBlock opc={content.opc_case} />
+        </>
+      )}
+
+      {content.version === 4 && (
+        <>
+          <SectionGroupTitle>OPC分享</SectionGroupTitle>
+          <OpcCasesBlock cases={content.opc_cases} />
         </>
       )}
 
