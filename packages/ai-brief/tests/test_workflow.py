@@ -19,9 +19,18 @@ import psycopg
 import pytest
 from ai_brief.digest import condenser, generate
 from ai_brief.digest.generate import DigestBundle
+from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
-from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, OpcCase, Theme
+from ai_brief.schema import (
+    AiBriefContent,
+    BriefStatus,
+    DigestSection,
+    DigestStory,
+    OpcCase,
+    OpcCaseV4,
+    Theme,
+)
 from ai_brief.storage import DigestRunStatus
 
 BRIEF_DATE = date(2026, 8, 4)
@@ -34,6 +43,72 @@ def _opc_case() -> OpcCase:
         original_revenue="$167K MRR", monthly_revenue_usd=167_000,
         revenue_display="$167K 美元月度营收", url="https://example.com/opc",
         header_image="https://img.test/opc.jpg", header_image_alt="Zipchat",
+    )
+
+
+def _opc_cases_v4() -> list[OpcCaseV4]:
+    return [
+        OpcCaseV4(
+            sharer="Alice",
+            headline="First",
+            background="First background.",
+            solution="First solution.",
+            insight="First insight.",
+            original_revenue="$10K MRR",
+            monthly_revenue_usd=10_000,
+            revenue_display="$10K 美元月度营收",
+            url="https://example.com/first",
+            header_image="https://img.test/opc-one.jpg",
+            header_image_alt="First",
+        ),
+        OpcCaseV4(
+            sharer="Bob",
+            headline="Second",
+            background="Second background.",
+            solution="Second solution.",
+            insight="Second insight.",
+            original_revenue="$2K MRR",
+            monthly_revenue_usd=2_000,
+            revenue_display="$2K 美元月度营收",
+            url="https://example.com/second",
+            header_image="https://img.test/opc-two.jpg",
+            header_image_alt="Second",
+        ),
+    ]
+
+
+def _structured_opc_html(
+    first_revenue: str = "$10K MRR",
+    second_revenue: str = "$2K MRR",
+) -> str:
+    return (
+        "<h3>案例1 · Alice：First</h3>"
+        "<p>案例背景：First background.</p><p>解决方案：First solution.</p>"
+        f"<p>案例启示：First insight.</p><p>收入：{first_revenue}</p>"
+        '<p><a href="https://example.com/first">来源</a></p>'
+        "<h3>案例2 · Bob：Second</h3>"
+        "<p>案例背景：Second background.</p><p>解决方案：Second solution.</p>"
+        f"<p>案例启示：Second insight.</p><p>收入：{second_revenue}</p>"
+        '<p><a href="https://example.com/second">来源</a></p>'
+    )
+
+
+def _opc_envelope(
+    *,
+    html: str | None = None,
+    attachments: tuple[Attachment, ...] = (),
+) -> DigestEnvelope:
+    return DigestEnvelope(
+        kind="opc",
+        message_id="<opc@test>",
+        subject=f"ai-opc-sharing {BRIEF_DATE}",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC),
+        requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE,
+        used_fallback=False,
+        text=None,
+        html=html or _structured_opc_html(),
+        attachments=attachments,
     )
 
 
@@ -68,6 +143,12 @@ def test_editorial_rejects_recommendation_that_cannot_fit() -> None:
     case = _opc_case().model_copy(update={"sharer": "R" * 80, "headline": "H" * 120})
     with pytest.raises(ValueError, match="OPC recommendation exceeds editorial limit"):
         generate.build_editorial("安全叙事。", case)
+
+
+def test_v4_editorial_keeps_lead_and_uses_fixed_double_case_sentence() -> None:
+    assert generate.build_v4_editorial("核心判断。与此同时，旧内容") == (
+        "核心判断。今日给大家分享两个 OPC 案例，详情见下方。"
+    )
 
 
 def _section(theme: Theme, *, header_image: str | None = "https://img.test/x.jpg") -> DigestSection:
@@ -234,24 +315,112 @@ def test_opc_digest_sources_records_parsed_candidate_count() -> None:
     assert "source</p>" not in repr(sources)
 
 
-async def test_digest_generation_includes_opc_case_and_candidate_count() -> None:
-    envelope = DigestEnvelope(
-        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
-        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
-        matched_date=BRIEF_DATE, used_fallback=False, text=None,
-        html=(
-            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
-            '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
-            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
-            '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
-        ),
-        attachments=(),
-    )
-    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": envelope})
-    assert bundle.opc_case is not None
-    assert bundle.opc_case.sharer == "Ruslan"
-    assert bundle.opc_case.header_image == ""
+async def test_digest_generation_includes_both_opc_cases_and_candidate_count() -> None:
+    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": _opc_envelope()})
+    assert [case.sharer for case in bundle.opc_cases] == ["Alice", "Bob"]
+    assert [case.header_image for case in bundle.opc_cases] == ["", ""]
     assert bundle.opc_candidate_count == 2
+
+
+def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_paths() -> None:
+    attachments = (
+        Attachment("case-1.png", "image/png", b"one"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    rates_loader = MagicMock(return_value={
+        "EUR": generate.Decimal("1"),
+        "USD": generate.Decimal("1.2"),
+        "CNY": generate.Decimal("7.2"),
+    })
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
+        patch.object(
+            generate.uploader,
+            "upload_image",
+            side_effect=["https://img.test/one.png", "https://img.test/two.png"],
+        ) as upload,
+    ):
+        cases, count = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(),
+            _opc_envelope(
+                html=_structured_opc_html("CNY 7200 MRR", "$120K ARR"),
+                attachments=attachments,
+            ),
+            rates_loader,
+        )
+
+    assert count == 2
+    assert [case.headline for case in cases] == ["First", "Second"]
+    assert [case.monthly_revenue_usd for case in cases] == [1200, 10_000]
+    rates_loader.assert_called_once_with()
+    paths = [call.kwargs["path"] for call in upload.call_args_list]
+    assert "opc-case-1" in paths[0]
+    assert "opc-case-2" in paths[1]
+
+
+def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindexed() -> None:
+    attachments = (
+        Attachment("first.png", "image/png", b"one"),
+        Attachment("second.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
+        patch.object(
+            generate.uploader,
+            "upload_image",
+            side_effect=["https://img.test/one.png", "https://img.test/two.png"],
+        ),
+    ):
+        cases, _ = generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
+
+    assert [case.header_image for case in cases] == [
+        "https://img.test/one.png",
+        "https://img.test/two.png",
+    ]
+
+
+def test_build_opc_cases_never_cross_substitutes_ambiguous_or_unusable_images() -> None:
+    attachments = (
+        Attachment("case-1-a.png", "image/png", b"one-a"),
+        Attachment("case-1-b.png", "image/png", b"one-b"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(generate, "_is_usable_header_image", side_effect=lambda data, _type: data == b"two"),
+        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
+        patch.object(generate.uploader, "upload_image", return_value="https://img.test/two.png"),
+    ):
+        cases, _ = generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
+
+    assert [case.header_image for case in cases] == ["", "https://img.test/two.png"]
+
+
+def test_build_opc_cases_fails_whole_result_before_upload_on_revenue_error() -> None:
+    with patch.object(generate.uploader, "upload_image") as upload:
+        cases, count = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(),
+            _opc_envelope(html=_structured_opc_html("GBP 10K MRR", "$2K MRR")),
+            lambda: {"EUR": generate.Decimal("1"), "USD": generate.Decimal("1.2")},
+        )
+
+    assert (cases, count) == ([], 2)
+    upload.assert_not_called()
+
+
+def test_build_opc_cases_surfaces_upload_failure() -> None:
+    attachments = (
+        Attachment("case-1.png", "image/png", b"one"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
+        patch.object(generate.uploader, "upload_image", return_value=None),
+        pytest.raises(RuntimeError, match="OPC image upload failed"),
+    ):
+        generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
 
 
 @pytest.mark.parametrize("bullets", [

@@ -14,6 +14,7 @@ from ai_brief.digest.exchange_rates import (
     fetch_ecb_rates,
     format_monthly_usd,
     monthly_revenue_usd,
+    normalize_case_revenue,
     select_highest_case,
 )
 from ai_brief.digest.models import OpcCaseCandidate, Revenue
@@ -28,7 +29,9 @@ def usd_cases() -> list[OpcCaseCandidate]:
             index=1,
             sharer="Aurélien",
             headline="案例一主题",
-            body="案例一正文",
+            background="案例一背景",
+            solution="案例一方案",
+            insight="案例一启示",
             revenue=Revenue(Decimal("83000"), "USD", "MRR", "$83K+ MRR"),
             url="https://www.indiehackers.com/post/case-one",
         ),
@@ -36,7 +39,9 @@ def usd_cases() -> list[OpcCaseCandidate]:
             index=2,
             sharer="Ruslan",
             headline="Zipchat 再冲到 $2M ARR",
-            body="案例二正文",
+            background="案例二背景",
+            solution="案例二方案",
+            insight="案例二启示",
             revenue=Revenue(Decimal("167000"), "USD", "MRR", "$167K MRR"),
             url="https://www.indiehackers.com/post/case-two",
         ),
@@ -53,6 +58,31 @@ def test_cny_mrr_uses_euro_cross_rate() -> None:
     revenue = Revenue(Decimal("720000"), "CNY", "MRR", "CNY 720K MRR")
 
     assert monthly_revenue_usd(revenue, RATES) == Decimal("120000")
+
+
+@pytest.mark.parametrize(
+    ("revenue", "expected_amount", "expected_display", "converted"),
+    [
+        (Revenue(Decimal("83000"), "USD", "MRR", "$83K MRR"), Decimal("83000"), "$83K 美元月度营收", False),
+        (Revenue(Decimal("120000"), "USD", "ARR", "$120K ARR"), Decimal("10000"), "约 $10K 美元月度营收", True),
+        (Revenue(Decimal("720000"), "CNY", "MRR", "CNY 720K MRR"), Decimal("120000"), "约 $120K 美元月度营收", True),
+    ],
+)
+def test_normalizes_each_case_without_ranking(
+    revenue: Revenue,
+    expected_amount: Decimal,
+    expected_display: str,
+    converted: bool,
+) -> None:
+    candidate = usd_cases()[0]
+    candidate.revenue = revenue
+
+    normalized = normalize_case_revenue(candidate, RATES)
+
+    assert normalized.candidate is candidate
+    assert normalized.monthly_revenue_usd == expected_amount
+    assert normalized.revenue_display == expected_display
+    assert normalized.converted is converted
 
 
 def test_selects_case_two_and_does_not_fetch_rates_for_usd() -> None:
@@ -73,7 +103,9 @@ def test_usd_arr_is_approximate_without_fetching_ecb_rates() -> None:
         index=1,
         sharer="Aurélien",
         headline="ARR 案例",
-        body="案例一正文",
+        background="案例一背景",
+        solution="案例一方案",
+        insight="案例一启示",
         revenue=Revenue(Decimal("1200000"), "USD", "ARR", "$1.2M ARR"),
         url="https://www.indiehackers.com/post/arr-case",
     )
@@ -92,7 +124,9 @@ def test_equal_revenue_selects_case_one() -> None:
         index=2,
         sharer="Ruslan",
         headline="Zipchat 再冲到 $2M ARR",
-        body="案例二正文",
+        background="案例二背景",
+        solution="案例二方案",
+        insight="案例二启示",
         revenue=Revenue(Decimal("83000"), "USD", "MRR", "$83K MRR"),
         url="https://www.indiehackers.com/post/case-two",
     )
@@ -126,7 +160,9 @@ def test_converted_case_uses_approximate_monthly_display() -> None:
         index=1,
         sharer="Chen",
         headline="人民币案例",
-        body="正文",
+        background="背景",
+        solution="方案",
+        insight="启示",
         revenue=Revenue(Decimal("720000"), "CNY", "MRR", "CNY 720K MRR"),
         url="https://www.indiehackers.com/post/cny-case",
     )
