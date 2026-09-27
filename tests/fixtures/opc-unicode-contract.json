@@ -10,10 +10,33 @@
     "header_image": "https://aivizens.com/images/🚀.png",
     "header_image_alt": "Zipchat 🚀"
   },
+  "opc_case_v4": {
+    "sharer": "Ruslan",
+    "headline": "Zipchat 🚀",
+    "background": "案例背景 🚀",
+    "solution": "解决方案 🚀",
+    "insight": "案例启示 🚀",
+    "original_revenue": "$167K MRR",
+    "monthly_revenue_usd": 167000,
+    "revenue_display": "$167K 美元月度营收",
+    "url": "https://www.indiehackers.com/post/🚀",
+    "header_image": "https://aivizens.com/images/🚀.png",
+    "header_image_alt": "Zipchat 🚀"
+  },
   "bounded_strings": [
     {"field": "sharer", "max": 80},
     {"field": "headline", "max": 120},
     {"field": "summary", "max": 500},
+    {"field": "original_revenue", "max": 80},
+    {"field": "revenue_display", "max": 80},
+    {"field": "header_image_alt", "max": 160}
+  ],
+  "v4_bounded_strings": [
+    {"field": "sharer", "max": 80},
+    {"field": "headline", "max": 120},
+    {"field": "background", "max": 100},
+    {"field": "solution", "max": 120},
+    {"field": "insight", "max": 80},
     {"field": "original_revenue", "max": 80},
     {"field": "revenue_display", "max": 80},
     {"field": "header_image_alt", "max": 160}

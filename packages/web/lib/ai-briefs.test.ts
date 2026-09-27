@@ -19,7 +19,10 @@ import {
   listPublishedBriefs,
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
-import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
+import {
+  PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+  PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+} from "@/test/fixtures/published-brief";
 import opcUnicode from "../../../tests/fixtures/opc-unicode-contract.json";
 
 type QueryResponse = {
@@ -237,6 +240,41 @@ describe("AiBriefContentSchema", () => {
     delete missingOpcCase.opc_case;
     expect(AiBriefContentSchema.safeParse(missingOpcCase).success).toBe(false);
   });
+
+  it("accepts exactly two V4 cases and rejects legacy or wrong-sized OPC data", () => {
+    expect(AiBriefContentSchema.safeParse(PUBLISHED_BRIEF_V4_RENDERING_CONTENT).success).toBe(true);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_cases: PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases.slice(0, 1),
+    }).success).toBe(false);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_cases: [
+        ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases,
+        PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases[0],
+      ],
+    }).success).toBe(false);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_case: opcUnicode.opc_case,
+    }).success).toBe(false);
+  });
+
+  it.each(opcUnicode.v4_bounded_strings)(
+    "counts V4 $field by Unicode code points",
+    ({ field, max }) => {
+      for (const boundary of opcUnicode.string_boundaries) {
+        const length = { empty: 0, one: 1, max, over: max + 1 }[boundary.length]!;
+        const value = length ? "题".repeat(length - 1) + "🚀" : "";
+        const [first, second] = PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases;
+        const parsed = AiBriefContentSchema.safeParse({
+          ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+          opc_cases: [{ ...first, [field]: value }, second],
+        });
+        expect(parsed.success).toBe(boundary.valid);
+      }
+    },
+  );
 
   it("accepts historical four and current five V3 overview bullets and rejects six", () => {
     expect(AiBriefContentSchema.safeParse({

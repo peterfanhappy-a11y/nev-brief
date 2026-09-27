@@ -132,13 +132,31 @@ const OpcCaseSchema = z
   })
   .strict();
 
+const OpcCaseV4Schema = z
+  .object({
+    sharer: codePointString(1, 80),
+    headline: codePointString(1, 120),
+    background: codePointString(1, 100),
+    solution: codePointString(1, 120),
+    insight: codePointString(1, 80),
+    original_revenue: codePointString(1, 80),
+    monthly_revenue_usd: z.number().int().positive(),
+    revenue_display: codePointString(1, 80),
+    url: HttpsUrlSchema,
+    header_image: HttpsUrlSchema,
+    header_image_alt: codePointString(1, 160),
+  })
+  .strict();
+
 const Stage1StatsSchema = z.object({
   candidates: z.number().int().default(0),
   dupe_groups: z.number().int().default(0),
 });
 
 export const AiBriefContentSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
+  version: z
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+    .default(1),
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
@@ -157,6 +175,7 @@ export const AiBriefContentSchema = z.object({
     (value) => value ?? null,
   ),
   opc_case: OpcCaseSchema.nullish().transform((value) => value ?? null),
+  opc_cases: z.array(OpcCaseV4Schema).max(2).default([]),
   model: z.string().nullish().transform((value) => value ?? null),
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
@@ -169,7 +188,38 @@ export const AiBriefContentSchema = z.object({
       path: ["opc_case"],
     });
   }
-  if (content.version !== 2 && content.version !== 3) return;
+  if (content.version === 3 && content.opc_cases.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v3 content cannot include opc_cases",
+      path: ["opc_cases"],
+    });
+  }
+  if (content.version === 4 && content.opc_case) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v4 content cannot include opc_case",
+      path: ["opc_case"],
+    });
+  }
+  if (content.version === 4 && content.opc_cases.length !== 2) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v4 content requires exactly two opc_cases",
+      path: ["opc_cases"],
+    });
+  }
+  if (
+    (content.version === 1 || content.version === 2) &&
+    (content.opc_case || content.opc_cases.length > 0)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `v${content.version} content cannot include OPC cases`,
+      path: ["opc_cases"],
+    });
+  }
+  if (content.version !== 2 && content.version !== 3 && content.version !== 4) return;
   if (content.ai_engineering) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
