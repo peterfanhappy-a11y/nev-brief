@@ -125,6 +125,7 @@ export const PUBLISHED_BRIEF_CONTENT: AiBriefContent = {
     url: "https://example.com/yesterday",
   },
   opc_case: null,
+  opc_cases: [],
   model: "fixture-model",
   stage1_stats: { candidates: 12, dupe_groups: 2 },
 };

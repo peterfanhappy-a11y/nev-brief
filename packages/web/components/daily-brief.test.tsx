@@ -127,6 +127,7 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
       url: "https://example.com/yesterday",
     },
     opc_case: null,
+    opc_cases: [],
     model: "test-model",
     stage1_stats: { candidates: 24, dupe_groups: 3 },
   },

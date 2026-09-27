@@ -79,7 +79,8 @@ def test_required_fields_independently_reject_case_one(old: str, new: str) -> No
 @pytest.mark.parametrize("field", ["案例背景", "解决方案", "案例启示", "收入"])
 def test_duplicate_labeled_field_rejects_case(field: str) -> None:
     extra = f"<p><strong>{field}：</strong>duplicate</p>"
-    assert [case.index for case in parse_opc_digest(_two_cases(_structured_fields() + extra))] == [2]
+    parsed = parse_opc_digest(_two_cases(_structured_fields() + extra))
+    assert [case.index for case in parsed] == [2]
 
 
 @pytest.mark.parametrize("field", ["案例背景", "解决方案", "案例启示"])
@@ -170,20 +171,28 @@ def test_rejects_illegally_grouped_thousands_separators(revenue_text: str) -> No
 
 
 def test_excludes_complete_cases_outside_indexes_one_and_two() -> None:
-    html = """
-    <h3>案例 0 · Zero：完整但越界</h3><p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p><p>收入：$1 MRR</p><p><a href="https://example.com/zero">阅读原文</a></p>
-    <h3>案例 1 · One：完整合法</h3><p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p><p>收入：$1 MRR</p><p><a href="https://example.com/one">阅读原文</a></p>
-    <h3>案例 3 · Three：完整但越界</h3><p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p><p>收入：$1 MRR</p><p><a href="https://example.com/three">阅读原文</a></p>
-    """
+    fields = "<p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p>"
+    html = (
+        f"<h3>案例 0 · Zero：完整但越界</h3>{fields}<p>收入：$1 MRR</p>"
+        '<p><a href="https://example.com/zero">阅读原文</a></p>'
+        f"<h3>案例 1 · One：完整合法</h3>{fields}<p>收入：$1 MRR</p>"
+        '<p><a href="https://example.com/one">阅读原文</a></p>'
+        f"<h3>案例 3 · Three：完整但越界</h3>{fields}<p>收入：$1 MRR</p>"
+        '<p><a href="https://example.com/three">阅读原文</a></p>'
+    )
 
     assert [(case.index, case.sharer) for case in parse_opc_digest(html)] == [(1, "One")]
 
 
 def test_excludes_complete_case_when_duplicate_header_is_incomplete() -> None:
-    html = """
-    <h3>案例 1 · Missing fields：重复但不完整</h3><p>收入：$1 MRR</p><p><a href="https://example.com/first">阅读原文</a></p>
-    <h3>案例 1 · Complete duplicate：重复且完整</h3><p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p><p>收入：$1 MRR</p><p><a href="https://example.com/second">阅读原文</a></p>
-    <h3>案例 2 · Unique：唯一完整</h3><p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p><p>收入：$1 MRR</p><p><a href="https://example.com/unique">阅读原文</a></p>
-    """
+    fields = "<p>案例背景：背景</p><p>解决方案：方案</p><p>案例启示：启示</p>"
+    html = (
+        "<h3>案例 1 · Missing fields：重复但不完整</h3><p>收入：$1 MRR</p>"
+        '<p><a href="https://example.com/first">阅读原文</a></p>'
+        f"<h3>案例 1 · Complete duplicate：重复且完整</h3>{fields}"
+        '<p>收入：$1 MRR</p><p><a href="https://example.com/second">阅读原文</a></p>'
+        f"<h3>案例 2 · Unique：唯一完整</h3>{fields}<p>收入：$1 MRR</p>"
+        '<p><a href="https://example.com/unique">阅读原文</a></p>'
+    )
 
     assert [(case.index, case.sharer) for case in parse_opc_digest(html)] == [(2, "Unique")]

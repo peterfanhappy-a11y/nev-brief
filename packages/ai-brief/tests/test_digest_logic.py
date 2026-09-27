@@ -43,9 +43,15 @@ def _opc_envelope(attachments: tuple[Attachment, ...]) -> DigestEnvelope:
         received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=date(2026, 8, 4),
         matched_date=date(2026, 8, 4), used_fallback=False, text=None,
         html=(
-            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
+            "<h3>案例1 · Alice：First</h3>"
+            "<p>案例背景：First background.</p>"
+            "<p>解决方案：First solution.</p>"
+            "<p>案例启示：First insight.</p>"
             '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
-            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
+            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3>"
+            "<p>案例背景：Second background.</p>"
+            "<p>解决方案：Second solution.</p>"
+            "<p>案例启示：Second insight.</p>"
             '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
         ),
         attachments=attachments,

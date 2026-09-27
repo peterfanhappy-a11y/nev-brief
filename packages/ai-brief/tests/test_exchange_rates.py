@@ -63,9 +63,24 @@ def test_cny_mrr_uses_euro_cross_rate() -> None:
 @pytest.mark.parametrize(
     ("revenue", "expected_amount", "expected_display", "converted"),
     [
-        (Revenue(Decimal("83000"), "USD", "MRR", "$83K MRR"), Decimal("83000"), "$83K 美元月度营收", False),
-        (Revenue(Decimal("120000"), "USD", "ARR", "$120K ARR"), Decimal("10000"), "约 $10K 美元月度营收", True),
-        (Revenue(Decimal("720000"), "CNY", "MRR", "CNY 720K MRR"), Decimal("120000"), "约 $120K 美元月度营收", True),
+        (
+            Revenue(Decimal("83000"), "USD", "MRR", "$83K MRR"),
+            Decimal("83000"),
+            "$83K 美元月度营收",
+            False,
+        ),
+        (
+            Revenue(Decimal("120000"), "USD", "ARR", "$120K ARR"),
+            Decimal("10000"),
+            "约 $10K 美元月度营收",
+            True,
+        ),
+        (
+            Revenue(Decimal("720000"), "CNY", "MRR", "CNY 720K MRR"),
+            Decimal("120000"),
+            "约 $120K 美元月度营收",
+            True,
+        ),
     ],
 )
 def test_normalizes_each_case_without_ranking(

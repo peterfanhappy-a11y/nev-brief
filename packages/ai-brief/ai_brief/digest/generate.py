@@ -12,12 +12,13 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from PIL import Image
 
 from nev_shared.logger import get_logger
+from pydantic import ValidationError
 
 from ai_brief import config
 from ai_brief.digest import condenser, image_judge, uploader
@@ -37,7 +38,6 @@ from ai_brief.digest.models import AgentTool, EventItem
 from ai_brief.digest.opc_parser import parse_opc_digest
 from ai_brief.digest.research_parser import parse_research_digest
 from ai_brief.schema import DigestSection, DigestStory, OpcCase, OpcCaseV4, Theme
-from pydantic import ValidationError
 
 log = get_logger("ai_brief.digest.generate")
 
@@ -302,7 +302,7 @@ def _opc_case_v4_unchecked(**values: object) -> OpcCaseV4:
     try:
         return OpcCaseV4.model_validate(values)
     except ValidationError:
-        return OpcCaseV4.model_construct(**values)
+        return OpcCaseV4.model_construct(**cast(dict[str, Any], values))
 
 
 def build_opc_cases(

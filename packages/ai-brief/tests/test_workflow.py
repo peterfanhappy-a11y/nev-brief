@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,7 +18,7 @@ import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
 import pytest
-from ai_brief.digest import condenser, generate
+from ai_brief.digest import condenser, generate, uploader
 from ai_brief.digest.generate import DigestBundle
 from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
@@ -337,15 +338,19 @@ def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_path
         Attachment("case-2.png", "image/png", b"two"),
     )
     rates_loader = MagicMock(return_value={
-        "EUR": generate.Decimal("1"),
-        "USD": generate.Decimal("1.2"),
-        "CNY": generate.Decimal("7.2"),
+        "EUR": Decimal("1"),
+        "USD": Decimal("1.2"),
+        "CNY": Decimal("7.2"),
     })
     with (
         patch.object(generate, "_is_usable_header_image", return_value=True),
-        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
         patch.object(
-            generate.uploader,
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(
+            uploader,
             "upload_image",
             side_effect=["https://img.test/one.png", "https://img.test/two.png"],
         ) as upload,
@@ -375,14 +380,20 @@ def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindex
     )
     with (
         patch.object(generate, "_is_usable_header_image", return_value=True),
-        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
         patch.object(
-            generate.uploader,
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(
+            uploader,
             "upload_image",
             side_effect=["https://img.test/one.png", "https://img.test/two.png"],
         ),
     ):
-        cases, _ = generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
+        cases, _ = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments)
+        )
 
     assert [case.header_image for case in cases] == [
         "https://img.test/one.png",
@@ -397,21 +408,31 @@ def test_build_opc_cases_never_cross_substitutes_ambiguous_or_unusable_images() 
         Attachment("case-2.png", "image/png", b"two"),
     )
     with (
-        patch.object(generate, "_is_usable_header_image", side_effect=lambda data, _type: data == b"two"),
-        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
-        patch.object(generate.uploader, "upload_image", return_value="https://img.test/two.png"),
+        patch.object(
+            generate,
+            "_is_usable_header_image",
+            side_effect=lambda data, _type: data == b"two",
+        ),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(uploader, "upload_image", return_value="https://img.test/two.png"),
     ):
-        cases, _ = generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
+        cases, _ = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments)
+        )
 
     assert [case.header_image for case in cases] == ["", "https://img.test/two.png"]
 
 
 def test_build_opc_cases_fails_whole_result_before_upload_on_revenue_error() -> None:
-    with patch.object(generate.uploader, "upload_image") as upload:
+    with patch.object(uploader, "upload_image") as upload:
         cases, count = generate.build_opc_cases(
             BRIEF_DATE.isoformat(),
             _opc_envelope(html=_structured_opc_html("GBP 10K MRR", "$2K MRR")),
-            lambda: {"EUR": generate.Decimal("1"), "USD": generate.Decimal("1.2")},
+            lambda: {"EUR": Decimal("1"), "USD": Decimal("1.2")},
         )
 
     assert (cases, count) == ([], 2)
@@ -425,8 +446,12 @@ def test_build_opc_cases_surfaces_upload_failure() -> None:
     )
     with (
         patch.object(generate, "_is_usable_header_image", return_value=True),
-        patch.object(generate, "_find_hero_band", side_effect=lambda data, _aspect: (data, "image/png")),
-        patch.object(generate.uploader, "upload_image", return_value=None),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(uploader, "upload_image", return_value=None),
         pytest.raises(RuntimeError, match="OPC image upload failed"),
     ):
         generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
