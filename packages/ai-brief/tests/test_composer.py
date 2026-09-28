@@ -13,6 +13,7 @@ from ai_brief.schema import (
     DigestStory,
     FeaturedItem,
     OpcCase,
+    OpcCaseV4,
     QuickHit,
     Theme,
     Tool,
@@ -187,6 +188,74 @@ def test_render_v3_opc_sharing_before_digest_modules() -> None:
     assert "早上好，Peter！" in html
     assert "5 分钟阅读" in html
     assert "5 分钟阅读" in text
+
+
+def test_render_v4_two_structured_opc_cases_in_source_order() -> None:
+    cases = [
+        OpcCaseV4(
+            sharer="Ruslan",
+            headline="Zipchat 恢复增长",
+            background="产品遭遇平台政策变化后收入归零。",
+            solution="团队重做电商 AI 销售代理并持续优化。",
+            insight="聚焦可验证的客户价值。",
+            original_revenue="$167K MRR",
+            monthly_revenue_usd=167000,
+            revenue_display="$167K 美元月度营收",
+            url="https://example.com/opc-one",
+            header_image="https://img/opc-one.png",
+            header_image_alt="Zipchat 案例",
+        ),
+        OpcCaseV4(
+            sharer="Mina",
+            headline="Tiny Studio 稳定获客",
+            background="独立工作室缺少稳定的获客渠道。",
+            solution="围绕细分需求打造内容与自动化交付流程。",
+            insight="小团队的优势是迭代速度。",
+            original_revenue="$24K ARR",
+            monthly_revenue_usd=2000,
+            revenue_display="$2K 美元月度营收",
+            url="https://example.com/opc-two",
+            header_image="https://img/opc-two.png",
+            header_image_alt="Tiny Studio 案例",
+        ),
+    ]
+    brief = _brief(
+        version=4,
+        intro_bullets=["OPC 双案例", "今日 AI 1", "今日 AI 2", "今日 AI 4", "AI 大神 1"],
+        opc_cases=cases,
+        ai_research=DigestSection(
+            theme=Theme.AI_RESEARCH,
+            stories=[DigestStory(headline="研究标题", summary="研究摘要")],
+        ),
+        agent_tools=DigestSection(
+            theme=Theme.AGENT_TOOLS,
+            stories=[DigestStory(headline="工具标题", summary="工具摘要")],
+        ),
+    )
+
+    html, text = render(
+        brief,
+        date(2026, 7, 6),
+        delivery_id="v4-d",
+        unsubscribe_token="v4-t",  # noqa: S106 - inert test value
+    )
+
+    for rendered in (html, text):
+        assert rendered.count("OPC分享") == 1
+        assert rendered.count("一、OPC案例") == 1
+        assert rendered.index("案例 1") < rendered.index("案例 2")
+        assert rendered.index("Zipchat 恢复增长") < rendered.index("Tiny Studio 稳定获客")
+        for label in ("案例背景：", "解决方案：", "案例启示："):
+            assert rendered.count(label) == 2
+        for fragment in (
+            "https://img/opc-one.png",
+            "https://img/opc-two.png",
+            "$167K 美元月度营收",
+            "$2K 美元月度营收",
+            "https://example.com/opc-one",
+            "https://example.com/opc-two",
+        ):
+            assert fragment in rendered
 
 
 def test_render_omits_missing_ai_masters() -> None:

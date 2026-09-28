@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, Literal, cast
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,11 +18,20 @@ import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
 import pytest
-from ai_brief.digest import condenser, generate
+from ai_brief.digest import condenser, generate, uploader
 from ai_brief.digest.generate import DigestBundle
+from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
 from ai_brief.quality import QualityIssue, QualityReport
-from ai_brief.schema import AiBriefContent, BriefStatus, DigestSection, DigestStory, OpcCase, Theme
+from ai_brief.schema import (
+    AiBriefContent,
+    BriefStatus,
+    DigestSection,
+    DigestStory,
+    OpcCase,
+    OpcCaseV4,
+    Theme,
+)
 from ai_brief.storage import DigestRunStatus
 
 BRIEF_DATE = date(2026, 8, 4)
@@ -34,6 +44,72 @@ def _opc_case() -> OpcCase:
         original_revenue="$167K MRR", monthly_revenue_usd=167_000,
         revenue_display="$167K 美元月度营收", url="https://example.com/opc",
         header_image="https://img.test/opc.jpg", header_image_alt="Zipchat",
+    )
+
+
+def _opc_cases_v4() -> list[OpcCaseV4]:
+    return [
+        OpcCaseV4(
+            sharer="Alice",
+            headline="First",
+            background="First background.",
+            solution="First solution.",
+            insight="First insight.",
+            original_revenue="$10K MRR",
+            monthly_revenue_usd=10_000,
+            revenue_display="$10K 美元月度营收",
+            url="https://www.indiehackers.com/post/case-one",
+            header_image="https://aivizens.com/images/opc-one.jpg",
+            header_image_alt="First",
+        ),
+        OpcCaseV4(
+            sharer="Bob",
+            headline="Second",
+            background="Second background.",
+            solution="Second solution.",
+            insight="Second insight.",
+            original_revenue="$2K MRR",
+            monthly_revenue_usd=2_000,
+            revenue_display="$2K 美元月度营收",
+            url="https://www.indiehackers.com/post/case-two",
+            header_image="https://aivizens.com/images/opc-two.jpg",
+            header_image_alt="Second",
+        ),
+    ]
+
+
+def _structured_opc_html(
+    first_revenue: str = "$10K MRR",
+    second_revenue: str = "$2K MRR",
+) -> str:
+    return (
+        "<h3>案例1 · Alice：First</h3>"
+        "<p>案例背景：First background.</p><p>解决方案：First solution.</p>"
+        f"<p>案例启示：First insight.</p><p>收入：{first_revenue}</p>"
+        '<p><a href="https://example.com/first">来源</a></p>'
+        "<h3>案例2 · Bob：Second</h3>"
+        "<p>案例背景：Second background.</p><p>解决方案：Second solution.</p>"
+        f"<p>案例启示：Second insight.</p><p>收入：{second_revenue}</p>"
+        '<p><a href="https://example.com/second">来源</a></p>'
+    )
+
+
+def _opc_envelope(
+    *,
+    html: str | None = None,
+    attachments: tuple[Attachment, ...] = (),
+) -> DigestEnvelope:
+    return DigestEnvelope(
+        kind="opc",
+        message_id="<opc@test>",
+        subject=f"ai-opc-sharing {BRIEF_DATE}",
+        received_at=datetime(2026, 8, 4, tzinfo=UTC),
+        requested_date=BRIEF_DATE,
+        matched_date=BRIEF_DATE,
+        used_fallback=False,
+        text=None,
+        html=html or _structured_opc_html(),
+        attachments=attachments,
     )
 
 
@@ -68,6 +144,12 @@ def test_editorial_rejects_recommendation_that_cannot_fit() -> None:
     case = _opc_case().model_copy(update={"sharer": "R" * 80, "headline": "H" * 120})
     with pytest.raises(ValueError, match="OPC recommendation exceeds editorial limit"):
         generate.build_editorial("安全叙事。", case)
+
+
+def test_v4_editorial_keeps_lead_and_uses_fixed_double_case_sentence() -> None:
+    assert generate.build_v4_editorial("核心判断。与此同时，旧内容") == (
+        "核心判断。今日给大家分享两个 OPC 案例，详情见下方。"
+    )
 
 
 def _section(theme: Theme, *, header_image: str | None = "https://img.test/x.jpg") -> DigestSection:
@@ -152,6 +234,13 @@ def _v3_bundle() -> DigestBundle:
     )
 
 
+def _v4_bundle() -> DigestBundle:
+    bundle = _v3_bundle()
+    bundle.opc_case = None
+    bundle.opc_cases = _opc_cases_v4()
+    return bundle
+
+
 def _quality(*, passed: bool) -> QualityReport:
     blockers = () if passed else (QualityIssue("subject_blank", "unsafe detail", "subject"),)
     return QualityReport(
@@ -162,35 +251,36 @@ def _quality(*, passed: bool) -> QualityReport:
     )
 
 
-def test_new_generation_builds_a_five_module_v3_brief(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_new_generation_builds_a_five_module_v4_brief(monkeypatch: pytest.MonkeyPatch) -> None:
     """New candidates must omit engineering while retained v1 reads stay untouched."""
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
-    bundle = _v3_bundle()
+    bundle = _v4_bundle()
     brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
 
-    assert brief.version == 3
+    assert brief.version == 4
     assert brief.ai_engineering is None
-    assert brief.opc_case == _opc_case()
+    assert brief.opc_case is None
+    assert brief.opc_cases == _opc_cases_v4()
     assert brief.intro_bullets == [
-        "💡 Zipchat 再冲到 $2M ARR",
+        "💡 OPC案例：First；Second",
         "📰 Today 1",
         "📰 Today 2",
         "📰 Today 4",
         "👤 Masters 1",
     ]
     assert bundle.intro_bullets == ["One", "Two", "Three"]
-    assert brief.editorial.endswith("“Zipchat 再冲到 $2M ARR”OPC案例。")
+    assert brief.editorial.endswith("今日给大家分享两个 OPC 案例，详情见下方。")
     assert runner._module_count(bundle) == 5
 
 
 @pytest.mark.parametrize("bullets", [None, [], ["One"], ["One"] * 6])
-def test_v3_generation_ignores_model_intro_bullets(bullets: Any) -> None:
-    bundle = _v3_bundle()
+def test_v4_generation_ignores_model_intro_bullets(bullets: Any) -> None:
+    bundle = _v4_bundle()
     bundle.intro_bullets = bullets
     brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
     assert brief.intro_bullets == [
-        "💡 Zipchat 再冲到 $2M ARR",
+        "💡 OPC案例：First；Second",
         "📰 Today 1",
         "📰 Today 2",
         "📰 Today 4",
@@ -199,8 +289,8 @@ def test_v3_generation_ignores_model_intro_bullets(bullets: Any) -> None:
 
 
 @pytest.mark.parametrize("absent", [True, False])
-def test_v3_overview_does_not_depend_on_agent_tools(absent: bool) -> None:
-    bundle = _v3_bundle()
+def test_v4_overview_does_not_depend_on_agent_tools(absent: bool) -> None:
+    bundle = _v4_bundle()
     bundle.agent_tools = (
         None if absent else DigestSection.model_construct(theme=Theme.AGENT_TOOLS, stories=[])
     )
@@ -209,16 +299,17 @@ def test_v3_overview_does_not_depend_on_agent_tools(absent: bool) -> None:
     assert all("Agents" not in bullet for bullet in brief.intro_bullets)
 
 
-def test_v3_missing_opc_preserves_lead_for_structured_quality_blocker() -> None:
-    bundle = _v3_bundle()
-    bundle.opc_case = None
+def test_v4_missing_opc_preserves_double_case_editorial_for_quality_blocker() -> None:
+    bundle = _v4_bundle()
+    bundle.opc_cases = []
     with patch.object(
-        runner, "build_editorial", side_effect=AssertionError("no OPC recommendation")
+        runner, "build_v4_editorial", wraps=generate.build_v4_editorial
     ):
         brief = runner._build_brief_without_lookup(BRIEF_DATE, bundle, None)
-    assert brief.version == 3
+    assert brief.version == 4
     assert brief.opc_case is None
-    assert brief.editorial == bundle.editorial
+    assert brief.opc_cases == []
+    assert brief.editorial.endswith("今日给大家分享两个 OPC 案例，详情见下方。")
 
 
 def test_opc_digest_sources_records_parsed_candidate_count() -> None:
@@ -228,30 +319,142 @@ def test_opc_digest_sources_records_parsed_candidate_count() -> None:
         matched_date=BRIEF_DATE, used_fallback=False,
         text=None, html="<p>source</p>", attachments=(),
     )
-    sources = runner._digest_sources({"opc": envelope}, _v3_bundle())
+    sources = runner._digest_sources({"opc": envelope}, _v4_bundle())
     assert sources["opc"] is not None
     assert sources["opc"]["parse_count"] == 2
     assert "source</p>" not in repr(sources)
 
 
-async def test_digest_generation_includes_opc_case_and_candidate_count() -> None:
-    envelope = DigestEnvelope(
-        kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
-        received_at=datetime(2026, 8, 4, tzinfo=UTC), requested_date=BRIEF_DATE,
-        matched_date=BRIEF_DATE, used_fallback=False, text=None,
-        html=(
-            "<h3>案例1 · Alice：First</h3><p>First body.</p>"
-            '<p>收入：$10K MRR</p><p><a href="https://example.com/first">来源</a></p>'
-            "<h3>案例2 · Ruslan：Zipchat 再冲到 $2M ARR</h3><p>Second body.</p>"
-            '<p>收入：$167K MRR</p><p><a href="https://example.com/second">来源</a></p>'
-        ),
-        attachments=(),
-    )
-    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": envelope})
-    assert bundle.opc_case is not None
-    assert bundle.opc_case.sharer == "Ruslan"
-    assert bundle.opc_case.header_image == ""
+async def test_digest_generation_includes_both_opc_cases_and_candidate_count() -> None:
+    bundle = await generate.build_digest_modules(BRIEF_DATE, {"opc": _opc_envelope()})
+    assert [case.sharer for case in bundle.opc_cases] == ["Alice", "Bob"]
+    assert [case.header_image for case in bundle.opc_cases] == ["", ""]
     assert bundle.opc_candidate_count == 2
+
+
+def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_paths() -> None:
+    attachments = (
+        Attachment("case-1.png", "image/png", b"one"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    rates_loader = MagicMock(return_value={
+        "EUR": Decimal("1"),
+        "USD": Decimal("1.2"),
+        "CNY": Decimal("7.2"),
+    })
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(
+            uploader,
+            "upload_image",
+            side_effect=["https://img.test/one.png", "https://img.test/two.png"],
+        ) as upload,
+    ):
+        cases, count = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(),
+            _opc_envelope(
+                html=_structured_opc_html("CNY 7200 MRR", "$120K ARR"),
+                attachments=attachments,
+            ),
+            rates_loader,
+        )
+
+    assert count == 2
+    assert [case.headline for case in cases] == ["First", "Second"]
+    assert [case.monthly_revenue_usd for case in cases] == [1200, 10_000]
+    rates_loader.assert_called_once_with()
+    paths = [call.kwargs["path"] for call in upload.call_args_list]
+    assert "opc-case-1" in paths[0]
+    assert "opc-case-2" in paths[1]
+
+
+def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindexed() -> None:
+    attachments = (
+        Attachment("first.png", "image/png", b"one"),
+        Attachment("second.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(
+            uploader,
+            "upload_image",
+            side_effect=["https://img.test/one.png", "https://img.test/two.png"],
+        ),
+    ):
+        cases, _ = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments)
+        )
+
+    assert [case.header_image for case in cases] == [
+        "https://img.test/one.png",
+        "https://img.test/two.png",
+    ]
+
+
+def test_build_opc_cases_never_cross_substitutes_ambiguous_or_unusable_images() -> None:
+    attachments = (
+        Attachment("case-1-a.png", "image/png", b"one-a"),
+        Attachment("case-1-b.png", "image/png", b"one-b"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(
+            generate,
+            "_is_usable_header_image",
+            side_effect=lambda data, _type: data == b"two",
+        ),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(uploader, "upload_image", return_value="https://img.test/two.png"),
+    ):
+        cases, _ = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments)
+        )
+
+    assert [case.header_image for case in cases] == ["", "https://img.test/two.png"]
+
+
+def test_build_opc_cases_fails_whole_result_before_upload_on_revenue_error() -> None:
+    with patch.object(uploader, "upload_image") as upload:
+        cases, count = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(),
+            _opc_envelope(html=_structured_opc_html("GBP 10K MRR", "$2K MRR")),
+            lambda: {"EUR": Decimal("1"), "USD": Decimal("1.2")},
+        )
+
+    assert (cases, count) == ([], 2)
+    upload.assert_not_called()
+
+
+def test_build_opc_cases_surfaces_upload_failure() -> None:
+    attachments = (
+        Attachment("case-1.png", "image/png", b"one"),
+        Attachment("case-2.png", "image/png", b"two"),
+    )
+    with (
+        patch.object(generate, "_is_usable_header_image", return_value=True),
+        patch.object(
+            generate,
+            "_find_hero_band",
+            side_effect=lambda data, _aspect: (data, "image/png"),
+        ),
+        patch.object(uploader, "upload_image", return_value=None),
+        pytest.raises(RuntimeError, match="OPC image upload failed"),
+    ):
+        generate.build_opc_cases(BRIEF_DATE.isoformat(), _opc_envelope(attachments=attachments))
 
 
 @pytest.mark.parametrize("bullets", [
@@ -282,13 +485,11 @@ async def test_condenser_preserves_model_bullet_count_and_values(bullets: Any) -
     ["One", {"text": "Two"}, "Three"], None, {"text": "not a list"},
     ["One", "Two", "Three", "Four"],
 ])
-async def test_model_intro_cannot_block_deterministic_v3_overview(
+async def test_model_intro_cannot_block_deterministic_v4_overview(
     bullets: Any,
 ) -> None:
-    bundle = _v3_bundle()
-    assert bundle.opc_case is not None and bundle.today_ai is not None
-    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
-    bundle.opc_case.header_image = "https://aivizens.com/images/opc.png"
+    bundle = _v4_bundle()
+    assert len(bundle.opc_cases) == 2 and bundle.today_ai is not None
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     for kind, section in (
         ("events", bundle.today_ai), ("builder", bundle.ai_masters),
@@ -311,7 +512,10 @@ async def test_model_intro_cannot_block_deterministic_v3_overview(
     digests["opc"] = DigestEnvelope(
         kind="opc", message_id="<opc@test>", subject=f"ai-opc-sharing {BRIEF_DATE}",
         received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
-        used_fallback=False, text=bundle.opc_case.url, html=None, attachments=(),
+        used_fallback=False,
+        text="\n".join(case.url for case in bundle.opc_cases),
+        html=None,
+        attachments=(),
     )
     connection = _connection()
     cursor = connection.cursor.return_value.__enter__.return_value
@@ -331,7 +535,7 @@ async def test_model_intro_cannot_block_deterministic_v3_overview(
         patch.object(generate, "_build_ai_masters", return_value=(bundle.ai_masters, True, True)),
         patch.object(generate, "_build_research", return_value=(bundle.ai_research, True, True)),
         patch.object(generate, "_build_agent", return_value=(bundle.agent_tools, True)),
-        patch.object(generate, "build_opc_case", return_value=(bundle.opc_case, 2)),
+        patch.object(generate, "build_opc_cases", return_value=(bundle.opc_cases, 2)),
         patch.object(runner, "_alert"),
         patch.object(composer, "compose_frozen_brief") as compose,
         patch.object(deliverer, "send_pending") as deliver,
@@ -345,7 +549,7 @@ async def test_model_intro_cannot_block_deterministic_v3_overview(
         assert len(saved) == 1
         candidate, report = json.loads(saved[0][0]), json.loads(saved[0][3])
         assert candidate["intro_bullets"] == [
-            "💡 Zipchat 再冲到 $2M ARR",
+            "💡 OPC案例：First；Second",
             "📰 Today 1",
             "📰 Today 2",
             "📰 Today 4",
@@ -421,13 +625,13 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_called_once()
 
 
-async def test_v3_generation_stops_at_review_without_composing_or_delivering(
+async def test_v4_generation_stops_at_review_without_composing_or_delivering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A balanced v3 candidate is stored for review only, never released or sent."""
+    """A balanced V4 candidate is stored for review only, never released or sent."""
     connection = _connection()
     adapter = _Adapter()
-    bundle = _v3_bundle()
+    bundle = _v4_bundle()
     monkeypatch.setattr(config, "get_model", lambda: "test-model")
 
     with (
@@ -446,10 +650,13 @@ async def test_v3_generation_stops_at_review_without_composing_or_delivering(
     saved_content = save.call_args.kwargs["content"]
     assert result.status == "awaiting_approval"
     assert result.exit_code == 0
-    assert saved_content["version"] == 3
-    assert saved_content["opc_case"] == _opc_case().model_dump(mode="json")
+    assert saved_content["version"] == 4
+    assert saved_content["opc_case"] is None
+    assert saved_content["opc_cases"] == [
+        case.model_dump(mode="json") for case in _opc_cases_v4()
+    ]
     assert saved_content["intro_bullets"] == [
-        "💡 Zipchat 再冲到 $2M ARR",
+        "💡 OPC案例：First；Second",
         "📰 Today 1",
         "📰 Today 2",
         "📰 Today 4",
@@ -498,30 +705,28 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfil
     ("mutation", "expected_status", "issue"),
     [
         ("valid", "awaiting_approval", None),
-        ("missing_opc", "blocked", ("opc_case_missing", "opc_case")),
+        ("missing_opc", "blocked", ("schema_invalid", "opc_cases")),
         ("short_today_ai", "blocked", ("intro_bullet_count_invalid", "intro_bullets")),
-        ("empty_image", "blocked", ("opc_image_missing", "opc_case.header_image")),
+        ("empty_image", "blocked", ("opc_image_missing", "opc_cases[0].header_image")),
     ],
 )
-async def test_generation_retains_quality_rejected_v3_through_real_storage(
+async def test_generation_retains_quality_rejected_v4_through_real_storage(
     backfill: bool,
     mutation: str,
     expected_status: str,
     issue: tuple[str, str] | None,
 ) -> None:
     """Schema-invalid output must remain an auditable quality block, not a storage failure."""
-    bundle = _v3_bundle()
-    assert bundle.opc_case is not None
-    bundle.opc_case.url = "https://www.indiehackers.com/post/case-two"
-    bundle.opc_case.header_image = "https://aivizens.com/images/opc.png"
+    bundle = _v4_bundle()
+    assert len(bundle.opc_cases) == 2
     if mutation == "missing_opc":
-        bundle.opc_case = None
+        bundle.opc_cases = []
         bundle.opc_candidate_count = 0
     elif mutation == "short_today_ai":
         assert bundle.today_ai is not None
         bundle.today_ai.stories = bundle.today_ai.stories[:3]
     elif mutation == "empty_image":
-        bundle.opc_case.header_image = ""
+        bundle.opc_cases[0].header_image = ""
 
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     for kind, section in (
@@ -536,10 +741,12 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
             used_fallback=False, text="\n".join(story.url for story in section.stories),
             html="<p>private-source-body</p>", attachments=(),
         )
-    digests["opc"] = None if bundle.opc_case is None else DigestEnvelope(
+    digests["opc"] = None if not bundle.opc_cases else DigestEnvelope(
         kind="opc", message_id="<opc@test>", subject=f"opc-{BRIEF_DATE}",
         received_at=datetime.now(UTC), requested_date=BRIEF_DATE, matched_date=BRIEF_DATE,
-        used_fallback=False, text=bundle.opc_case.url, html="<p>private-opc-body</p>",
+        used_fallback=False,
+        text="\n".join(case.url for case in bundle.opc_cases),
+        html="<p>private-opc-body</p>",
         attachments=(),
     )
     adapter = SimpleNamespace(fetch=lambda _date: digests)
@@ -573,7 +780,7 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
     assert "private-" not in str(saved + finished)
     assert all("message" not in entry for entry in report["blockers"])
     expected_intro = [
-        "💡 Zipchat 再冲到 $2M ARR",
+        "💡 OPC案例：First；Second",
         "📰 Today 1",
         "📰 Today 2",
     ]
@@ -583,15 +790,16 @@ async def test_generation_retains_quality_rejected_v3_through_real_storage(
     if mutation == "missing_opc":
         expected_intro.pop(0)
     assert candidate["intro_bullets"] == expected_intro
-    assert candidate["opc_case"] == (
-        None if bundle.opc_case is None else bundle.opc_case.model_dump(mode="json")
-    )
+    assert candidate["opc_case"] is None
+    assert candidate["opc_cases"] == [
+        case.model_dump(mode="json", warnings=False) for case in bundle.opc_cases
+    ]
     assert candidate["ai_engineering"] is None
     assert candidate["yesterday_top"] is None
     assert candidate["featured"] == candidate["tools"] == candidate["quick_hits"] == []
     assert candidate["daily_tip"] is None
     if mutation == "missing_opc":
-        assert candidate["editorial"] == bundle.editorial
+        assert candidate["editorial"] == generate.build_v4_editorial(bundle.editorial)
     if issue is not None:
         assert {"code": issue[0], "path": issue[1]} in report["blockers"]
         cursor.fetchone.return_value = (saved[0][2], candidate, report, RUN_ID)

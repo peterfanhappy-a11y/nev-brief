@@ -4,7 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import DailyBrief from "@/components/daily-brief";
 import type { AiPublishedBrief } from "@/lib/ai-briefs";
-import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
+import {
+  PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+  PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+} from "@/test/fixtures/published-brief";
 
 const COMPLETE_BRIEF: AiPublishedBrief = {
   briefDate: "2026-08-03",
@@ -124,6 +127,7 @@ const COMPLETE_BRIEF: AiPublishedBrief = {
       url: "https://example.com/yesterday",
     },
     opc_case: null,
+    opc_cases: [],
     model: "test-model",
     stage1_stats: { candidates: 24, dupe_groups: 3 },
   },
@@ -230,6 +234,50 @@ describe("DailyBrief", () => {
     for (const bullet of PUBLISHED_BRIEF_V3_RENDERING_CONTENT.intro_bullets) {
       expect(screen.getByText(bullet)).toBeInTheDocument();
     }
+  });
+
+  it("renders two structured v4 OPC cases inside one ordered module", () => {
+    render(
+      <DailyBrief
+        brief={{
+          briefDate: PUBLISHED_BRIEF_V4_RENDERING_CONTENT.brief_date,
+          publishedAt: "2026-08-01T01:00:00.000Z",
+          content: PUBLISHED_BRIEF_V4_RENDERING_CONTENT as unknown as AiPublishedBrief["content"],
+        }}
+      />,
+    );
+
+    expect(screen.getAllByRole("heading", { name: "OPC分享" })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: "一、OPC案例" })).toHaveLength(1);
+    const opc = screen.getByRole("region", { name: "一、OPC案例" });
+    const caseOne = within(opc).getByRole("heading", { name: "案例 1" });
+    const caseTwo = within(opc).getByRole("heading", { name: "案例 2" });
+    expect(
+      caseOne.compareDocumentPosition(caseTwo) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    const images = within(opc).getAllByRole("img");
+    expect(images).toHaveLength(2);
+    expect(images.map((image) => image.getAttribute("src"))).toEqual([
+      "https://cdn.example.com/opc-one.png",
+      "https://cdn.example.com/opc-two.png",
+    ]);
+    for (const image of images) {
+      expect(image).toHaveClass("block", "h-auto", "w-full");
+      expect(image).not.toHaveClass("aspect-[16/9]", "object-cover");
+    }
+    for (const label of ["案例背景：", "解决方案：", "案例启示："]) {
+      expect(within(opc).getAllByText(label)).toHaveLength(2);
+    }
+    for (const value of ["Zipchat 恢复增长", "Tiny Studio 稳定获客"]) {
+      expect(within(opc).getByText(value)).toBeInTheDocument();
+    }
+    expect(opc).toHaveTextContent("$167K 美元月度营收");
+    expect(opc).toHaveTextContent("$2K 美元月度营收");
+    expect(within(opc).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "https://www.indiehackers.com/post/example-one",
+      "https://www.indiehackers.com/post/example-two",
+    ]);
   });
 
   it("groups v2 content like the email and frames every primary module", () => {

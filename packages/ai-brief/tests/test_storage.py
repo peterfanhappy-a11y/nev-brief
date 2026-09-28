@@ -124,7 +124,7 @@ def test_fetch_previous_brief_none_on_first_day() -> None:
     assert storage.fetch_previous_brief(conn, date(2026, 7, 2)) is None
 
 
-@pytest.mark.parametrize("version", [2, 3])
+@pytest.mark.parametrize("version", [2, 3, 4])
 @pytest.mark.parametrize("operation", ["save", "upsert", "blocked"])
 def test_current_content_normalization_preserves_opc_and_clears_legacy_fields(
     version: int, operation: str,
@@ -136,10 +136,27 @@ def test_current_content_normalization_preserves_opc_and_clears_legacy_fields(
         "url": "https://www.indiehackers.com/post/case-two",
         "header_image": "https://aivizens.com/images/opc.png", "header_image_alt": "Zipchat 案例",
     }
+    opc_cases = [
+        {
+            "sharer": f"Sharer {index}",
+            "headline": f"OPC {index}",
+            "background": f"Background {index}",
+            "solution": f"Solution {index}",
+            "insight": f"Insight {index}",
+            "original_revenue": f"${index}K MRR",
+            "monthly_revenue_usd": index * 1_000,
+            "revenue_display": f"${index}K 美元月度营收",
+            "url": f"https://www.indiehackers.com/post/case-{index}",
+            "header_image": f"https://aivizens.com/images/opc-{index}.png",
+            "header_image_alt": f"OPC {index}",
+        }
+        for index in (1, 2)
+    ]
     content = {
         "version": version, "brief_date": "2026-09-14", "subject": "Frozen candidate",
         "preheader": "OPC", "intro_bullets": ["一", "二", "三", "🧰 Agent 0"],
         "opc_case": opc_case if version == 3 else None,
+        "opc_cases": opc_cases if version == 4 else [],
         "ai_engineering": {"theme": "ai_engineering", "stories": [
             {"headline": "Old story", "summary": "Old summary"},
         ]},
@@ -168,6 +185,7 @@ def test_current_content_normalization_preserves_opc_and_clears_legacy_fields(
         storage.upsert_daily_brief(conn, brief_date=date(2026, 9, 14), content=content, model=None)
         persisted = json.loads(cur.execute.call_args.args[1][1])
     assert persisted["opc_case"] == (opc_case if version == 3 else None)
+    assert persisted["opc_cases"] == (opc_cases if version == 4 else [])
     assert persisted["intro_bullets"] == content["intro_bullets"]
     assert "unknown" not in persisted
     assert persisted["ai_engineering"] is None

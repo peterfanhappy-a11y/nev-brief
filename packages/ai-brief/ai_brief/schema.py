@@ -79,6 +79,7 @@ QUALITY_METRIC_KEYS = frozenset(
         "opc_candidate_count",
         "opc_case_count",
         "opc_monthly_revenue_usd",
+        "opc_monthly_revenue_usd_total",
         "opc_freshness_hours",
         "parsed_items",
         "quality_passed",
@@ -97,7 +98,7 @@ QUALITY_METRIC_KEYS = frozenset(
     }
 )
 QUALITY_BRIEF_PATHS = frozenset(
-    {"editorial", "intro_bullets", "preheader", "subject", "opc_case"}
+    {"editorial", "intro_bullets", "preheader", "subject", "opc_case", "opc_cases"}
 )
 QUALITY_DIGEST_SECTION_ROOTS = frozenset(
     {"agent_tools", "ai_engineering", "ai_masters", "ai_research", "today_ai"}
@@ -115,12 +116,34 @@ QUALITY_DIGEST_SOURCE_FIELDS = frozenset(
 _QUALITY_INDEXED_STORY_PATH = re.compile(
     r"^stories\[(?:0|[1-9][0-9]*)\](?:\.([a-z_]+))?$"
 )
+_QUALITY_INDEXED_OPC_PATH = re.compile(
+    r"^opc_cases\[(0|1)\]\.([a-z_]+)$"
+)
+_QUALITY_OPC_FIELDS = frozenset(
+    {
+        "background",
+        "header_image",
+        "header_image_alt",
+        "headline",
+        "insight",
+        "monthly_revenue_usd",
+        "original_revenue",
+        "revenue_display",
+        "sharer",
+        "solution",
+        "url",
+    }
+)
 
 
 def quality_path_is_allowed(path: str) -> bool:
     """Return whether a structural issue path is safe for run persistence."""
     if path in QUALITY_BRIEF_PATHS or path in QUALITY_DIGEST_SECTION_ROOTS:
         return True
+
+    opc_match = _QUALITY_INDEXED_OPC_PATH.fullmatch(path)
+    if opc_match is not None:
+        return opc_match.group(2) in _QUALITY_OPC_FIELDS
 
     root, separator, remainder = path.partition(".")
     if not separator:
@@ -219,6 +242,20 @@ class OpcCase(BaseModel):
     header_image_alt: str = Field(min_length=1, max_length=160)
 
 
+class OpcCaseV4(BaseModel):
+    sharer: str = Field(min_length=1, max_length=80)
+    headline: str = Field(min_length=1, max_length=120)
+    background: str = Field(min_length=1, max_length=100)
+    solution: str = Field(min_length=1, max_length=120)
+    insight: str = Field(min_length=1, max_length=80)
+    original_revenue: str = Field(min_length=1, max_length=80)
+    monthly_revenue_usd: int = Field(gt=0)
+    revenue_display: str = Field(min_length=1, max_length=80)
+    url: str
+    header_image: str
+    header_image_alt: str = Field(min_length=1, max_length=160)
+
+
 def build_v3_intro_bullets(
     opc_case: OpcCase | None,
     today_ai: DigestSection | None,
@@ -239,6 +276,28 @@ def build_v3_intro_bullets(
     return bullets
 
 
+def build_v4_intro_bullets(
+    opc_cases: list[OpcCaseV4],
+    today_ai: DigestSection | None,
+    ai_masters: DigestSection | None,
+) -> list[str]:
+    """Build the fixed V4 overview from both OPC and selected module headlines."""
+    bullets: list[str] = []
+    if len(opc_cases) == 2:
+        bullets.append(
+            f"💡 OPC案例：{opc_cases[0].headline}；{opc_cases[1].headline}"
+        )
+    if today_ai is not None:
+        bullets.extend(
+            f"📰 {today_ai.stories[index].headline}"
+            for index in (0, 1, 3)
+            if index < len(today_ai.stories)
+        )
+    if ai_masters is not None and ai_masters.stories:
+        bullets.append(f"👤 {ai_masters.stories[0].headline}")
+    return bullets
+
+
 class Stage1Stats(BaseModel):
     candidates: int = 0
     dupe_groups: int = 0
@@ -248,7 +307,7 @@ class Stage1Stats(BaseModel):
 class AiBriefContent(BaseModel):
     """完整简报文档。存 ai_daily_briefs.content。"""
 
-    version: Literal[1, 2, 3] = SCHEMA_VERSION
+    version: Literal[1, 2, 3, 4] = SCHEMA_VERSION
     brief_date: str  # YYYY-MM-DD
     subject: str = Field(max_length=44)          # 邮件主题：抓眼球中文标题
     preheader: str = Field(max_length=60)        # "另外：" + 第二新闻
@@ -268,12 +327,13 @@ class AiBriefContent(BaseModel):
     quick_hits: list[QuickHit] = Field(default_factory=list, max_length=6)
     yesterday_top: YesterdayTop | None = None
     opc_case: OpcCase | None = None
+    opc_cases: list[OpcCaseV4] = Field(default_factory=list, max_length=2)
     model: str | None = None
     stage1_stats: Stage1Stats | None = None
 
     @model_validator(mode="after")
     def remove_frozen_content(self) -> AiBriefContent:
-        if self.version in (2, 3):
+        if self.version in (2, 3, 4):
             self.ai_engineering = None
             self.featured = []
             self.tools = []
@@ -282,4 +342,13 @@ class AiBriefContent(BaseModel):
             self.yesterday_top = None
         if self.version == 3 and self.opc_case is None:
             raise ValueError("v3 content requires opc_case")
+        if self.version == 3 and self.opc_cases:
+            raise ValueError("v3 content cannot include opc_cases")
+        if self.version == 4:
+            if self.opc_case is not None:
+                raise ValueError("v4 content cannot include opc_case")
+            if len(self.opc_cases) != 2:
+                raise ValueError("v4 content requires exactly two opc_cases")
+        if self.version in (1, 2) and (self.opc_case is not None or self.opc_cases):
+            raise ValueError(f"v{self.version} content cannot include OPC cases")
         return self

@@ -7,6 +7,7 @@ import {
   assertDisposableFixtureTarget,
   PUBLISHED_BRIEF_CONTENT,
   PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+  PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
 } from "./published-brief";
 
 describe("published brief fixtures", () => {
@@ -23,6 +24,16 @@ describe("published brief fixtures", () => {
     expect(legacy.opc_case).toBeNull();
     expect(legacy.ai_engineering).not.toBeNull();
     expect(legacy.featured).toHaveLength(1);
+  });
+
+  it("provides a schema-valid V4 double-case fixture", () => {
+    const v4 = AiBriefContentSchema.parse(PUBLISHED_BRIEF_V4_RENDERING_CONTENT);
+    expect(v4.version).toBe(4);
+    expect(v4.opc_case).toBeNull();
+    expect(v4.opc_cases.map((item) => item.headline)).toEqual([
+      "Zipchat 恢复增长",
+      "Tiny Studio 稳定获客",
+    ]);
   });
 });
 

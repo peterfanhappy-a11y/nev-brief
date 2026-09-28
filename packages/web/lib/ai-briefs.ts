@@ -132,13 +132,31 @@ const OpcCaseSchema = z
   })
   .strict();
 
+const OpcCaseV4Schema = z
+  .object({
+    sharer: codePointString(1, 80),
+    headline: codePointString(1, 120),
+    background: codePointString(1, 100),
+    solution: codePointString(1, 120),
+    insight: codePointString(1, 80),
+    original_revenue: codePointString(1, 80),
+    monthly_revenue_usd: z.number().int().positive(),
+    revenue_display: codePointString(1, 80),
+    url: HttpsUrlSchema,
+    header_image: HttpsUrlSchema,
+    header_image_alt: codePointString(1, 160),
+  })
+  .strict();
+
 const Stage1StatsSchema = z.object({
   candidates: z.number().int().default(0),
   dupe_groups: z.number().int().default(0),
 });
 
 export const AiBriefContentSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2), z.literal(3)]).default(1),
+  version: z
+    .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
+    .default(1),
   brief_date: BriefDateSchema,
   subject: z.string().max(44),
   preheader: z.string().max(60),
@@ -157,6 +175,7 @@ export const AiBriefContentSchema = z.object({
     (value) => value ?? null,
   ),
   opc_case: OpcCaseSchema.nullish().transform((value) => value ?? null),
+  opc_cases: z.array(OpcCaseV4Schema).max(2).default([]),
   model: z.string().nullish().transform((value) => value ?? null),
   stage1_stats: Stage1StatsSchema.nullish().transform(
     (value) => value ?? null,
@@ -169,7 +188,38 @@ export const AiBriefContentSchema = z.object({
       path: ["opc_case"],
     });
   }
-  if (content.version !== 2 && content.version !== 3) return;
+  if (content.version === 3 && content.opc_cases.length > 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v3 content cannot include opc_cases",
+      path: ["opc_cases"],
+    });
+  }
+  if (content.version === 4 && content.opc_case) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v4 content cannot include opc_case",
+      path: ["opc_case"],
+    });
+  }
+  if (content.version === 4 && content.opc_cases.length !== 2) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "v4 content requires exactly two opc_cases",
+      path: ["opc_cases"],
+    });
+  }
+  if (
+    (content.version === 1 || content.version === 2) &&
+    (content.opc_case || content.opc_cases.length > 0)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `v${content.version} content cannot include OPC cases`,
+      path: ["opc_cases"],
+    });
+  }
+  if (content.version !== 2 && content.version !== 3 && content.version !== 4) return;
   if (content.ai_engineering) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -232,7 +282,7 @@ const PublishedBriefSummaryRowSchema = z
     content_brief_date: BriefDateSchema,
     published_at: z.string().datetime({ offset: true }),
     version: z
-      .enum(["1", "2", "3"])
+      .enum(["1", "2", "3", "4"])
       .nullish()
       .transform((value) => Number(value ?? "1")),
     subject: z.string().max(44),
@@ -241,6 +291,11 @@ const PublishedBriefSummaryRowSchema = z
       .nullish()
       .transform((value) => value ?? ""),
     opc_case_headline: z.string().nullish(),
+    opc_cases: z
+      .array(z.object({ headline: z.string().min(1) }))
+      .max(2)
+      .nullish()
+      .transform((value) => value ?? []),
     today_ai_theme: ThemeSchema.nullish(),
     ai_masters_theme: ThemeSchema.nullish(),
     ai_research_theme: ThemeSchema.nullish(),
@@ -266,8 +321,15 @@ const PublishedBriefSummaryRowSchema = z
         path: ["opc_case_headline"],
       });
     }
+    if (row.version === 4 && row.opc_cases.length !== 2) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "V4 summary requires exactly two OPC cases",
+        path: ["opc_cases"],
+      });
+    }
     if (
-      (row.version === 2 || row.version === 3) &&
+      (row.version === 2 || row.version === 3 || row.version === 4) &&
       (row.ai_engineering_theme || row.featured.length > 0)
     ) {
       context.addIssue({
@@ -303,9 +365,10 @@ function parsePublishedBrief(row: unknown): AiPublishedBrief | null {
 function summaryModuleLabels(
   summary: z.infer<typeof PublishedBriefSummaryRowSchema>,
 ): string[] {
-  const labels = (summary.version === 2 || summary.version === 3
+  const labels = (summary.version === 2 || summary.version === 3 || summary.version === 4
     ? [
-        summary.version === 3 && summary.opc_case_headline && "OPC案例",
+        ((summary.version === 3 && summary.opc_case_headline) ||
+          (summary.version === 4 && summary.opc_cases.length === 2)) && "OPC案例",
         summary.today_ai_theme && "今日AI",
         summary.ai_masters_theme && "AI大神",
         summary.ai_research_theme && "AI研究",
@@ -339,7 +402,7 @@ export async function listPublishedBriefs(
   const { data, error } = await getSupabaseAdmin()
     .from("ai_daily_briefs")
     .select(
-      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
+      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,opc_cases:content->opc_cases,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
     )
     .eq("status", "published")
     .order("brief_date", { ascending: false })

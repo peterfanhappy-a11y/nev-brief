@@ -108,6 +108,8 @@ class OpcCaseCandidate:
     index: int
     sharer: str
     headline: str
-    body: str
+    background: str
+    solution: str
+    insight: str
     revenue: Revenue
     url: str

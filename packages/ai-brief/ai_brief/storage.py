@@ -54,7 +54,7 @@ _ALLOWED_ERROR_CODES = frozenset(
 
 
 def _normalize_current_content(content: dict[str, Any]) -> dict[str, Any]:
-    if content.get("version") not in (2, 3):
+    if content.get("version") not in (2, 3, 4):
         return content
     return AiBriefContent.model_validate(content).model_dump(mode="json")
 
@@ -387,7 +387,7 @@ def save_generated_brief(
     safe_report = _safe_quality_report(quality_report)
     if safe_report is None or safe_report.get("passed") is not (status == "awaiting_approval"):
         raise ValueError("workflow status must match the stored quality report")
-    if status == "blocked" and content.get("version") == 3:
+    if status == "blocked" and content.get("version") in (3, 4):
         # Keep rejected model output auditable without making it publishable.
         content = {
             key: value for key, value in content.items() if key in AiBriefContent.model_fields

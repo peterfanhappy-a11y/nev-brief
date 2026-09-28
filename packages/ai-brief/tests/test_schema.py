@@ -9,12 +9,16 @@ import pytest
 from ai_brief.schema import (
     AiBriefContent,
     DailyTip,
+    DigestSection,
+    DigestStory,
     FeaturedItem,
     OpcCase,
+    OpcCaseV4,
     QuickHit,
     Theme,
     Tool,
     YesterdayTop,
+    build_v4_intro_bullets,
 )
 from pydantic import ValidationError
 
@@ -58,6 +62,24 @@ def test_opc_shared_positive_integer_boundaries(boundary: dict[str, Any]) -> Non
             OpcCase.model_validate(payload)
 
 
+@pytest.mark.parametrize("field", OPC_UNICODE["v4_bounded_strings"])
+@pytest.mark.parametrize("boundary", OPC_UNICODE["string_boundaries"])
+def test_opc_v4_unicode_code_point_boundaries(
+    field: dict[str, Any], boundary: dict[str, Any],
+) -> None:
+    length = {"empty": 0, "one": 1, "max": field["max"], "over": field["max"] + 1}[
+        boundary["length"]
+    ]
+    value = "题" * (length - 1) + "🚀" if length else ""
+    payload = {**OPC_UNICODE["opc_case_v4"], field["field"]: value}
+    if boundary["valid"]:
+        parsed = OpcCaseV4.model_validate(payload)
+        assert parsed.model_dump()[field["field"]] == value
+    else:
+        with pytest.raises(ValidationError):
+            OpcCaseV4.model_validate(payload)
+
+
 def _minimal_featured() -> FeaturedItem:
     return FeaturedItem(
         theme=Theme.MODEL_RESEARCH,
@@ -89,6 +111,29 @@ def _opc_case() -> OpcCase:
         url="https://www.indiehackers.com/post/example",
         header_image="https://cdn.example.com/opc.png",
         header_image_alt="Ruslan 的 Zipchat 案例",
+    )
+
+
+def _opc_case_v4(*, headline: str = "Zipchat 恢复增长") -> OpcCaseV4:
+    return OpcCaseV4(
+        sharer="Ruslan",
+        headline=headline,
+        background="产品遭遇平台政策变化后收入归零。",
+        solution="团队重做电商 AI 销售代理，持续根据客户反馈优化。",
+        insight="恢复增长需要聚焦可验证的客户价值。",
+        original_revenue="$167K MRR",
+        monthly_revenue_usd=167_000,
+        revenue_display="$167K 美元月度营收",
+        url="https://www.indiehackers.com/post/example",
+        header_image="https://cdn.example.com/opc.png",
+        header_image_alt=f"{headline} 案例",
+    )
+
+
+def _digest_section(headlines: list[str]) -> DigestSection:
+    return DigestSection(
+        theme=Theme.MODEL_RESEARCH,
+        stories=[DigestStory(headline=headline, summary="摘要") for headline in headlines],
     )
 
 
@@ -125,6 +170,60 @@ def test_v3_requires_a_complete_opc_case() -> None:
         AiBriefContent.model_validate(
             valid.model_copy(update={"intro_bullets": ["要点"] * 6}).model_dump()
         )
+
+    with pytest.raises(ValidationError):
+        AiBriefContent.model_validate(
+            valid.model_copy(update={"opc_cases": [_opc_case_v4(), _opc_case_v4()]}).model_dump()
+        )
+
+
+def test_v4_requires_exactly_two_structured_opc_cases() -> None:
+    cases = [_opc_case_v4(headline="First title"), _opc_case_v4(headline="Second title")]
+    payload = {
+        **_v2_contract_brief().model_dump(),
+        "version": 4,
+        "intro_bullets": ["一", "二", "三", "四", "五"],
+        "opc_case": None,
+        "opc_cases": [case.model_dump() for case in cases],
+    }
+
+    parsed = AiBriefContent.model_validate(payload)
+    assert [case.headline for case in parsed.opc_cases] == ["First title", "Second title"]
+
+    for invalid_cases in ([], [cases[0]], [*cases, cases[0]]):
+        with pytest.raises(ValidationError):
+            AiBriefContent.model_validate(
+                {**payload, "opc_cases": [case.model_dump() for case in invalid_cases]}
+            )
+
+
+def test_v4_rejects_legacy_single_case() -> None:
+    with pytest.raises(ValidationError):
+        AiBriefContent.model_validate(
+            {
+                **_v2_contract_brief().model_dump(),
+                "version": 4,
+                "opc_case": _opc_case().model_dump(),
+                "opc_cases": [_opc_case_v4().model_dump(), _opc_case_v4().model_dump()],
+            }
+        )
+
+
+def test_build_v4_intro_bullets_uses_fixed_sources() -> None:
+    cases = [_opc_case_v4(headline="First title"), _opc_case_v4(headline="Second title")]
+    bullets = build_v4_intro_bullets(
+        cases,
+        _digest_section(["AI one", "AI two", "AI three", "AI four"]),
+        _digest_section(["Master one"]),
+    )
+
+    assert bullets == [
+        "💡 OPC案例：First title；Second title",
+        "📰 AI one",
+        "📰 AI two",
+        "📰 AI four",
+        "👤 Master one",
+    ]
 
 
 def test_v2_remains_valid_without_opc_case() -> None:

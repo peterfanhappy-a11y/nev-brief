@@ -43,6 +43,11 @@ Values live only in the relevant provider secret store, Vercel Production enviro
 
 The web deployment uses `packages/web/.env.local.example` as its key-name template. The Mac Mini and Python services use the repository-root `.env.example`. Compare these templates with static code reads before every launch; report key names only.
 
+## V4 OPC input acceptance
+
+- Every new `ai-opc-sharing` digest must contain exactly two complete cases in source order. Each case requires `案例背景`, `解决方案`, `案例启示`, `收入`, and one HTTPS source link; the two ordered image attachments must map to cases 1 and 2. A missing field, invalid revenue conversion, unusable image, or ambiguous attachment mapping blocks the whole candidate and must not create deliveries.
+- Before the first scheduled publish after deploying V4, inspect the actual Hermes email and the generated review candidate. Confirm both cases and all three narrative labels were parsed, the two images stayed in source order, and the normalized monthly revenue is reasonable. Keep the candidate blocked until this compatibility check passes; this check does not change the existing schedule or secret handling.
+
 ## Vercel deployment ownership
 
 - Normal production deployment is GitHub-driven: merge a reviewed PR into `main`, wait for Vercel Production to become `READY`, then verify its Git SHA and the live domains.

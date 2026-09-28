@@ -44,17 +44,40 @@ AIVIZENS 趋势 · {{ date_human }} · 5 分钟阅读
    阅读原文：{{ case.url }}
 {% endmacro %}
 
+{% macro opc_cases_section(cases) %}
+《一、OPC案例》
+{% for case in cases %}案例 {{ loop.index }} · 分享者：{{ case.sharer }}
+主题：{{ case.headline }}
+图片：{{ case.header_image }}
+案例背景：
+{{ case.background }}
+解决方案：
+{{ case.solution }}
+案例启示：
+{{ case.insight }}
+收入：{{ case.revenue_display }}
+阅读原文：{{ case.url }}
+{% if not loop.last %}
+--------------------
+{% endif %}
+{% endfor %}{% endmacro %}
+
 {% if brief.version == 3 %}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 OPC分享
 ━━━━━━━━━━━━━━━━━━━━━━━━
 {{ opc_section(brief.opc_case) }}
+{% elif brief.version == 4 %}
+━━━━━━━━━━━━━━━━━━━━━━━━
+OPC分享
+━━━━━━━━━━━━━━━━━━━━━━━━
+{{ opc_cases_section(brief.opc_cases) }}
 {% endif %}
 ━━━━━━━━━━━━━━━━━━━━━━━━
 今日精选
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{{ digest_section(brief.today_ai, '二、今日AI' if brief.version == 3 else ('一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else '')), brief.version != 2, brief.version == 2) }}
-{{ digest_section(brief.ai_masters, '三、AI大神' if brief.version == 3 else ('二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else '')), brief.version != 2, brief.version == 2) }}
+{{ digest_section(brief.today_ai, '二、今日AI' if brief.version in [3, 4] else ('一、今日AI' if brief.version == 2 else (theme_label(brief.today_ai.theme) if brief.today_ai else '')), brief.version != 2, brief.version == 2) }}
+{{ digest_section(brief.ai_masters, '三、AI大神' if brief.version in [3, 4] else ('二、AI大神' if brief.version == 2 else (theme_label(brief.ai_masters.theme) if brief.ai_masters else '')), brief.version != 2, brief.version == 2) }}
 {% for item in brief.featured if brief.version != 2 %}
 【{{ theme_label(item.theme) }}】{{ item.headline }}
 {% for d in item.details %}  - {{ d }}
@@ -65,9 +88,9 @@ OPC分享
 ━━━━━━━━━━━━━━━━━━━━━━━━
 工具学习
 ━━━━━━━━━━━━━━━━━━━━━━━━
-{{ digest_section(brief.ai_research, '四、AI研究' if brief.version == 3 else ('三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')), false, true) }}
+{{ digest_section(brief.ai_research, '四、AI研究' if brief.version in [3, 4] else ('三、AI研究' if brief.version == 2 else (theme_label(brief.ai_research.theme) if brief.ai_research else '')), false, true) }}
 {% if brief.version != 2 %}{{ digest_section(brief.ai_engineering, theme_label(brief.ai_engineering.theme) if brief.ai_engineering else '', false, true) }}{% endif %}
-{{ digest_section(brief.agent_tools, '五、Agent工具' if brief.version == 3 else ('四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')), false, true) }}
+{{ digest_section(brief.agent_tools, '五、Agent工具' if brief.version in [3, 4] else ('四、Agent工具' if brief.version == 2 else (theme_label(brief.agent_tools.theme) if brief.agent_tools else '')), false, true) }}
 {% if brief.version != 2 and brief.tools %}
 [热门 AI 工具]
 {% for t in brief.tools %}  · {{ t.name }} — {{ t.one_liner }}（{{ t.url }}）

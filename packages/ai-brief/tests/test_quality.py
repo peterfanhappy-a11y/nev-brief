@@ -17,8 +17,10 @@ from ai_brief.schema import (
     DigestSection,
     DigestStory,
     OpcCase,
+    OpcCaseV4,
     Stage1Stats,
     Theme,
+    build_v4_intro_bullets,
 )
 from ai_brief.storage import _normalize_current_content, _safe_quality_report
 from PIL import Image
@@ -145,7 +147,10 @@ def _envelope(
         ),
         "research": ("https://arxiv.org/abs/2608.00001",),
         "engineering": (),
-        "opc": ("https://www.indiehackers.com/post/case-two",),
+        "opc": (
+            "https://www.indiehackers.com/post/case-one",
+            "https://www.indiehackers.com/post/case-two",
+        ),
         "agent": (
             "https://github.com/acme/agent-one",
             "https://github.com/acme/agent-two",
@@ -236,6 +241,122 @@ def _fresh_v3_digests() -> dict[DigestKind, DigestEnvelope | None]:
     return digests
 
 
+def _v4_cases() -> list[OpcCaseV4]:
+    return [
+        OpcCaseV4(
+            sharer="Alice",
+            headline="First OPC",
+            background="First background.",
+            solution="First solution.",
+            insight="First insight.",
+            original_revenue="$83K MRR",
+            monthly_revenue_usd=83_000,
+            revenue_display="$83K 美元月度营收",
+            url="https://www.indiehackers.com/post/case-one",
+            header_image="https://aivizens.com/images/opc-one.png",
+            header_image_alt="First OPC",
+        ),
+        OpcCaseV4(
+            sharer="Ruslan",
+            headline="Second OPC",
+            background="Second background.",
+            solution="Second solution.",
+            insight="Second insight.",
+            original_revenue="$167K MRR",
+            monthly_revenue_usd=167_000,
+            revenue_display="$167K 美元月度营收",
+            url="https://www.indiehackers.com/post/case-two",
+            header_image="https://aivizens.com/images/opc-two.png",
+            header_image_alt="Second OPC",
+        ),
+    ]
+
+
+def _v4_brief() -> AiBriefContent:
+    base = _v2_brief()
+    assert base.today_ai is not None
+    assert base.ai_masters is not None
+    cases = _v4_cases()
+    return base.model_copy(
+        update={
+            "version": 4,
+            "opc_case": None,
+            "opc_cases": cases,
+            "intro_bullets": build_v4_intro_bullets(cases, base.today_ai, base.ai_masters),
+        }
+    )
+
+
+def _fresh_v4_digests() -> dict[DigestKind, DigestEnvelope | None]:
+    return _fresh_v3_digests()
+
+
+def test_valid_v4_has_double_case_metrics_and_total() -> None:
+    report = _report(_v4_brief(), _fresh_v4_digests(), opc_candidate_count=2)
+
+    assert report.passed
+    assert report.metrics["opc_candidate_count"] == 2
+    assert report.metrics["opc_case_count"] == 2
+    assert report.metrics["opc_monthly_revenue_usd_total"] == 250_000
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_code", "expected_path"),
+    [
+        ("missing_second", "schema_invalid", "opc_cases"),
+        ("background_over", "schema_invalid", "opc_cases[0].background"),
+        ("solution_over", "schema_invalid", "opc_cases[1].solution"),
+        ("insight_over", "schema_invalid", "opc_cases[0].insight"),
+        ("empty_image", "opc_image_missing", "opc_cases[1].header_image"),
+        ("http_image", "opc_image_missing", "opc_cases[0].header_image"),
+        ("absent_url", "critical_url_missing", "opc_cases[1].url"),
+        ("http_url", "url_not_https", "opc_cases[0].url"),
+        ("nonpositive_revenue", "schema_invalid", "opc_cases[1].monthly_revenue_usd"),
+        ("swapped", "schema_invalid", "opc_cases[0].url"),
+    ],
+)
+def test_v4_blocks_each_invalid_case_with_indexed_path(
+    mutation: str,
+    expected_code: str,
+    expected_path: str,
+) -> None:
+    brief = _v4_brief()
+    cases = list(brief.opc_cases)
+    digests = _fresh_v4_digests()
+    if mutation == "missing_second":
+        cases = cases[:1]
+    elif mutation == "background_over":
+        cases[0] = cases[0].model_copy(update={"background": "背" * 101})
+    elif mutation == "solution_over":
+        cases[1] = cases[1].model_copy(update={"solution": "方" * 121})
+    elif mutation == "insight_over":
+        cases[0] = cases[0].model_copy(update={"insight": "启" * 81})
+    elif mutation == "empty_image":
+        cases[1] = cases[1].model_copy(update={"header_image": ""})
+    elif mutation == "http_image":
+        cases[0] = cases[0].model_copy(update={"header_image": "http://aivizens.com/opc.png"})
+    elif mutation == "absent_url":
+        cases[1] = cases[1].model_copy(
+            update={"url": "https://www.indiehackers.com/post/not-in-digest"}
+        )
+    elif mutation == "http_url":
+        cases[0] = cases[0].model_copy(
+            update={"url": "http://www.indiehackers.com/post/case-one"}
+        )
+    elif mutation == "nonpositive_revenue":
+        cases[1] = cases[1].model_copy(update={"monthly_revenue_usd": 0})
+    elif mutation == "swapped":
+        cases.reverse()
+    brief = brief.model_copy(update={"opc_cases": cases})
+
+    report = _report(brief, digests, opc_candidate_count=2)
+
+    assert any(
+        issue.code == expected_code and issue.path == expected_path
+        for issue in report.blockers
+    )
+
+
 def test_valid_v3_has_opc_metrics_and_known_domain() -> None:
     report = _report(_v3_brief(), _fresh_v3_digests(), opc_candidate_count=2)
     assert report.passed
@@ -256,9 +377,13 @@ def test_generated_emoji_boundary_case_survives_quality_and_frozen_storage() -> 
     envelope = replace(
         _envelope("opc"),
         html=(
-            '<h3>案例1 · Alice：First</h3><p>First body.</p><p>收入：$10K MRR</p>'
+            '<h3>案例1 · Alice：First</h3><p>案例背景：First background.</p>'
+            '<p>解决方案：First solution.</p><p>案例启示：First insight.</p>'
+            '<p>收入：$10K MRR</p>'
             '<p><a href="https://www.indiehackers.com/post/case-one">原文</a></p>'
-            f'<h3>案例2 · Ruslan：{headline}</h3><p>Second body.</p><p>收入：$167K MRR</p>'
+            f'<h3>案例2 · Ruslan：{headline}</h3><p>案例背景：Second background.</p>'
+            '<p>解决方案：Second solution.</p><p>案例启示：Second insight.</p>'
+            '<p>收入：$167K MRR</p>'
             '<p><a href="https://www.indiehackers.com/post/case-two">原文</a></p>'
         ),
         attachments=(Attachment("case2.png", "image/png", image.getvalue()),),

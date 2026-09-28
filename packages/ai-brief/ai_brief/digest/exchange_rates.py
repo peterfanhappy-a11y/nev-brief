@@ -26,6 +26,14 @@ class SelectedOpcCase:
     converted: bool
 
 
+@dataclass(frozen=True)
+class NormalizedOpcCase:
+    candidate: OpcCaseCandidate
+    monthly_revenue_usd: Decimal
+    revenue_display: str
+    converted: bool
+
+
 def fetch_ecb_rates() -> dict[str, Decimal]:
     try:
         response = httpx.get(ECB_DAILY_RATES_URL, timeout=10.0, follow_redirects=True)
@@ -93,6 +101,20 @@ def format_monthly_usd(amount: Decimal, *, approximate: bool) -> str:
             break
     prefix = "约 " if approximate else ""
     return f"{prefix}${_display_amount(amount / divisor)}{unit} 美元月度营收"
+
+
+def normalize_case_revenue(
+    candidate: OpcCaseCandidate,
+    rates: Mapping[str, Decimal],
+) -> NormalizedOpcCase:
+    monthly_amount = monthly_revenue_usd(candidate.revenue, rates)
+    converted = candidate.revenue.currency != "USD" or candidate.revenue.period != "MRR"
+    return NormalizedOpcCase(
+        candidate=candidate,
+        monthly_revenue_usd=monthly_amount,
+        revenue_display=format_monthly_usd(monthly_amount, approximate=converted),
+        converted=converted,
+    )
 
 
 def select_highest_case(

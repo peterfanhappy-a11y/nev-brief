@@ -125,6 +125,7 @@ export const PUBLISHED_BRIEF_CONTENT: AiBriefContent = {
     url: "https://example.com/yesterday",
   },
   opc_case: null,
+  opc_cases: [],
   model: "fixture-model",
   stage1_stats: { candidates: 12, dupe_groups: 2 },
 };
@@ -158,6 +159,47 @@ export const PUBLISHED_BRIEF_V3_RENDERING_CONTENT: AiBriefContent = {
   quick_hits: [],
   yesterday_top: null,
 };
+
+export const PUBLISHED_BRIEF_V4_RENDERING_CONTENT = {
+  ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+  version: 4,
+  intro_bullets: [
+    "💡 OPC案例：Zipchat 恢复增长；Tiny Studio 稳定获客",
+    "📰 OpenAI 推出下一代智能体",
+    "📰 AI 工作流进入团队协作",
+    "📰 国内大模型加速应用落地",
+    "👤 AI 大神分享可复用实践",
+  ],
+  opc_case: null,
+  opc_cases: [
+    {
+      sharer: "Ruslan",
+      headline: "Zipchat 恢复增长",
+      background: "产品遭遇平台政策变化后收入归零。",
+      solution: "团队重做电商 AI 销售代理并持续优化。",
+      insight: "聚焦可验证的客户价值。",
+      original_revenue: "$167K MRR",
+      monthly_revenue_usd: 167_000,
+      revenue_display: "$167K 美元月度营收",
+      url: "https://www.indiehackers.com/post/example-one",
+      header_image: "https://cdn.example.com/opc-one.png",
+      header_image_alt: "Zipchat 恢复增长案例",
+    },
+    {
+      sharer: "Mina",
+      headline: "Tiny Studio 稳定获客",
+      background: "独立工作室缺少稳定的获客渠道。",
+      solution: "围绕细分需求打造内容与自动化交付流程。",
+      insight: "小团队的优势是迭代速度。",
+      original_revenue: "$24K ARR",
+      monthly_revenue_usd: 2_000,
+      revenue_display: "$2K 美元月度营收",
+      url: "https://www.indiehackers.com/post/example-two",
+      header_image: "https://cdn.example.com/opc-two.png",
+      header_image_alt: "Tiny Studio 稳定获客案例",
+    },
+  ],
+} as const;
 
 export interface AiDailyBriefFixtureRow {
   brief_date: string;

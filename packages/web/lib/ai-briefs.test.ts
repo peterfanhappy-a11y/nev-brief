@@ -19,7 +19,10 @@ import {
   listPublishedBriefs,
 } from "@/lib/ai-briefs";
 import { siteBaseUrl } from "@/lib/site-url";
-import { PUBLISHED_BRIEF_V3_RENDERING_CONTENT } from "@/test/fixtures/published-brief";
+import {
+  PUBLISHED_BRIEF_V3_RENDERING_CONTENT,
+  PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+} from "@/test/fixtures/published-brief";
 import opcUnicode from "../../../tests/fixtures/opc-unicode-contract.json";
 
 type QueryResponse = {
@@ -135,6 +138,7 @@ function summaryRow(
     opcCase && typeof opcCase === "object"
       ? (opcCase as Record<string, unknown>).headline
       : null;
+  const opcCases = storedContent.opc_cases;
 
   return {
     brief_date: briefDate,
@@ -146,6 +150,7 @@ function summaryRow(
     editorial: storedContent.editorial,
     opc_case_headline:
       typeof opcCaseHeadline === "string" ? opcCaseHeadline : null,
+    opc_cases: Array.isArray(opcCases) ? opcCases : [],
     today_ai_theme: sectionTheme("today_ai"),
     ai_masters_theme: sectionTheme("ai_masters"),
     ai_research_theme: sectionTheme("ai_research"),
@@ -237,6 +242,41 @@ describe("AiBriefContentSchema", () => {
     delete missingOpcCase.opc_case;
     expect(AiBriefContentSchema.safeParse(missingOpcCase).success).toBe(false);
   });
+
+  it("accepts exactly two V4 cases and rejects legacy or wrong-sized OPC data", () => {
+    expect(AiBriefContentSchema.safeParse(PUBLISHED_BRIEF_V4_RENDERING_CONTENT).success).toBe(true);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_cases: PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases.slice(0, 1),
+    }).success).toBe(false);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_cases: [
+        ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases,
+        PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases[0],
+      ],
+    }).success).toBe(false);
+    expect(AiBriefContentSchema.safeParse({
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      opc_case: opcUnicode.opc_case,
+    }).success).toBe(false);
+  });
+
+  it.each(opcUnicode.v4_bounded_strings)(
+    "counts V4 $field by Unicode code points",
+    ({ field, max }) => {
+      for (const boundary of opcUnicode.string_boundaries) {
+        const length = { empty: 0, one: 1, max, over: max + 1 }[boundary.length]!;
+        const value = length ? "题".repeat(length - 1) + "🚀" : "";
+        const [first, second] = PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases;
+        const parsed = AiBriefContentSchema.safeParse({
+          ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+          opc_cases: [{ ...first, [field]: value }, second],
+        });
+        expect(parsed.success).toBe(boundary.valid);
+      }
+    },
+  );
 
   it("accepts historical four and current five V3 overview bullets and rejects six", () => {
     expect(AiBriefContentSchema.safeParse({
@@ -431,7 +471,7 @@ describe("published brief queries", () => {
       },
     ]);
     expect(query.select).toHaveBeenCalledWith(
-      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
+      "brief_date,published_at,content_brief_date:content->>brief_date,version:content->>version,subject:content->>subject,preheader:content->>preheader,editorial:content->>editorial,opc_case_headline:content->opc_case->>headline,opc_cases:content->opc_cases,today_ai_theme:content->today_ai->>theme,ai_masters_theme:content->ai_masters->>theme,ai_research_theme:content->ai_research->>theme,ai_engineering_theme:content->ai_engineering->>theme,agent_tools_theme:content->agent_tools->>theme,featured:content->featured",
     );
   });
 
@@ -512,6 +552,55 @@ describe("published brief queries", () => {
 
     await expect(listPublishedBriefs()).resolves.toMatchObject([
       { modules: ["OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具"] },
+    ]);
+  });
+
+  it("keeps valid mixed-version summaries and skips only malformed v4 OPC rows", async () => {
+    const malformedV4 = {
+      ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT,
+      brief_date: "2026-08-04",
+      opc_cases: PUBLISHED_BRIEF_V4_RENDERING_CONTENT.opc_cases.slice(0, 1),
+    };
+    useQueries(new QueryBuilder({
+      data: [
+        summaryRow(
+          "2026-08-05",
+          "2026-08-05T01:00:00.000Z",
+          { ...PUBLISHED_BRIEF_V4_RENDERING_CONTENT, brief_date: "2026-08-05" },
+        ),
+        summaryRow("2026-08-04", "2026-08-04T01:00:00.000Z", malformedV4),
+        summaryRow(
+          "2026-08-03",
+          "2026-08-03T01:00:00.000Z",
+          { ...PUBLISHED_BRIEF_V3_RENDERING_CONTENT, brief_date: "2026-08-03" },
+        ),
+        summaryRow("2026-08-02", "2026-08-02T01:00:00.000Z", content({
+          brief_date: "2026-08-02",
+          version: 2,
+          ai_masters: section("product_tools"),
+          ai_research: section("ai_research"),
+          agent_tools: section("agent_tools"),
+        })),
+        summaryRow("2026-08-01", "2026-08-01T01:00:00.000Z", content({
+          brief_date: "2026-08-01",
+        })),
+      ],
+      error: null,
+    }));
+
+    const result = await listPublishedBriefs();
+
+    expect(result.map((brief) => brief.briefDate)).toEqual([
+      "2026-08-05",
+      "2026-08-03",
+      "2026-08-02",
+      "2026-08-01",
+    ]);
+    expect(result[0].modules).toEqual([
+      "OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具",
+    ]);
+    expect(result[1].modules).toEqual([
+      "OPC案例", "今日AI", "AI大神", "AI研究", "Agent工具",
     ]);
   });
 
