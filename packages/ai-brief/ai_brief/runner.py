@@ -181,6 +181,45 @@ def _persist_generation_failure(
     conn.commit()
 
 
+def _persist_generated_candidate(
+    brief_date: date,
+    run_id: UUID,
+    *,
+    brief: AiBriefContent,
+    sources: dict[str, dict[str, Any] | None],
+    report_payload: dict[str, Any],
+    status: Literal["blocked", "awaiting_approval"],
+) -> None:
+    persisted = connect()
+    try:
+        storage.save_generated_brief(
+            persisted,
+            brief_date=brief_date,
+            content=brief.model_dump(mode="json", warnings=False),
+            model=brief.model,
+            digest_sources=sources,
+            quality_report=report_payload,
+            source_run_id=run_id,
+            status=status,
+        )
+        storage.finish_digest_run(
+            persisted,
+            run_id,
+            status=status,
+            digest_sources=sources,
+            quality_report=report_payload,
+            stage="quality" if status == "blocked" else None,
+            error_summary="quality_gate_failed" if status == "blocked" else None,
+        )
+        persisted.commit()
+    except Exception:
+        _rollback_if_connected(persisted)
+        raise
+    finally:
+        with suppress(Exception):
+            persisted.close()
+
+
 async def generate_for_review(
     conn: psycopg.Connection,
     brief_date: date,
@@ -206,6 +245,7 @@ async def generate_for_review(
         raise
 
     stage = "state"
+    external_work_started = False
     digests: dict[DigestKind, DigestEnvelope | None] = {}
     try:
         claim = storage.claim_brief_generation(
@@ -233,6 +273,7 @@ async def generate_for_review(
         yesterday_top = _yesterday_top(conn, brief_date)
         conn.commit()
 
+        external_work_started = True
         stage = "fetch"
         digests = adapter.fetch(brief_date)
         stage = "build"
@@ -276,26 +317,14 @@ async def generate_for_review(
         report_payload = asdict(report)
 
         stage = "storage"
-        storage.save_generated_brief(
-            conn,
-            brief_date=brief_date,
-            content=brief.model_dump(mode="json", warnings=False),
-            model=brief.model,
-            digest_sources=sources,
-            quality_report=report_payload,
-            source_run_id=run_id,
-            status=status,
-        )
-        storage.finish_digest_run(
-            conn,
+        _persist_generated_candidate(
+            brief_date,
             run_id,
+            brief=brief,
+            sources=sources,
+            report_payload=report_payload,
             status=status,
-            digest_sources=sources,
-            quality_report=report_payload,
-            stage="quality" if status == "blocked" else None,
-            error_summary="quality_gate_failed" if status == "blocked" else None,
         )
-        conn.commit()
 
         modules = _module_count(bundle)
         if status == "blocked":
@@ -312,7 +341,7 @@ async def generate_for_review(
     except Exception:  # noqa: BLE001 - convert pipeline faults into durable safe state
         recorded = False
         record_error: Exception | None = None
-        if _rollback_if_connected(conn):
+        if not external_work_started and _rollback_if_connected(conn):
             try:
                 _persist_generation_failure(
                     conn,

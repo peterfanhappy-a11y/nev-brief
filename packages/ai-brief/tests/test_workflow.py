@@ -536,6 +536,7 @@ async def test_model_intro_cannot_block_deterministic_v4_overview(
         patch.object(generate, "_build_research", return_value=(bundle.ai_research, True, True)),
         patch.object(generate, "_build_agent", return_value=(bundle.agent_tools, True)),
         patch.object(generate, "build_opc_cases", return_value=(bundle.opc_cases, 2)),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(runner, "_alert"),
         patch.object(composer, "compose_frozen_brief") as compose,
         patch.object(deliverer, "send_pending") as deliver,
@@ -606,6 +607,7 @@ async def test_generation_quality_result_controls_review_state(
         patch.object(storage, "finish_digest_run") as finish,
         patch.object(runner, "build_digest_modules", build),
         patch.object(runner, "validate_brief", return_value=report),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(runner, "_alert") as alert,
         patch.object(composer, "compose_for_date") as compose,
     ):
@@ -625,6 +627,42 @@ async def test_generation_quality_result_controls_review_state(
         alert.assert_called_once()
 
 
+async def test_generation_persists_with_fresh_connection_after_external_work() -> None:
+    original = _connection()
+    persisted = _connection()
+    adapter = _Adapter()
+
+    async def build_after_original_connection_expires(
+        _brief_date: date,
+        _digests: dict[DigestKind, DigestEnvelope | None],
+    ) -> DigestBundle:
+        original.commit.side_effect = psycopg.OperationalError("idle connection closed")
+        return _bundle()
+
+    with (
+        patch.object(storage, "start_digest_run", return_value=RUN_ID),
+        patch.object(storage, "claim_brief_generation", return_value="started"),
+        patch.object(storage, "fetch_previous_brief", return_value=None),
+        patch.object(storage, "save_generated_brief") as save,
+        patch.object(storage, "finish_digest_run") as finish,
+        patch.object(storage, "mark_brief_generation_failed") as mark_failed,
+        patch.object(runner, "build_digest_modules", build_after_original_connection_expires),
+        patch.object(runner, "validate_brief", return_value=_quality(passed=True)),
+        patch.object(runner, "connect", return_value=persisted) as reconnect,
+        patch.object(runner, "_alert"),
+    ):
+        result = await runner.generate_for_review(original, BRIEF_DATE, adapter)
+
+    assert result.status == "awaiting_approval"
+    assert save.call_args.args[0] is persisted
+    assert finish.call_args.args[:2] == (persisted, RUN_ID)
+    assert finish.call_args.kwargs["status"] == "awaiting_approval"
+    mark_failed.assert_not_called()
+    reconnect.assert_called_once_with()
+    persisted.commit.assert_called_once_with()
+    persisted.close.assert_called_once_with()
+
+
 async def test_v4_generation_stops_at_review_without_composing_or_delivering(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -642,6 +680,7 @@ async def test_v4_generation_stops_at_review_without_composing_or_delivering(
         patch.object(storage, "finish_digest_run"),
         patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
         patch.object(runner, "validate_brief", return_value=_quality(passed=True)),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(composer, "compose_for_date") as compose,
         patch("ai_brief.deliverer.send_pending") as deliver,
     ):
@@ -691,6 +730,7 @@ async def test_generation_passes_explicit_model_outcomes_to_quality_gate(backfil
         patch.object(storage, "finish_digest_run"),
         patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
         patch.object(runner, "validate_brief", validate),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(runner, "_alert"),
     ):
         await runner.generate_for_review(connection, BRIEF_DATE, adapter, backfill=backfill)
@@ -758,6 +798,7 @@ async def test_generation_retains_quality_rejected_v4_through_real_storage(
         patch.object(storage, "claim_brief_generation", return_value="started"),
         patch.object(storage, "fetch_previous_brief", return_value=None),
         patch.object(runner, "build_digest_modules", AsyncMock(return_value=bundle)),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(runner, "_alert"),
     ):
         result = await runner.generate_for_review(
@@ -938,6 +979,7 @@ async def test_generation_rejects_invalid_backfill_age_at_workflow_boundary(
 
 async def test_generation_exception_records_safe_failed_run_without_partial_content() -> None:
     connection = _connection()
+    recovered = _connection()
     raw_secret = "password=hunter2 raw message body"  # noqa: S105 - inert leak sentinel
     envelope = DigestEnvelope(
         kind="events",
@@ -970,25 +1012,27 @@ async def test_generation_exception_records_safe_failed_run_without_partial_cont
             "build_digest_modules",
             AsyncMock(side_effect=RuntimeError(raw_secret)),
         ),
+        patch.object(runner, "connect", return_value=recovered),
         patch.object(runner, "_alert") as alert,
     ):
         result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
 
     assert result.status == "failed"
     assert result.exit_code == 1
-    connection.rollback.assert_called()
-    mark_brief_failed.assert_called_once_with(connection, BRIEF_DATE, RUN_ID)
+    mark_brief_failed.assert_called_once_with(recovered, BRIEF_DATE, RUN_ID)
     assert finish.call_args.kwargs["error_summary"] == "brief_generation_failed"
     assert finish.call_args.kwargs["digest_sources"]["events"] == envelope.metadata()
+    recovered.commit.assert_called_once_with()
+    recovered.close.assert_called_once_with()
     persisted = repr(finish.call_args) + repr(alert.call_args)
     assert raw_secret not in persisted
 
 
-async def test_generation_reconnects_to_record_failure_after_database_connection_loss() -> None:
+async def test_generation_records_external_failure_with_fresh_connection() -> None:
     connection = _connection()
     recovered = _connection()
     adapter = _Adapter()
-    mark = MagicMock(side_effect=[psycopg.OperationalError("connection lost"), None])
+    mark = MagicMock()
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
         patch.object(storage, "claim_brief_generation", return_value="started"),
@@ -1006,10 +1050,7 @@ async def test_generation_reconnects_to_record_failure_after_database_connection
         result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
 
     assert result.status == "failed"
-    assert mark.call_args_list == [
-        ((connection, BRIEF_DATE, RUN_ID), {}),
-        ((recovered, BRIEF_DATE, RUN_ID), {}),
-    ]
+    mark.assert_called_once_with(recovered, BRIEF_DATE, RUN_ID)
     assert finish.call_args.args[:2] == (recovered, RUN_ID)
     recovered.commit.assert_called_once_with()
     reconnect.assert_called_once_with()
@@ -1075,6 +1116,7 @@ async def test_first_run_commit_failure_rolls_back_and_alerts() -> None:
 
 async def test_failed_run_recording_failure_alerts_before_reraising() -> None:
     connection = _connection()
+    recovered = _connection()
     raw_secret = "failure recording password=hunter2"  # noqa: S105
     with (
         patch.object(storage, "start_digest_run", return_value=RUN_ID),
@@ -1087,13 +1129,14 @@ async def test_failed_run_recording_failure_alerts_before_reraising() -> None:
             "build_digest_modules",
             AsyncMock(side_effect=RuntimeError("model failed")),
         ),
-        patch.object(runner, "connect", side_effect=RuntimeError("recovery unavailable")),
+        patch.object(runner, "connect", return_value=recovered),
         patch.object(runner, "_alert") as alert,
         pytest.raises(RuntimeError, match="failure recording"),
     ):
         await runner.generate_for_review(connection, BRIEF_DATE, _Adapter())
 
-    assert connection.rollback.call_count >= 2
+    recovered.rollback.assert_called_once_with()
+    recovered.close.assert_called_once_with()
     alert.assert_called_once()
     assert raw_secret not in repr(alert.call_args)
 
@@ -1115,6 +1158,7 @@ async def test_schema_invalid_candidate_is_quality_blocked_not_pipeline_failed()
         patch.object(storage, "finish_digest_run") as finish,
         patch.object(storage, "mark_brief_generation_failed") as mark_failed,
         patch.object(runner, "build_digest_modules", AsyncMock(return_value=invalid_bundle)),
+        patch.object(runner, "connect", return_value=connection),
         patch.object(runner, "_alert"),
     ):
         result = await runner.generate_for_review(connection, BRIEF_DATE, adapter)
