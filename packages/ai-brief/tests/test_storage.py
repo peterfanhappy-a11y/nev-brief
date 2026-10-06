@@ -132,7 +132,7 @@ def test_recover_recent_sending_deliveries_uses_idempotency_safe_window() -> Non
     sql, params = cur.execute.call_args.args
     assert "status = 'sending'" in sql
     assert "updated_at <= statement_timestamp() - (%s * INTERVAL '1 minute')" in sql
-    assert "updated_at > statement_timestamp() - (%s * INTERVAL '1 hour')" in sql
+    assert "created_at > statement_timestamp() - (%s * INTERVAL '1 hour')" in sql
     assert params == (15, 24, date(2026, 10, 5), date(2026, 10, 5))
 
 

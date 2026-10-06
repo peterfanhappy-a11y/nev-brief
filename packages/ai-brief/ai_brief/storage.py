@@ -833,7 +833,7 @@ def recover_recent_sending_deliveries(
             updated_at = statement_timestamp()
         WHERE status = 'sending'
           AND updated_at <= statement_timestamp() - (%s * INTERVAL '1 minute')
-          AND updated_at > statement_timestamp() - (%s * INTERVAL '1 hour')
+          AND created_at > statement_timestamp() - (%s * INTERVAL '1 hour')
           AND (%s IS NULL OR brief_date = %s)
         RETURNING id;
     """
