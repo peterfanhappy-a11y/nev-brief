@@ -364,6 +364,7 @@ async def test_frozen_v4_workflow_publishes_two_complete_cases_and_blocks_incomp
                 side_effect=publish,
             ),
             patch.object(runner, "build_digest_modules", side_effect=build_modules),
+            patch.object(runner, "connect", return_value=connection),
             patch.object(runner, "_alert"),
             patch.object(generate, "_is_usable_header_image", return_value=True),
             patch.object(

@@ -48,8 +48,23 @@ def test_retry_only_targets_transient_failures_below_ceiling() -> None:
     from unittest.mock import patch
 
     conn = MagicMock()
-    with patch("ai_brief.config.email_send_enabled", return_value=True), patch.object(
-        storage, "retry_transient_deliveries", return_value=2
-    ) as retry:
+    with (
+        patch("ai_brief.config.email_send_enabled", return_value=True),
+        patch.object(storage, "retry_transient_deliveries", return_value=2) as retry,
+        patch.object(storage, "recover_recent_sending_deliveries", return_value=1) as recover,
+    ):
         deliverer.send_pending(conn, brief_date=date(2026, 8, 13), retry_transient=True)
     retry.assert_called_once_with(conn, brief_date=date(2026, 8, 13))
+    recover.assert_called_once_with(conn, brief_date=date(2026, 8, 13))
+
+
+def test_stuck_sending_recovery_requires_explicit_retry() -> None:
+    conn = MagicMock()
+    with (
+        patch("ai_brief.config.email_send_enabled", return_value=True),
+        patch.object(storage, "recover_recent_sending_deliveries") as recover,
+        patch.object(storage, "claim_pending_deliveries", return_value=[]),
+    ):
+        deliverer.send_pending(conn, brief_date=date(2026, 8, 13), retry_transient=False)
+
+    recover.assert_not_called()
