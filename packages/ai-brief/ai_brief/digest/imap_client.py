@@ -295,15 +295,15 @@ def _fetch_latest_once(
                 for variant in _subject_date_variants(target)
             ]
         else:
-            terms = ["FROM", f'"{sender}"', "SUBJECT", f'"{subject_prefix}"']
+            fallback_terms = ["FROM", f'"{sender}"', "SUBJECT", f'"{subject_prefix}"']
             if oldest_ok is not None:
-                terms.extend(("SINCE", f'"{_imap_search_date(oldest_ok)}"'))
-            search_terms = [tuple(terms)]
+                fallback_terms.extend(("SINCE", f'"{_imap_search_date(oldest_ok)}"'))
+            search_terms = [tuple(fallback_terms)]
 
         uids: list[bytes] = []
         seen_uids: set[bytes] = set()
-        for terms in search_terms:
-            typ, data = imap.search(None, *terms)
+        for criteria in search_terms:
+            typ, data = imap.search(None, *criteria)
             if typ != "OK" or not data or not data[0]:
                 continue
             for uid in data[0].split():
