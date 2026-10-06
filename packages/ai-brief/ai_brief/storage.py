@@ -818,6 +818,38 @@ def retry_transient_deliveries(
         return len(cur.fetchall())
 
 
+def recover_recent_sending_deliveries(
+    conn: psycopg.Connection,
+    *,
+    brief_date: date | None = None,
+    stale_after_minutes: int = 15,
+    idempotency_window_hours: int = 24,
+) -> int:
+    """Requeue stuck sends only while their stable Resend key is still valid."""
+    sql = """
+        UPDATE ai_deliveries
+        SET status = 'pending',
+            error = 'recovered stale sending',
+            updated_at = statement_timestamp()
+        WHERE status = 'sending'
+          AND updated_at <= statement_timestamp() - (%s * INTERVAL '1 minute')
+          AND updated_at > statement_timestamp() - (%s * INTERVAL '1 hour')
+          AND (%s IS NULL OR brief_date = %s)
+        RETURNING id;
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            sql,
+            (
+                stale_after_minutes,
+                idempotency_window_hours,
+                brief_date,
+                brief_date,
+            ),
+        )
+        return len(cur.fetchall())
+
+
 def lock_active_subscriber(
     conn: psycopg.Connection,
     *,

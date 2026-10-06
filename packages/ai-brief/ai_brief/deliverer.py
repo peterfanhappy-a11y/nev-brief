@@ -108,17 +108,21 @@ def send_pending(
         return SendResult(attempted=0, sent=0, failed=0)
     if retry_transient:
         storage.retry_transient_deliveries(conn, brief_date=brief_date)
+        storage.recover_recent_sending_deliveries(conn, brief_date=brief_date)
         conn.commit()
-    pendings = storage.claim_pending_deliveries(conn, limit=limit, brief_date=brief_date)
-    if not pendings:
-        return SendResult(attempted=0, sent=0, failed=0)
-    conn.commit()  # 释放 claim 锁，后续可逐行独立 commit
 
-    sent = failed = 0
-    for d in pendings:
+    attempted = sent = failed = 0
+    while attempted < limit:
+        pendings = storage.claim_pending_deliveries(conn, limit=1, brief_date=brief_date)
+        if not pendings:
+            break
+        conn.commit()  # 一次仅释放一封的 claim 锁，崩溃最多遗留一行 sending。
+        attempted += 1
+        d = pendings[0]
         if _send_one(conn, d):
             sent += 1
         else:
             failed += 1
-    log.info("ai_deliverer.done", attempted=len(pendings), sent=sent, failed=failed)
-    return SendResult(attempted=len(pendings), sent=sent, failed=failed)
+    if attempted:
+        log.info("ai_deliverer.done", attempted=attempted, sent=sent, failed=failed)
+    return SendResult(attempted=attempted, sent=sent, failed=failed)

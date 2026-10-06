@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from datetime import date
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
+import psycopg
+import pytest
 from ai_brief import config, deliverer, storage
 from ai_brief.resend_client import ResendAuthError, ResendTransientError
 from ai_brief.storage import PendingAiDelivery
@@ -107,9 +109,46 @@ def test_send_pending_empty() -> None:
 
 def test_send_pending_mixed() -> None:
     conn = MagicMock()
-    pendings = [_pending(), _pending()]
+    first = _pending()
+    second = _pending()
     with patch.object(config, "email_send_enabled", return_value=True), \
-         patch.object(storage, "claim_pending_deliveries", return_value=pendings), \
+         patch.object(
+             storage,
+             "claim_pending_deliveries",
+             side_effect=[[first], [second]],
+         ) as claim, \
          patch.object(deliverer, "_send_one", side_effect=[True, False]):
-        res = deliverer.send_pending(conn)
+        res = deliverer.send_pending(conn, limit=2)
     assert res.attempted == 2 and res.sent == 1 and res.failed == 1
+    assert claim.call_args_list == [
+        call(conn, limit=1, brief_date=None),
+        call(conn, limit=1, brief_date=None),
+    ]
+
+
+def test_post_send_database_failure_retries_with_same_idempotency_key() -> None:
+    conn = MagicMock()
+    pending = _pending()
+    with (
+        patch.object(config, "email_send_enabled", return_value=True),
+        patch.object(storage, "retry_transient_deliveries", return_value=0),
+        patch.object(storage, "recover_recent_sending_deliveries", return_value=1) as recover,
+        patch.object(storage, "claim_pending_deliveries", side_effect=[[pending], [pending]]),
+        patch.object(storage, "lock_active_subscriber", return_value=True),
+        patch.object(deliverer, "send_email", return_value="re_123") as send,
+        patch.object(
+            storage,
+            "mark_sent",
+            side_effect=[psycopg.OperationalError("database write failed"), None],
+        ),
+    ):
+        with pytest.raises(psycopg.OperationalError, match="database write failed"):
+            deliverer.send_pending(conn, limit=1)
+        result = deliverer.send_pending(conn, limit=1, retry_transient=True)
+
+    assert result == deliverer.SendResult(attempted=1, sent=1, failed=0)
+    recover.assert_called_once_with(conn, brief_date=None)
+    assert [item.kwargs["idempotency_key"] for item in send.call_args_list] == [
+        "aivizens-2026-07-02-sub-1",
+        "aivizens-2026-07-02-sub-1",
+    ]

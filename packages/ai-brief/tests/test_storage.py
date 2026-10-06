@@ -113,6 +113,29 @@ def test_retry_transient_deliveries_uses_valid_psycopg_placeholders() -> None:
     ) == 2
 
 
+def test_recover_recent_sending_deliveries_uses_idempotency_safe_window() -> None:
+    conn, cur = _mock_conn(fetch_rows=[("delivery-1",), ("delivery-2",)])
+
+    def adapt_query(query: str, params: tuple[object, ...]) -> None:
+        PostgresQuery(Transformer()).convert(query, params)
+
+    cur.execute.side_effect = adapt_query
+
+    recovered = storage.recover_recent_sending_deliveries(
+        conn,
+        brief_date=date(2026, 10, 5),
+        stale_after_minutes=15,
+        idempotency_window_hours=24,
+    )
+
+    assert recovered == 2
+    sql, params = cur.execute.call_args.args
+    assert "status = 'sending'" in sql
+    assert "updated_at <= statement_timestamp() - (%s * INTERVAL '1 minute')" in sql
+    assert "updated_at > statement_timestamp() - (%s * INTERVAL '1 hour')" in sql
+    assert params == (15, 24, date(2026, 10, 5), date(2026, 10, 5))
+
+
 def test_fetch_previous_brief_returns_content() -> None:
     conn, cur = _mock_conn(fetch_rows=[({"subject": "昨日"},)])
     content = storage.fetch_previous_brief(conn, date(2026, 7, 2))
