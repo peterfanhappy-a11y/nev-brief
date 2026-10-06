@@ -8,6 +8,7 @@ import WebSocket from "ws";
 import { POST as subscribe } from "@/app/api/ai/subscribe/route";
 import { confirmSubscriptionAction } from "@/app/confirm/actions";
 import { unsubscribeAction } from "@/app/unsubscribe/actions";
+import { hashConfirmationToken } from "@/lib/subscription-token";
 
 interface CapturedEmail {
   id: string;
@@ -31,10 +32,8 @@ interface SubscriberRow {
   unsubscribe_token: string;
 }
 
-const SUCCESS = { ok: true, message: "check_email" };
+const SUCCESS = { ok: true, message: "subscribed" };
 const ZERO_UUID = "00000000-0000-0000-0000-000000000000";
-const SHA256_HEX = /^[0-9a-f]{64}$/;
-const CONFIRMATION_URL = /https?:\/\/[^\s<]+\/confirm\?token=([^\s<]+)/;
 function requiredEnvironment(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -168,12 +167,6 @@ async function subscriber(email: string): Promise<SubscriberRow> {
   return data as SubscriberRow;
 }
 
-function rawConfirmationToken(email: CapturedEmail): string {
-  const match = CONFIRMATION_URL.exec(email.body.text);
-  expect(match).not.toBeNull();
-  return decodeURIComponent(match![1]);
-}
-
 function activeSubscribersFromProduction(): Array<{
   id: string;
   email: string;
@@ -223,6 +216,7 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
   const lifecycleEmail = `lifecycle-${runId}@example.com`;
   const pendingEmail = `pending-${runId}@example.com`;
   const expiredEmail = `expired-${runId}@example.com`;
+  const legacyEmail = `legacy-${runId}@example.com`;
 
   beforeAll(async () => {
     const attempts = await supabase
@@ -252,24 +246,22 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
     assertNoSupabaseError(signed.error, "select subscribers with signed service role");
   });
 
-  it("moves new -> pending -> active -> unsubscribed -> pending -> active without storing raw tokens", async () => {
+  it("moves new -> active -> unsubscribed -> active without a confirmation email", async () => {
     expect(await submit(lifecycleEmail)).toEqual({ status: 202, body: SUCCESS });
 
     const firstMail = (await messages()).find(
-      (mail) => mail.body.to === lifecycleEmail && mail.body.subject.includes("确认订阅"),
+      (mail) => mail.body.to === lifecycleEmail && mail.body.subject.includes("欢迎加入"),
     );
     expect(firstMail).toBeDefined();
-    const firstRawToken = rawConfirmationToken(firstMail!);
-    const firstPending = await subscriber(lifecycleEmail);
-    expect(firstPending.status).toBe("pending_confirmation");
-    expect(firstPending.confirmation_token_hash).toMatch(SHA256_HEX);
-    expect(JSON.stringify(firstPending)).not.toContain(firstRawToken);
-    expect(activeSubscribersFromProduction()).toEqual([]);
-
     expect(
-      await formActionRedirect(confirmSubscriptionAction, { token: firstRawToken }),
-    ).toContain("/confirm?status=confirmed");
-    expect((await subscriber(lifecycleEmail)).status).toBe("active");
+      (await messages()).some(
+        (mail) => mail.body.to === lifecycleEmail && mail.body.subject.includes("确认订阅"),
+      ),
+    ).toBe(false);
+    const firstActive = await subscriber(lifecycleEmail);
+    expect(firstActive.status).toBe("active");
+    expect(firstActive.confirmation_token_hash).toBeNull();
+    expect(firstActive.confirmation_expires_at).toBeNull();
     expect(activeSubscribersFromProduction().map((row) => row.email)).toEqual([
       lifecycleEmail,
     ]);
@@ -289,28 +281,20 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
       body: SUCCESS,
     });
     const secondMail = (await messages()).find(
-      (mail) => mail.body.to === lifecycleEmail && mail.body.subject.includes("确认订阅"),
+      (mail) => mail.body.to === lifecycleEmail && mail.body.subject.includes("欢迎加入"),
     );
     expect(secondMail).toBeDefined();
-    const secondRawToken = rawConfirmationToken(secondMail!);
-    expect(secondRawToken).not.toBe(firstRawToken);
-    expect((await subscriber(lifecycleEmail)).status).toBe("pending_confirmation");
-    expect(JSON.stringify(await subscriber(lifecycleEmail))).not.toContain(secondRawToken);
-
-    expect(
-      await formActionRedirect(confirmSubscriptionAction, { token: secondRawToken }),
-    ).toContain("/confirm?status=confirmed");
     expect((await subscriber(lifecycleEmail)).status).toBe("active");
   });
 
-  it("keeps the public response identical when confirmation transport fails", async () => {
+  it("keeps the subscription active when welcome transport fails", async () => {
     await failNextMessages(2);
     const transportFailure = await submit(pendingEmail, "203.0.113.12");
     const existingActive = await submit(lifecycleEmail, "203.0.113.13");
 
     expect(transportFailure).toEqual({ status: 202, body: SUCCESS });
     expect(existingActive).toEqual(transportFailure);
-    expect((await subscriber(pendingEmail)).status).toBe("pending_confirmation");
+    expect((await subscriber(pendingEmail)).status).toBe("active");
     expect((await messages()).some((mail) => mail.body.to === pendingEmail)).toBe(false);
     const attempts = (await deliveryAttempts()).filter(
       (attempt) => attempt.body.to === pendingEmail,
@@ -320,41 +304,36 @@ describe.sequential("AIVIZENS subscription against PostgreSQL, PostgREST, and fa
     expect(attempts[1].idempotencyKey).toBe(attempts[0].idempotencyKey);
   });
 
-  it("rejects expired and replayed confirmation tokens without changing state", async () => {
-    await clearMessages();
-    expect(await submit(expiredEmail, "203.0.113.14")).toEqual({
-      status: 202,
-      body: SUCCESS,
-    });
-    const expiredMail = (await messages()).find((mail) => mail.body.to === expiredEmail);
-    expect(expiredMail).toBeDefined();
-    const expiredToken = rawConfirmationToken(expiredMail!);
-    const expiryUpdate = await supabase
-      .from("ai_subscribers")
-      .update({ confirmation_expires_at: "2000-01-01T00:00:00.000Z" })
-      .eq("email", expiredEmail);
-    assertNoSupabaseError(expiryUpdate.error, "expire confirmation token");
+  it("keeps legacy confirmation links working without issuing new ones", async () => {
+    const expiredToken = `expired-${runId}`;
+    const replayToken = `replay-${runId}`;
+    const insertLegacy = await supabase.from("ai_subscribers").insert([
+      {
+        email: expiredEmail,
+        status: "pending_confirmation",
+        confirmation_token_hash: hashConfirmationToken(expiredToken),
+        confirmation_expires_at: "2000-01-01T00:00:00.000Z",
+      },
+      {
+        email: legacyEmail,
+        status: "pending_confirmation",
+        confirmation_token_hash: hashConfirmationToken(replayToken),
+        confirmation_expires_at: "2999-01-01T00:00:00.000Z",
+      },
+    ]);
+    assertNoSupabaseError(insertLegacy.error, "insert legacy confirmation rows");
 
     expect(
       await formActionRedirect(confirmSubscriptionAction, { token: expiredToken }),
     ).toContain("/confirm?status=invalid");
     expect((await subscriber(expiredEmail)).status).toBe("pending_confirmation");
-
-    await clearMessages();
-    expect(await submit(pendingEmail, "203.0.113.15")).toEqual({
-      status: 202,
-      body: SUCCESS,
-    });
-    const replayMail = (await messages()).find((mail) => mail.body.to === pendingEmail);
-    expect(replayMail).toBeDefined();
-    const replayToken = rawConfirmationToken(replayMail!);
     expect(
       await formActionRedirect(confirmSubscriptionAction, { token: replayToken }),
     ).toContain("/confirm?status=confirmed");
     expect(
       await formActionRedirect(confirmSubscriptionAction, { token: replayToken }),
     ).toContain("/confirm?status=invalid");
-    expect((await subscriber(pendingEmail)).status).toBe("active");
+    expect((await subscriber(legacyEmail)).status).toBe("active");
   });
 
   it("suppresses an already queued delivery when the reader unsubscribes", async () => {

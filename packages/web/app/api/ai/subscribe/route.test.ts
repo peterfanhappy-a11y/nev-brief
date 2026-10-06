@@ -4,12 +4,13 @@ const RAW_TOKEN = "raw-confirmation-token-must-stay-private";
 const TOKEN_HASH = "c".repeat(64);
 const IP_HASH = "a".repeat(64);
 const EMAIL_HASH = "b".repeat(64);
+const UNSUBSCRIBE_TOKEN = "11111111-1111-4111-8111-111111111111";
 
 const mocks = vi.hoisted(() => ({
   hashLimiterKey: vi.fn(),
   checkRateLimit: vi.fn(),
   createToken: vi.fn(),
-  sendConfirmation: vi.fn(),
+  sendWelcome: vi.fn(),
   getSupabaseAdmin: vi.fn(),
   rpc: vi.fn(),
 }));
@@ -21,9 +22,8 @@ vi.mock("@/lib/rate-limit", () => ({
 vi.mock("@/lib/subscription-token", () => ({
   createConfirmationToken: mocks.createToken,
 }));
-vi.mock("@/lib/ai-confirmation-email", () => ({
-  ConfirmationEmailDeliveryError: class ConfirmationEmailDeliveryError extends Error {},
-  sendAiConfirmationEmail: mocks.sendConfirmation,
+vi.mock("@/lib/ai-welcome-email", () => ({
+  sendAiWelcomeEmail: mocks.sendWelcome,
 }));
 vi.mock("@/lib/supabase", () => ({
   getSupabaseAdmin: mocks.getSupabaseAdmin,
@@ -31,7 +31,7 @@ vi.mock("@/lib/supabase", () => ({
 
 import { POST } from "./route";
 
-const SUCCESS = { ok: true, message: "check_email" };
+const SUCCESS = { ok: true, message: "subscribed" };
 
 function request(
   body: unknown = {
@@ -67,11 +67,11 @@ describe("POST /api/ai/subscribe", () => {
     });
     mocks.createToken.mockReturnValue({ rawToken: RAW_TOKEN, tokenHash: TOKEN_HASH });
     mocks.rpc.mockResolvedValue({
-      data: [{ confirmation_required: true }],
+      data: [{ welcome_required: true, unsubscribe_token: UNSUBSCRIBE_TOKEN }],
       error: null,
     });
     mocks.getSupabaseAdmin.mockReturnValue({ rpc: mocks.rpc });
-    mocks.sendConfirmation.mockResolvedValue(undefined);
+    mocks.sendWelcome.mockResolvedValue(undefined);
     consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
@@ -94,7 +94,7 @@ describe("POST /api/ai/subscribe", () => {
     expect(json).not.toHaveBeenCalled();
     expect(mocks.checkRateLimit).not.toHaveBeenCalled();
     expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
-    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
+    expect(mocks.sendWelcome).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -134,7 +134,7 @@ describe("POST /api/ai/subscribe", () => {
     expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
   });
 
-  it("normalizes input, preserves operation order, and stores only the token hash", async () => {
+  it("normalizes input, atomically activates the subscription, and sends welcome mail", async () => {
     const response = await POST(request());
     const text = await response.text();
 
@@ -147,48 +147,46 @@ describe("POST /api/ai/subscribe", () => {
       emailHash: EMAIL_HASH,
       now: expect.any(Date),
     });
-    expect(mocks.rpc).toHaveBeenCalledWith("prepare_ai_subscription", {
+    expect(mocks.rpc).toHaveBeenCalledWith("activate_ai_subscription", {
       input_email: "reader@example.com",
-      input_token_hash: TOKEN_HASH,
-      input_expires_at: expect.any(String),
       input_ip_hash: IP_HASH,
       input_utm: { source: "launch", medium: "email", campaign: "phase-1" },
     });
-    expect(mocks.sendConfirmation).toHaveBeenCalledWith(
+    expect(mocks.sendWelcome).toHaveBeenCalledWith(
       "reader@example.com",
-      RAW_TOKEN,
+      UNSUBSCRIBE_TOKEN,
+      TOKEN_HASH,
     );
 
     const dbPayload = JSON.stringify(mocks.rpc.mock.calls);
     expect(dbPayload).not.toContain(RAW_TOKEN);
-    expect(dbPayload).not.toContain('"status":"active"');
     expect(text).not.toContain(RAW_TOKEN);
     expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TOKEN);
 
     expect(mocks.checkRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.createToken.mock.invocationCallOrder[0],
-    );
-    expect(mocks.createToken.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.rpc.mock.invocationCallOrder[0],
     );
     expect(mocks.rpc.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.sendConfirmation.mock.invocationCallOrder[0],
+      mocks.createToken.mock.invocationCallOrder[0],
+    );
+    expect(mocks.createToken.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.sendWelcome.mock.invocationCallOrder[0],
     );
   });
 
   it.each(["new", "pending", "unsubscribed"])(
-    "returns the same public success for a %s email and sends confirmation",
+    "returns the same public success for a %s email and sends one welcome message",
     async () => {
       const response = await POST(request());
       expect(response.status).toBe(202);
       await expect(responseBody(response)).resolves.toEqual(SUCCESS);
-      expect(mocks.sendConfirmation).toHaveBeenCalledOnce();
+      expect(mocks.sendWelcome).toHaveBeenCalledOnce();
     },
   );
 
-  it("returns the same public success for active email without changing or emailing it", async () => {
+  it("returns the same public success for an active email without sending another welcome", async () => {
     mocks.rpc.mockResolvedValue({
-      data: [{ confirmation_required: false }],
+      data: [{ welcome_required: false, unsubscribe_token: UNSUBSCRIBE_TOKEN }],
       error: null,
     });
 
@@ -196,8 +194,8 @@ describe("POST /api/ai/subscribe", () => {
 
     expect(response.status).toBe(202);
     await expect(responseBody(response)).resolves.toEqual(SUCCESS);
-    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
-    expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain('"status":"active"');
+    expect(mocks.createToken).not.toHaveBeenCalled();
+    expect(mocks.sendWelcome).not.toHaveBeenCalled();
   });
 
   it("fails closed when the durable limiter storage fails", async () => {
@@ -211,14 +209,14 @@ describe("POST /api/ai/subscribe", () => {
     expect(mocks.getSupabaseAdmin).not.toHaveBeenCalled();
   });
 
-  it("returns a database error without sending email when atomic preparation fails", async () => {
+  it("returns a database error without sending email when atomic activation fails", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: { message: "db unavailable" } });
 
     const response = await POST(request());
 
     expect(response.status).toBe(500);
     await expect(responseBody(response)).resolves.toEqual({ error: "db" });
-    expect(mocks.sendConfirmation).not.toHaveBeenCalled();
+    expect(mocks.sendWelcome).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -227,13 +225,16 @@ describe("POST /api/ai/subscribe", () => {
     ["unsubscribed", true],
     ["active", false],
   ])(
-    "returns the same private result for %s when confirmation delivery is unavailable",
-    async (_state, confirmationRequired) => {
+    "keeps the subscription successful for %s when welcome delivery is unavailable",
+    async (_state, welcomeRequired) => {
       mocks.rpc.mockResolvedValue({
-        data: [{ confirmation_required: confirmationRequired }],
+        data: [{
+          welcome_required: welcomeRequired,
+          unsubscribe_token: UNSUBSCRIBE_TOKEN,
+        }],
         error: null,
       });
-      mocks.sendConfirmation.mockRejectedValue(
+      mocks.sendWelcome.mockRejectedValue(
         new Error(`provider rejected reader@example.com ${RAW_TOKEN}`),
       );
 
@@ -243,9 +244,7 @@ describe("POST /api/ai/subscribe", () => {
       expect(response.status).toBe(202);
       expect(JSON.parse(text)).toEqual(SUCCESS);
       expect(mocks.rpc).toHaveBeenCalledOnce();
-      expect(mocks.sendConfirmation).toHaveBeenCalledTimes(
-        confirmationRequired ? 1 : 0,
-      );
+      expect(mocks.sendWelcome).toHaveBeenCalledTimes(welcomeRequired ? 1 : 0);
       expect(text).not.toContain(RAW_TOKEN);
       expect(JSON.stringify(mocks.rpc.mock.calls)).not.toContain(RAW_TOKEN);
       expect(JSON.stringify(consoleError.mock.calls)).not.toContain(RAW_TOKEN);

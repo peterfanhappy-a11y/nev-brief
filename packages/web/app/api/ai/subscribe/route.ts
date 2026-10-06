@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import {
-  ConfirmationEmailDeliveryError,
-  sendAiConfirmationEmail,
-} from "@/lib/ai-confirmation-email";
+import { sendAiWelcomeEmail } from "@/lib/ai-welcome-email";
 import { subscriptionsEnabled } from "@/lib/feature-flags";
 import {
   checkSubscriptionRateLimit,
@@ -29,8 +26,9 @@ const Body = z
   })
   .strict();
 
-interface PrepareSubscriptionRow {
-  confirmation_required: boolean;
+interface ActivateSubscriptionRow {
+  welcome_required: boolean;
+  unsubscribe_token: string;
 }
 
 function getClientIp(req: Request): string {
@@ -88,51 +86,49 @@ export async function POST(req: Request) {
     );
   }
 
-  const { rawToken, tokenHash } = createConfirmationToken();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1_000);
-
-  let prepareResult: {
+  let activationResult: {
     data: unknown;
     error: unknown;
   };
   try {
-    prepareResult = await getSupabaseAdmin().rpc("prepare_ai_subscription", {
+    activationResult = await getSupabaseAdmin().rpc("activate_ai_subscription", {
       input_email: body.email,
-      input_token_hash: tokenHash,
-      input_expires_at: expiresAt.toISOString(),
       input_ip_hash: ipHash,
       input_utm: body.utm ?? {},
     });
   } catch {
-    console.error("[ai/subscribe] atomic preparation failed");
+    console.error("[ai/subscribe] atomic activation failed");
     return NextResponse.json({ error: "db" }, { status: 500 });
   }
 
-  const rows = prepareResult.data as PrepareSubscriptionRow[] | null;
+  const rows = activationResult.data as ActivateSubscriptionRow[] | null;
   const decision = Array.isArray(rows) ? rows[0] : undefined;
   if (
-    prepareResult.error ||
+    activationResult.error ||
     rows?.length !== 1 ||
     !decision ||
-    typeof decision.confirmation_required !== "boolean"
+    typeof decision.welcome_required !== "boolean" ||
+    typeof decision.unsubscribe_token !== "string"
   ) {
-    console.error("[ai/subscribe] atomic preparation failed");
+    console.error("[ai/subscribe] atomic activation failed");
     return NextResponse.json({ error: "db" }, { status: 500 });
   }
 
-  if (decision.confirmation_required) {
+  if (decision.welcome_required) {
+    const { tokenHash } = createConfirmationToken();
     try {
-      await sendAiConfirmationEmail(body.email, rawToken);
-    } catch (error) {
-      const kind = error instanceof ConfirmationEmailDeliveryError
-        ? error.kind
-        : "unknown";
-      console.error(`[ai/subscribe] confirmation email delivery failed (${kind})`);
+      await sendAiWelcomeEmail(
+        body.email,
+        decision.unsubscribe_token,
+        tokenHash,
+      );
+    } catch {
+      console.error("[ai/subscribe] welcome email delivery failed");
     }
   }
 
   return NextResponse.json(
-    { ok: true, message: "check_email" },
+    { ok: true, message: "subscribed" },
     { status: 202 },
   );
 }
