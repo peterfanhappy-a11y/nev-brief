@@ -211,6 +211,24 @@ def _date_key(text: str) -> tuple[int, int, int] | None:
 
 
 _INTERNALDATE_RE = re.compile(br'INTERNALDATE "(?P<value>[^"]+)"')
+_IMAP_MONTHS = (
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+
+
+def _subject_date_variants(target: tuple[int, int, int]) -> tuple[str, ...]:
+    year, month, day = target
+    return (
+        f"{year}-{month:02d}-{day:02d}",
+        f"{year}-{month:02d}-{day}",
+        f"{year}-{month}-{day:02d}",
+        f"{year}-{month}-{day}",
+    )
+
+
+def _imap_search_date(value: datetime) -> str:
+    return f"{value.day:02d}-{_IMAP_MONTHS[value.month - 1]}-{value.year}"
 
 
 def _internaldate(response: bytes) -> datetime | None:
@@ -264,12 +282,37 @@ def _fetch_latest_once(
     try:
         imap.login(user, password)
         imap.select(mailbox, readonly=True)
-        # IMAP SUBJECT 是子串匹配；用前缀粗筛，日期在客户端精确比对
-        typ, data = imap.search(None, "FROM", f'"{sender}"', "SUBJECT", f'"{subject_prefix}"')
-        if typ != "OK" or not data or not data[0]:
+        # IMAP SUBJECT 是子串匹配；服务端先按前缀和日期变体缩小候选，
+        # 客户端仍做完整主题、日期与 INTERNALDATE 校验。
+        search_terms: list[tuple[str, ...]]
+        if target is not None:
+            search_terms = [
+                (
+                    "FROM", f'"{sender}"',
+                    "SUBJECT", f'"{subject_prefix}"',
+                    "SUBJECT", f'"{variant}"',
+                )
+                for variant in _subject_date_variants(target)
+            ]
+        else:
+            terms = ["FROM", f'"{sender}"', "SUBJECT", f'"{subject_prefix}"']
+            if oldest_ok is not None:
+                terms.extend(("SINCE", f'"{_imap_search_date(oldest_ok)}"'))
+            search_terms = [tuple(terms)]
+
+        uids: list[bytes] = []
+        seen_uids: set[bytes] = set()
+        for terms in search_terms:
+            typ, data = imap.search(None, *terms)
+            if typ != "OK" or not data or not data[0]:
+                continue
+            for uid in data[0].split():
+                if uid not in seen_uids:
+                    seen_uids.add(uid)
+                    uids.append(uid)
+        if not uids:
             log.warning("ai_imap.no_match", sender=sender, prefix=subject_prefix)
             return None
-        uids = data[0].split()
 
         # 先只取 header + INTERNALDATE（小），按服务器收件时间挑最新，再下载整封。
         best_uid: bytes | None = None

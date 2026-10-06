@@ -1,6 +1,7 @@
 """imap_client.parse_message —— MIME 解析纯函数测试（不触网）。"""
 from __future__ import annotations
 
+import email
 import imaplib
 from datetime import UTC, date, datetime, timedelta, timezone
 from email.message import EmailMessage
@@ -36,6 +37,8 @@ class _FakeIMAP:
             str(index).encode(): record
             for index, record in enumerate(records, start=1)
         }
+        self.search_calls: list[tuple[object, ...]] = []
+        self.header_fetches: list[bytes] = []
 
     def login(self, _user: str, _password: str) -> None:
         return None
@@ -44,11 +47,13 @@ class _FakeIMAP:
         assert readonly is True
 
     def search(self, *_args: object) -> tuple[str, list[bytes]]:
+        self.search_calls.append(_args)
         return "OK", [b" ".join(self._records)]
 
     def fetch(self, uid: bytes, query: str) -> tuple[str, list[tuple[bytes, bytes]]]:
         received_at, raw = self._records[uid]
         if "HEADER.FIELDS" in query:
+            self.header_fetches.append(uid)
             fields = raw.split(b"\r\n\r\n", 1)[0] + b"\r\n\r\n"
             attributes = [uid + b" ("]
             if "INTERNALDATE" in query:
@@ -61,6 +66,48 @@ class _FakeIMAP:
 
     def logout(self) -> None:
         return None
+
+
+class _CriteriaAwareFakeIMAP(_FakeIMAP):
+    """Small IMAP search fake that filters SUBJECT and SINCE before FETCH."""
+
+    def search(self, *_args: object) -> tuple[str, list[bytes]]:
+        self.search_calls.append(_args)
+        terms = list(_args[1:])
+        subject_terms: list[str] = []
+        since: date | None = None
+        index = 0
+        while index < len(terms):
+            criterion = terms[index]
+            if criterion == "SUBJECT" and index + 1 < len(terms):
+                subject_terms.append(str(terms[index + 1]).strip('"'))
+                index += 2
+                continue
+            if criterion == "SINCE" and index + 1 < len(terms):
+                since = datetime.strptime(
+                    str(terms[index + 1]).strip('"'), "%d-%b-%Y"
+                ).date()
+                index += 2
+                continue
+            index += 1
+
+        matches: list[bytes] = []
+        for uid, (received_at, raw) in self._records.items():
+            subject = str(email.message_from_bytes(raw).get("Subject") or "")
+            if not all(term in subject for term in subject_terms):
+                continue
+            if since is not None and received_at.date() < since:
+                continue
+            matches.append(uid)
+        return "OK", [b" ".join(matches)]
+
+
+class _RepeatingSearchFakeIMAP(_FakeIMAP):
+    """Return the same UID for each server-side date variant search."""
+
+    def search(self, *_args: object) -> tuple[str, list[bytes]]:
+        self.search_calls.append(_args)
+        return "OK", [next(iter(self._records))]
 
 
 @pytest.mark.parametrize("has_exact", [True, False])
@@ -105,6 +152,94 @@ def test_other_digest_kinds_keep_prefix_and_unpadded_date_tolerance() -> None:
             user="test-user", password="test-password",  # noqa: S106
         )
     assert result is not None and result.message_id == "<events-test>"
+
+
+def test_fetch_latest_filters_target_date_before_fetching_headers() -> None:
+    now = datetime.now(UTC)
+    fake = _CriteriaAwareFakeIMAP(
+        [
+            (now - timedelta(days=2), _raw_email(
+                subject="ai-events-digest-2026-10-03",
+                message_id="<historical-one>",
+                date_header=None,
+            )),
+            (now - timedelta(days=1), _raw_email(
+                subject="ai-events-digest-2026-10-04",
+                message_id="<historical-two>",
+                date_header=None,
+            )),
+            (now, _raw_email(
+                subject="ai-events-digest-2026-10-05",
+                message_id="<target>",
+                date_header=None,
+            )),
+        ]
+    )
+
+    with patch.object(imap_client, "_connect", return_value=fake):
+        result = fetch_latest(
+            "digest@example.test",
+            "ai-events-digest-",
+            "2026-10-05",
+            user="test-user",
+            password="test-password",  # noqa: S106
+        )
+
+    assert result is not None and result.message_id == "<target>"
+    assert fake.header_fetches == [b"3"]
+
+
+def test_fetch_latest_deduplicates_uids_across_date_variant_searches() -> None:
+    fake = _RepeatingSearchFakeIMAP([(datetime.now(UTC), _raw_email(
+        subject="ai-events-digest-2026-9-4",
+        message_id="<variant-match>",
+        date_header=None,
+    ))])
+
+    with patch.object(imap_client, "_connect", return_value=fake):
+        result = fetch_latest(
+            "digest@example.test",
+            "ai-events-digest-",
+            "2026-09-04",
+            user="test-user",
+            password="test-password",  # noqa: S106
+        )
+
+    assert result is not None and result.message_id == "<variant-match>"
+    assert len(fake.search_calls) == 4
+    assert fake.header_fetches == [b"1"]
+
+
+def test_fetch_latest_fallback_uses_since_before_precise_internaldate_filter() -> None:
+    now = datetime.now(UTC)
+    fake = _CriteriaAwareFakeIMAP(
+        [
+            (now - timedelta(hours=60), _raw_email(
+                subject="ai-research-digest-2026-10-03",
+                message_id="<stale>",
+                date_header=None,
+            )),
+            (now - timedelta(hours=2), _raw_email(
+                subject="ai-research-digest-2026-10-05",
+                message_id="<recent>",
+                date_header=None,
+            )),
+        ]
+    )
+
+    with patch.object(imap_client, "_connect", return_value=fake):
+        result = fetch_latest(
+            "digest@example.test",
+            "ai-research-digest-",
+            None,
+            user="test-user",
+            password="test-password",  # noqa: S106
+            within_hours=40,
+        )
+
+    assert result is not None and result.message_id == "<recent>"
+    assert any("SINCE" in search for search in fake.search_calls)
+    assert fake.header_fetches == [b"2"]
 
 
 def _build_raw() -> bytes:
