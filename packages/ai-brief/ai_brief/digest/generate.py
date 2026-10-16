@@ -12,10 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING, Any, cast
-
-if TYPE_CHECKING:
-    from PIL import Image
+from typing import Any, cast
 
 from nev_shared.logger import get_logger
 from pydantic import ValidationError
@@ -110,47 +107,31 @@ def _filename_index(filename: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _richness(im: Image.Image) -> float:
-    """一横带里「非近白像素」的占比：正文页多为白底黑字→低；hero 图/照片→高。"""
-    g = im.convert("L")
-    if g.width > 200:
-        g = g.resize((200, max(1, int(200 * g.height / g.width))))
-    hist: list[int] = g.histogram()
-    total = sum(hist) or 1
-    white = sum(hist[235:])  # 近白
-    return 1.0 - white / total
-
-
 def _find_hero_band(data: bytes, aspect: float, max_width: int = 1200) -> tuple[bytes, str]:
-    """从（多为整页长截图的）图里找出最像配图的横带 → 裁成 宽:高=aspect 的矮横幅。
-
-    正文是白底黑字、非白占比低；hero 图/照片非白占比高。在顶部 ~2/3 滑窗取「非白占比最高」
-    的一带（避开深处正文），既定位了 hero 又天然避开大段文字。失败回退居中裁剪。
-    """
+    """把完整前景置于固定比例画布，并用同图模糊背景补齐空白。"""
     try:
-        from PIL import Image
+        from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 
         im = Image.open(io.BytesIO(data)).convert("RGB")
-        w, h = im.size
-        band_h = max(1, int(w / aspect))
-        if h <= int(band_h * 1.25):  # 本就不高 → 居中 cover 裁
-            top = max(0, (h - band_h) // 2)
-            band = im.crop((0, top, w, min(h, top + band_h)))
-        else:
-            limit = int(h * 0.68)  # hero 通常在顶部 2/3
-            step = max(1, band_h // 3)
-            best_y, best = 0, -1.0
-            y = 0
-            while y + band_h <= min(h, limit + band_h):
-                s = _richness(im.crop((0, y, w, y + band_h)))
-                if s > best:
-                    best, best_y = s, y
-                y += step
-            band = im.crop((0, best_y, w, best_y + band_h))
-        if band.width > max_width:
-            band = band.resize((max_width, int(band.height * max_width / band.width)))
+        canvas_width = min(im.width, max_width)
+        canvas_height = max(1, round(canvas_width / aspect))
+        size = (canvas_width, canvas_height)
+        resample = Image.Resampling.LANCZOS
+
+        background = ImageOps.fit(im, size, method=resample)
+        background = background.filter(
+            ImageFilter.GaussianBlur(radius=max(2, canvas_width // 40))
+        )
+        background = ImageEnhance.Brightness(background).enhance(0.72)
+
+        foreground = im.copy()
+        foreground.thumbnail(size, resample)
+        left = (canvas_width - foreground.width) // 2
+        top = (canvas_height - foreground.height) // 2
+        background.paste(foreground, (left, top))
+
         buf = io.BytesIO()
-        band.save(buf, "JPEG", quality=85)
+        background.save(buf, "JPEG", quality=85)
         return buf.getvalue(), "image/jpeg"
     except Exception as e:  # noqa: BLE001
         log.warning("ai_digest.hero_band_failed", err=str(e)[:120])
@@ -251,7 +232,7 @@ def build_opc_case(
         attachment = images[case.index - 1]
     header_image = ""
     if attachment is not None and _is_usable_header_image(attachment.data, attachment.content_type):
-        data, content_type = _find_hero_band(attachment.data, config.TODAY_AI_BANNER_ASPECT)
+        data, content_type = _find_hero_band(attachment.data, config.HEADER_IMAGE_ASPECT)
         path = uploader.image_path(brief_date, "opc-case", data, content_type)
         uploaded = uploader.upload_image(data, content_type, path=path)
         if uploaded is None:
@@ -337,7 +318,7 @@ def build_opc_cases(
             attachment.data, attachment.content_type
         ):
             data, content_type = _find_hero_band(
-                attachment.data, config.TODAY_AI_BANNER_ASPECT
+                attachment.data, config.HEADER_IMAGE_ASPECT
             )
             path = uploader.image_path(
                 brief_date, f"opc-case-{candidate.index}", data, content_type
@@ -405,7 +386,7 @@ def _today_ai_image_candidates(
         ):
             continue
         band, content_type = _find_hero_band(
-            indexed_attachment.data, config.TODAY_AI_BANNER_ASPECT
+            indexed_attachment.data, config.HEADER_IMAGE_ASPECT
         )
         candidates.append((item.index, band, content_type, item.headline))
     if candidates:
@@ -419,7 +400,7 @@ def _today_ai_image_candidates(
     ]
     for item, attachment in zip(items, unindexed, strict=False):
         band, content_type = _find_hero_band(
-            attachment.data, config.TODAY_AI_BANNER_ASPECT
+            attachment.data, config.HEADER_IMAGE_ASPECT
         )
         candidates.append((item.index, band, content_type, item.headline))
     return candidates

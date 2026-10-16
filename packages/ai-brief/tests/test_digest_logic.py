@@ -37,6 +37,17 @@ def _opc_image(filename: str, color: str) -> Attachment:
     return Attachment(filename, "image/png", buf.getvalue())
 
 
+def _full_subject_image() -> bytes:
+    image = Image.new("RGB", (80, 80), "white")
+    for y, color in ((0, (255, 0, 0)), (10, (0, 128, 0)), (70, (0, 0, 255))):
+        for row in range(y, min(y + 10, image.height)):
+            for column in range(20, 60):
+                image.putpixel((column, row), color)
+    buf = io.BytesIO()
+    image.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def _opc_envelope(attachments: tuple[Attachment, ...]) -> DigestEnvelope:
     return DigestEnvelope(
         kind="opc", message_id="<opc@test>", subject="ai-opc-sharing2026-08-04",
@@ -500,6 +511,33 @@ def test_today_ai_uses_attachment_order_when_filenames_have_no_story_index() -> 
     ]
 
 
+def test_today_ai_standardizes_to_sixteen_by_nine_without_cropping_the_subject() -> None:
+    item = EventItem(
+        index=1,
+        category="AI",
+        value_tag="重要",
+        headline="完整主体",
+        url="https://example.com/1",
+        body="正文",
+        image_note="",
+    )
+
+    candidates = _today_ai_image_candidates(
+        [item],
+        [Attachment("story-1.png", "image/png", _full_subject_image())],
+    )
+
+    image = Image.open(io.BytesIO(candidates[0][1])).convert("RGB")
+    assert image.width * 9 == image.height * 16
+    center = image.width // 2
+    top = image.getpixel((center, 2))
+    bottom = image.getpixel((center, image.height - 3))
+    assert isinstance(top, tuple)
+    assert isinstance(bottom, tuple)
+    assert top[0] > top[2] + 80
+    assert bottom[2] > bottom[0] + 80
+
+
 def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
     assert '"rank": 4' not in condenser._AGENT_SYSTEM
     assert "rank 必须来自给定工具" in condenser._AGENT_SYSTEM
@@ -626,6 +664,8 @@ def test_today_ai_image_prompt_prioritizes_technology_before_people() -> None:
     prompt = post.call_args.kwargs["json"]["messages"][0]["content"][0]["text"]
     assert "科技感" in prompt
     assert prompt.index("科技感") < prompt.index("人物")
+    assert "脸部完整" in prompt
+    assert "至少一个核心物品完整" in prompt
     assert result.complete is True
 
 

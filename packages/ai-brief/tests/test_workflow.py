@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 from datetime import UTC, date, datetime
@@ -33,6 +34,7 @@ from ai_brief.schema import (
     Theme,
 )
 from ai_brief.storage import DigestRunStatus
+from PIL import Image
 
 BRIEF_DATE = date(2026, 8, 4)
 RUN_ID = UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690")
@@ -371,6 +373,43 @@ def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_path
     paths = [call.kwargs["path"] for call in upload.call_args_list]
     assert "opc-case-1" in paths[0]
     assert "opc-case-2" in paths[1]
+
+
+def test_build_opc_cases_uploads_complete_sixteen_by_nine_images() -> None:
+    source = Image.new("RGB", (80, 80), "white")
+    for y, color in ((0, (255, 0, 0)), (10, (0, 128, 0)), (70, (0, 0, 255))):
+        for row in range(y, min(y + 10, source.height)):
+            for column in range(20, 60):
+                source.putpixel((column, row), color)
+    buf = io.BytesIO()
+    source.save(buf, "PNG")
+    attachments = (
+        Attachment("case-1.png", "image/png", buf.getvalue()),
+        Attachment("case-2.png", "image/png", buf.getvalue()),
+    )
+
+    with patch.object(
+        uploader,
+        "upload_image",
+        side_effect=["https://img.test/one.jpg", "https://img.test/two.jpg"],
+    ) as upload:
+        cases, count = generate.build_opc_cases(
+            BRIEF_DATE.isoformat(),
+            _opc_envelope(attachments=attachments),
+        )
+
+    assert count == 2
+    assert len(cases) == 2
+    for call in upload.call_args_list:
+        image = Image.open(io.BytesIO(call.args[0])).convert("RGB")
+        assert image.width * 9 == image.height * 16
+        center = image.width // 2
+        top = image.getpixel((center, 2))
+        bottom = image.getpixel((center, image.height - 3))
+        assert isinstance(top, tuple)
+        assert isinstance(bottom, tuple)
+        assert top[0] > top[2] + 80
+        assert bottom[2] > bottom[0] + 80
 
 
 def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindexed() -> None:
