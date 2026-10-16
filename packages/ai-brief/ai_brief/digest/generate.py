@@ -12,6 +12,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any, cast
 
 from nev_shared.logger import get_logger
@@ -107,31 +108,41 @@ def _filename_index(filename: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
-def _find_hero_band(data: bytes, aspect: float, max_width: int = 1200) -> tuple[bytes, str]:
-    """把完整前景置于固定比例画布，并用同图模糊背景补齐空白。"""
+def _find_hero_band(
+    data: bytes,
+    aspect: float,
+    max_width: int = 1200,
+    *,
+    focus_x: float = 0.5,
+    focus_y: float = 0.5,
+) -> tuple[bytes, str]:
+    """围绕语义焦点截取固定比例的真实图像，不补边。"""
     try:
-        from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+        from PIL import Image
 
         im = Image.open(io.BytesIO(data)).convert("RGB")
-        canvas_width = min(im.width, max_width)
-        canvas_height = max(1, round(canvas_width / aspect))
-        size = (canvas_width, canvas_height)
+        ratio = Fraction(aspect).limit_denominator(100)
+        unit = min(im.width // ratio.numerator, im.height // ratio.denominator)
+        if unit < 1:
+            raise ValueError("source image is too small for header crop")
+        crop_width = unit * ratio.numerator
+        crop_height = unit * ratio.denominator
+        center_x = min(1.0, max(0.0, focus_x)) * im.width
+        center_y = min(1.0, max(0.0, focus_y)) * im.height
+        left = min(max(0, round(center_x - crop_width / 2)), im.width - crop_width)
+        top = min(max(0, round(center_y - crop_height / 2)), im.height - crop_height)
+        cropped = im.crop((left, top, left + crop_width, top + crop_height))
+
         resample = Image.Resampling.LANCZOS
-
-        background = ImageOps.fit(im, size, method=resample)
-        background = background.filter(
-            ImageFilter.GaussianBlur(radius=max(2, canvas_width // 40))
-        )
-        background = ImageEnhance.Brightness(background).enhance(0.72)
-
-        foreground = im.copy()
-        foreground.thumbnail(size, resample)
-        left = (canvas_width - foreground.width) // 2
-        top = (canvas_height - foreground.height) // 2
-        background.paste(foreground, (left, top))
+        if cropped.width > max_width:
+            resized_unit = max(1, max_width // ratio.numerator)
+            cropped = cropped.resize(
+                (resized_unit * ratio.numerator, resized_unit * ratio.denominator),
+                resample,
+            )
 
         buf = io.BytesIO()
-        background.save(buf, "JPEG", quality=85)
+        cropped.save(buf, "JPEG", quality=85)
         return buf.getvalue(), "image/jpeg"
     except Exception as e:  # noqa: BLE001
         log.warning("ai_digest.hero_band_failed", err=str(e)[:120])
@@ -232,7 +243,17 @@ def build_opc_case(
         attachment = images[case.index - 1]
     header_image = ""
     if attachment is not None and _is_usable_header_image(attachment.data, attachment.content_type):
-        data, content_type = _find_hero_band(attachment.data, config.HEADER_IMAGE_ASPECT)
+        focus = image_judge.locate_crop_focuses(
+            [(attachment.data, attachment.content_type)],
+            [case.headline],
+            mode="opc",
+        )[0]
+        data, content_type = _find_hero_band(
+            attachment.data,
+            config.HEADER_IMAGE_ASPECT,
+            focus_x=focus.x,
+            focus_y=focus.y,
+        )
         path = uploader.image_path(brief_date, "opc-case", data, content_type)
         uploaded = uploader.upload_image(data, content_type, path=path)
         if uploaded is None:
@@ -309,6 +330,24 @@ def build_opc_cases(
         return [], count
 
     attachments = _opc_case_attachments(digest)
+    focus_inputs = [
+        (
+            normalized_case.candidate.index,
+            attachment,
+            normalized_case.candidate.headline,
+        )
+        for normalized_case in normalized
+        if (attachment := attachments.get(normalized_case.candidate.index)) is not None
+        and _is_usable_header_image(attachment.data, attachment.content_type)
+    ]
+    focus_values = image_judge.locate_crop_focuses(
+        [(attachment.data, attachment.content_type) for _, attachment, _ in focus_inputs],
+        [headline for _, _, headline in focus_inputs],
+        mode="opc",
+    )
+    focus_by_index = {
+        index: focus for (index, _, _), focus in zip(focus_inputs, focus_values, strict=True)
+    }
     results: list[OpcCaseV4] = []
     for normalized_case in normalized:
         candidate = normalized_case.candidate
@@ -317,8 +356,12 @@ def build_opc_cases(
         if attachment is not None and _is_usable_header_image(
             attachment.data, attachment.content_type
         ):
+            focus = focus_by_index[candidate.index]
             data, content_type = _find_hero_band(
-                attachment.data, config.HEADER_IMAGE_ASPECT
+                attachment.data,
+                config.HEADER_IMAGE_ASPECT,
+                focus_x=focus.x,
+                focus_y=focus.y,
             )
             path = uploader.image_path(
                 brief_date, f"opc-case-{candidate.index}", data, content_type
@@ -385,10 +428,12 @@ def _today_ai_image_candidates(
             or "svg" in (indexed_attachment.content_type or "").lower()
         ):
             continue
-        band, content_type = _find_hero_band(
-            indexed_attachment.data, config.HEADER_IMAGE_ASPECT
-        )
-        candidates.append((item.index, band, content_type, item.headline))
+        candidates.append((
+            item.index,
+            indexed_attachment.data,
+            indexed_attachment.content_type,
+            item.headline,
+        ))
     if candidates:
         return candidates
 
@@ -399,10 +444,7 @@ def _today_ai_image_candidates(
         and "svg" not in (attachment.content_type or "").lower()
     ]
     for item, attachment in zip(items, unindexed, strict=False):
-        band, content_type = _find_hero_band(
-            attachment.data, config.HEADER_IMAGE_ASPECT
-        )
-        candidates.append((item.index, band, content_type, item.headline))
+        candidates.append((item.index, attachment.data, attachment.content_type, item.headline))
     return candidates
 
 
@@ -413,7 +455,7 @@ def _pick_and_upload(
     brief_date: str,
     module: str,
 ) -> tuple[str | None, str, bool]:
-    """Qwen 从已备好的候选图里选 1 张 → 上传 → (public_url, alt)。图已按模块处理好，直接传。"""
+    """Qwen 从候选原图选 1 张，按模块处理后上传。"""
     candidates = [
         candidate
         for candidate in candidates
@@ -426,6 +468,13 @@ def _pick_and_upload(
     outcome = image_judge.pick_image(images, captions, mode=mode)
     pick = outcome.index if 0 <= outcome.index < len(candidates) else 0
     _, data, ctype, caption = candidates[pick]
+    if mode == "today_ai":
+        data, ctype = _find_hero_band(
+            data,
+            config.HEADER_IMAGE_ASPECT,
+            focus_x=outcome.focus_x,
+            focus_y=outcome.focus_y,
+        )
     path = uploader.image_path(brief_date, module, data, ctype)
     url = uploader.upload_image(data, ctype, path=path)
     return url, caption, outcome.complete
@@ -453,7 +502,7 @@ async def _build_today_ai(
         return None, None, False, True
     result = outcome.value
 
-    # 源图多是整页长截图 → 先从每张里裁出最像配图的 hero 横幅带，再让 Qwen 在这些干净带里选
+    # 先让 Qwen 基于原图选图和定位，再围绕焦点生成 16:6 真实截图。
     candidates = _today_ai_image_candidates(items, _image_attachments(digest))
     header_url, alt, qwen_complete = _pick_and_upload(
         candidates, mode="today_ai", brief_date=brief_date, module="today-ai"

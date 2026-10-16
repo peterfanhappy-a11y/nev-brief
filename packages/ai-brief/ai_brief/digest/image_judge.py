@@ -28,6 +28,16 @@ _MAX_EDGE = 768  # 判图不需要原图（2-3MB 截图），缩到长边 768 �
 class ImagePick:
     index: int
     complete: bool
+    focus_x: float = 0.5
+    focus_y: float = 0.5
+    focus_complete: bool = False
+
+
+@dataclass(frozen=True)
+class CropFocus:
+    x: float
+    y: float
+    complete: bool
 
 
 def _downscale(data: bytes, content_type: str) -> tuple[bytes, str]:
@@ -46,11 +56,16 @@ def _downscale(data: bytes, content_type: str) -> tuple[bytes, str]:
 
 _CRITERIA = {
     "today_ai": (
-        "这些都是保持完整前景的新闻配图候选。选出【文字最少、画面最干净、最像一张配图/照片/插画】的一张，"
+        "这些都是新闻配图候选。选出【文字最少、画面最干净、最像一张配图/照片/插画】的一张，"
         "尽量避开大段正文文字或满是 UI 文本的那张；"
         "在此前提下优先科技感画面（芯片、服务器、数据中心、机器人、代码、模型可视化或智能硬件），"
-        "包含人物时必须确保脸部完整且未被画面边缘截断；包含设备或产品时必须至少一个核心物品完整呈现；"
+        "包含人物时，16:6 截图必须确保脸部完整且未被画面边缘截断；"
+        "包含多个物品类别时，16:6 截图必须尽量完整呈现至少一个完整物品类别；"
         "没有合适科技图时才次选清晰自然的人物图，最后再挑最能代表新闻主题的。"
+    ),
+    "opc": (
+        "这是 OPC 案例头图。请定位最适合 16:6 截图的中心点；"
+        "如果有人像，截图必须包含完整头顶、脸部和下巴，不得截断头部。"
     ),
     "ai_masters": "选出内容最饱满、信息量最大、画面最完整的一张（优先展示完整推文/观点的截图）。",
     "research": (
@@ -78,23 +93,35 @@ def pick_image(
     """Choose an image and report whether Qwen produced a valid selection."""
     if not images:
         return ImagePick(index=-1, complete=False)
-    if len(images) == 1:
+    needs_focus = mode in {"today_ai", "opc"}
+    if len(images) == 1 and not needs_focus:
         return ImagePick(index=0, complete=True)
+
+    fallback_x, fallback_y = (0.5, 0.0) if mode == "opc" else (0.5, 0.5)
 
     api_key = api_key or config.qwen_api_key()
     if not api_key:
         log.warning("ai_image_judge.no_key_fallback_0")
-        return ImagePick(index=0, complete=False)
+        return ImagePick(
+            index=0, complete=False, focus_x=fallback_x, focus_y=fallback_y
+        )
 
     criterion = _CRITERIA.get(mode, _CRITERIA["today_ai"])
+    conclusion = "选择=N（N 为被选图片编号，只填一个数字）。"
+    if needs_focus:
+        conclusion += (
+            "随后另起两行输出所选原图中的归一化裁切焦点："
+            "焦点X=0到1之间的小数、焦点Y=0到1之间的小数。"
+            "该焦点用于生成 16:6 截图。"
+        )
     content: list[dict[str, Any]] = [{
         "type": "text",
         "text": (
             f"下面是 {len(images)} 张候选新闻配图，按顺序编号 0 到 {len(images)-1}。\n"
             "请先逐张判断每张是不是网页/文章/App 界面截图或含大段文字的图，再据此挑选。\n"
             f"{criterion}\n"
-            "分析完后，务必在最后另起一行、严格按此格式输出结论："
-            "选择=N（N 为被选图片编号，只填一个数字）。"
+            "分析完后，务必严格按指定格式输出结论："
+            f"{conclusion}"
         ),
     }]
     for i, (data, ctype) in enumerate(images):
@@ -124,18 +151,161 @@ def pick_image(
         reasoning = msg.get("reasoning_content") or ""
     except Exception as e:  # noqa: BLE001
         log.warning("ai_image_judge.failed_fallback_0", err=str(e)[:200])
-        return ImagePick(index=0, complete=False)
+        return ImagePick(
+            index=0, complete=False, focus_x=fallback_x, focus_y=fallback_y
+        )
 
     parsed = _model_pick_index(text, reasoning, len(images))
     if parsed is None or parsed == -1:
         log.warning("ai_image_judge.invalid_output_fallback_0")
-        return ImagePick(index=0, complete=False)
+        return ImagePick(
+            index=0, complete=False, focus_x=fallback_x, focus_y=fallback_y
+        )
     idx = parsed
-    log.info("ai_image_judge.picked", mode=mode, idx=idx, raw=str(text)[-40:])
-    return ImagePick(index=idx, complete=True)
+    focus = _model_crop_focus(text, reasoning) if needs_focus else None
+    if focus is None:
+        log.warning("ai_image_judge.missing_focus_fallback", mode=mode, idx=idx)
+        focus_x, focus_y, focus_complete = fallback_x, fallback_y, False
+    else:
+        focus_x, focus_y = focus
+        focus_complete = True
+    log.info(
+        "ai_image_judge.picked",
+        mode=mode,
+        idx=idx,
+        focus_x=focus_x,
+        focus_y=focus_y,
+        raw=str(text)[-80:],
+    )
+    return ImagePick(
+        index=idx,
+        complete=True,
+        focus_x=focus_x,
+        focus_y=focus_y,
+        focus_complete=focus_complete,
+    )
+
+
+def locate_crop_focuses(
+    images: list[tuple[bytes, str]],
+    captions: list[str],
+    *,
+    mode: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    model: str | None = None,
+    timeout: float = 180.0,
+) -> list[CropFocus]:
+    """Locate one 16:6 crop focus per image in a single vision request."""
+    if not images:
+        return []
+    fallback_y = 0.0 if mode == "opc" else 0.5
+    fallback = [CropFocus(0.5, fallback_y, False) for _ in images]
+    api_key = api_key or config.qwen_api_key()
+    if not api_key:
+        log.warning("ai_image_judge.no_key_crop_fallback", mode=mode)
+        return fallback
+
+    criterion = _CRITERIA.get(mode, _CRITERIA["today_ai"])
+    content: list[dict[str, Any]] = [{
+        "type": "text",
+        "text": (
+            f"下面是 {len(images)} 张图片，按顺序编号 0 到 {len(images)-1}。\n"
+            f"{criterion}\n"
+            "请为每张原图分别给出生成 16:6 截图所需的归一化中心点。"
+            "严格逐图输出两个坐标：图N焦点X=0到1之间的小数、图N焦点Y=0到1之间的小数。"
+        ),
+    }]
+    for i, (data, ctype) in enumerate(images):
+        caption = captions[i] if i < len(captions) else ""
+        scaled, scaled_type = _downscale(data, ctype)
+        content.append({"type": "text", "text": f"[图{i}] {caption}"})
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": _b64(scaled, scaled_type)},
+        })
+
+    payload = {
+        "model": model or config.qwen_vl_model(),
+        "messages": [{"role": "user", "content": content}],
+        "temperature": 0.0,
+        "max_tokens": 3000,
+    }
+    try:
+        response = httpx.post(
+            f"{(base_url or config.qwen_base_url()).rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json=payload,
+            timeout=timeout,
+            trust_env=False,
+        )
+        response.raise_for_status()
+        message = response.json()["choices"][0]["message"]
+        text = message.get("content") or ""
+        reasoning = message.get("reasoning_content") or ""
+    except Exception as exc:  # noqa: BLE001
+        log.warning("ai_image_judge.crop_focus_failed", mode=mode, err=str(exc)[:200])
+        return fallback
+
+    focuses = _model_crop_focuses(text, reasoning, len(images), fallback_y=fallback_y)
+    missing = [index for index, focus in enumerate(focuses) if not focus.complete]
+    if missing:
+        log.warning(
+            "ai_image_judge.missing_crop_focuses_fallback",
+            mode=mode,
+            indexes=missing,
+        )
+    log.info(
+        "ai_image_judge.crop_focuses",
+        mode=mode,
+        complete=sum(focus.complete for focus in focuses),
+        count=len(focuses),
+    )
+    return focuses
 
 
 _MARK_RE = re.compile(r"选择\s*[=＝:：]\s*(-?\d+)")
+_FOCUS_X_RE = re.compile(r"焦点\s*X\s*[=＝:：]\s*(0(?:\.\d+)?|1(?:\.0+)?)", re.IGNORECASE)
+_FOCUS_Y_RE = re.compile(r"焦点\s*Y\s*[=＝:：]\s*(0(?:\.\d+)?|1(?:\.0+)?)", re.IGNORECASE)
+_INDEXED_FOCUS_RE = re.compile(
+    r"图\s*(\d+)\s*焦点\s*([XY])\s*[=＝:：]\s*(0(?:\.\d+)?|1(?:\.0+)?)",
+    re.IGNORECASE,
+)
+
+
+def _model_crop_focus(content: str, reasoning: str) -> tuple[float, float] | None:
+    text = f"{content}\n{reasoning}"
+    xs = _FOCUS_X_RE.findall(text)
+    ys = _FOCUS_Y_RE.findall(text)
+    if not xs or not ys:
+        return None
+    return float(xs[-1]), float(ys[-1])
+
+
+def _model_crop_focuses(
+    content: str,
+    reasoning: str,
+    count: int,
+    *,
+    fallback_y: float,
+) -> list[CropFocus]:
+    coordinates: dict[int, dict[str, float]] = {}
+    for raw_index, axis, raw_value in _INDEXED_FOCUS_RE.findall(
+        f"{content}\n{reasoning}"
+    ):
+        index = int(raw_index)
+        if 0 <= index < count:
+            coordinates.setdefault(index, {})[axis.upper()] = float(raw_value)
+    return [
+        CropFocus(
+            coordinates[index]["X"],
+            coordinates[index]["Y"],
+            True,
+        )
+        if {"X", "Y"} <= coordinates.get(index, {}).keys()
+        else CropFocus(0.5, fallback_y, False)
+        for index in range(count)
+    ]
 
 
 def _model_pick_index(content: str, reasoning: str, n: int) -> int | None:
