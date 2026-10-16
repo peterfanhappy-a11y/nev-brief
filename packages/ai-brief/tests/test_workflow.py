@@ -19,7 +19,7 @@ import ai_brief.runner as runner
 import ai_brief.storage as storage
 import psycopg
 import pytest
-from ai_brief.digest import condenser, generate, uploader
+from ai_brief.digest import condenser, generate, image_judge, uploader
 from ai_brief.digest.generate import DigestBundle
 from ai_brief.digest.imap_client import Attachment
 from ai_brief.digest.input import DigestEnvelope, DigestKind
@@ -38,6 +38,16 @@ from PIL import Image
 
 BRIEF_DATE = date(2026, 8, 4)
 RUN_ID = UUID("aee85a2c-9c58-4be9-8a30-d4aed5fa4690")
+
+
+def _fallback_crop_focuses(
+    images: list[tuple[bytes, str]],
+    _captions: list[str],
+    *,
+    mode: str,
+) -> list[image_judge.CropFocus]:
+    assert mode == "opc"
+    return [image_judge.CropFocus(0.5, 0.0, False) for _ in images]
 
 
 def _opc_case() -> OpcCase:
@@ -349,7 +359,12 @@ def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_path
         patch.object(
             generate,
             "_find_hero_band",
-            side_effect=lambda data, _aspect: (data, "image/png"),
+            side_effect=lambda data, _aspect, **_focus: (data, "image/png"),
+        ),
+        patch.object(
+            image_judge,
+            "locate_crop_focuses",
+            side_effect=_fallback_crop_focuses,
         ),
         patch.object(
             uploader,
@@ -375,7 +390,7 @@ def test_build_opc_cases_preserves_order_loads_rates_once_and_uses_distinct_path
     assert "opc-case-2" in paths[1]
 
 
-def test_build_opc_cases_uploads_complete_sixteen_by_nine_images() -> None:
+def test_build_opc_cases_uploads_focused_sixteen_by_six_crops() -> None:
     source = Image.new("RGB", (80, 80), "white")
     for y, color in ((0, (255, 0, 0)), (10, (0, 128, 0)), (70, (0, 0, 255))):
         for row in range(y, min(y + 10, source.height)):
@@ -388,11 +403,19 @@ def test_build_opc_cases_uploads_complete_sixteen_by_nine_images() -> None:
         Attachment("case-2.png", "image/png", buf.getvalue()),
     )
 
-    with patch.object(
-        uploader,
-        "upload_image",
-        side_effect=["https://img.test/one.jpg", "https://img.test/two.jpg"],
-    ) as upload:
+    crop_focus = image_judge.CropFocus(0.5, 0.15, True)
+    with (
+        patch.object(
+            image_judge,
+            "locate_crop_focuses",
+            return_value=[crop_focus, crop_focus],
+        ),
+        patch.object(
+            uploader,
+            "upload_image",
+            side_effect=["https://img.test/one.jpg", "https://img.test/two.jpg"],
+        ) as upload,
+    ):
         cases, count = generate.build_opc_cases(
             BRIEF_DATE.isoformat(),
             _opc_envelope(attachments=attachments),
@@ -402,14 +425,14 @@ def test_build_opc_cases_uploads_complete_sixteen_by_nine_images() -> None:
     assert len(cases) == 2
     for call in upload.call_args_list:
         image = Image.open(io.BytesIO(call.args[0])).convert("RGB")
-        assert image.width * 9 == image.height * 16
+        assert image.width * 6 == image.height * 16
         center = image.width // 2
         top = image.getpixel((center, 2))
         bottom = image.getpixel((center, image.height - 3))
         assert isinstance(top, tuple)
         assert isinstance(bottom, tuple)
         assert top[0] > top[2] + 80
-        assert bottom[2] > bottom[0] + 80
+        assert bottom[2] < bottom[0] + 80
 
 
 def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindexed() -> None:
@@ -422,7 +445,12 @@ def test_build_opc_cases_uses_ordered_fallback_only_when_both_images_are_unindex
         patch.object(
             generate,
             "_find_hero_band",
-            side_effect=lambda data, _aspect: (data, "image/png"),
+            side_effect=lambda data, _aspect, **_focus: (data, "image/png"),
+        ),
+        patch.object(
+            image_judge,
+            "locate_crop_focuses",
+            side_effect=_fallback_crop_focuses,
         ),
         patch.object(
             uploader,
@@ -455,7 +483,12 @@ def test_build_opc_cases_never_cross_substitutes_ambiguous_or_unusable_images() 
         patch.object(
             generate,
             "_find_hero_band",
-            side_effect=lambda data, _aspect: (data, "image/png"),
+            side_effect=lambda data, _aspect, **_focus: (data, "image/png"),
+        ),
+        patch.object(
+            image_judge,
+            "locate_crop_focuses",
+            side_effect=_fallback_crop_focuses,
         ),
         patch.object(uploader, "upload_image", return_value="https://img.test/two.png"),
     ):
@@ -488,7 +521,12 @@ def test_build_opc_cases_surfaces_upload_failure() -> None:
         patch.object(
             generate,
             "_find_hero_band",
-            side_effect=lambda data, _aspect: (data, "image/png"),
+            side_effect=lambda data, _aspect, **_focus: (data, "image/png"),
+        ),
+        patch.object(
+            image_judge,
+            "locate_crop_focuses",
+            side_effect=_fallback_crop_focuses,
         ),
         patch.object(uploader, "upload_image", return_value=None),
         pytest.raises(RuntimeError, match="OPC image upload failed"),

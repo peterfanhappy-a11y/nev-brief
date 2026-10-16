@@ -370,7 +370,7 @@ async def test_frozen_v4_workflow_publishes_two_complete_cases_and_blocks_incomp
             patch.object(
                 generate,
                 "_find_hero_band",
-                side_effect=lambda data, _aspect: (data, "image/png"),
+                side_effect=lambda data, _aspect, **_focus: (data, "image/png"),
             ),
             patch.object(
                 uploader,

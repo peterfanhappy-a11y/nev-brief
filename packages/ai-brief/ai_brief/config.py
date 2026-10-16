@@ -123,8 +123,8 @@ AI_RESEARCH_SUMMARY_CHARS = 200   # AI研究 单篇内容
 AI_ENGINEERING_POINT_CHARS = 150  # AI工程 每条核心要点
 AGENT_TOOL_SUMMARY_CHARS = 150    # Agent工具 每个工具介绍
 AGENT_TOOLS_PICK = 3              # 过滤后展示 3 个工具
-# OPC 与今日 AI 头图统一为 16:9；完整前景居中，空白由模糊背景补齐。
-HEADER_IMAGE_ASPECT = 16 / 9
+# OPC 与今日 AI 头图统一截图为 16:6。
+HEADER_IMAGE_ASPECT = 16 / 6
 # 头图上传前缩到的最大宽度（研究图/工程图可能很大，缩小省邮件体积）
 HEADER_IMAGE_MAX_WIDTH = 1000
 

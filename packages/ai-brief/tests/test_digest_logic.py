@@ -69,15 +69,17 @@ def _opc_envelope(attachments: tuple[Attachment, ...]) -> DigestEnvelope:
     )
 
 
-def test_opc_uploads_only_the_selected_case_image_without_qwen() -> None:
+def test_opc_uploads_only_the_selected_case_image_with_semantic_crop() -> None:
     first, second = _opc_image("case1.jpg", "red"), _opc_image("case2.png", "blue")
     with (
         patch.object(
             uploader, "upload_image", return_value="https://cdn.example.com/opc-case.png"
         ) as upload,
         patch.object(
-            image_judge, "pick_image", side_effect=AssertionError("OPC must not call Qwen")
-        ),
+            image_judge,
+            "locate_crop_focuses",
+            return_value=[image_judge.CropFocus(0.5, 0.0, True)],
+        ) as locate,
     ):
         result, count = generate.build_opc_case("2026-08-04", _opc_envelope((first, second)))
 
@@ -93,6 +95,7 @@ def test_opc_uploads_only_the_selected_case_image_without_qwen() -> None:
     red, _, blue = pixel
     assert blue > 200 and red < 20
     assert upload.call_args.kwargs["path"].startswith("ai/2026-08-04/opc-case-")
+    locate.assert_called_once()
 
 
 def test_opc_requires_exactly_two_parsed_cases() -> None:
@@ -511,7 +514,7 @@ def test_today_ai_uses_attachment_order_when_filenames_have_no_story_index() -> 
     ]
 
 
-def test_today_ai_standardizes_to_sixteen_by_nine_without_cropping_the_subject() -> None:
+def test_today_ai_keeps_original_image_until_qwen_selects_the_crop() -> None:
     item = EventItem(
         index=1,
         category="AI",
@@ -528,7 +531,7 @@ def test_today_ai_standardizes_to_sixteen_by_nine_without_cropping_the_subject()
     )
 
     image = Image.open(io.BytesIO(candidates[0][1])).convert("RGB")
-    assert image.width * 9 == image.height * 16
+    assert image.size == (80, 80)
     center = image.width // 2
     top = image.getpixel((center, 2))
     bottom = image.getpixel((center, image.height - 3))
@@ -536,6 +539,49 @@ def test_today_ai_standardizes_to_sixteen_by_nine_without_cropping_the_subject()
     assert isinstance(bottom, tuple)
     assert top[0] > top[2] + 80
     assert bottom[2] > bottom[0] + 80
+
+
+def test_header_crop_uses_focus_and_outputs_sixteen_by_six_without_padding() -> None:
+    cropped, content_type = generate._find_hero_band(  # noqa: SLF001
+        _full_subject_image(), 16 / 6, focus_x=0.5, focus_y=0.15
+    )
+
+    image = Image.open(io.BytesIO(cropped)).convert("RGB")
+    assert image.width * 6 == image.height * 16
+    assert content_type == "image/jpeg"
+    center = image.width // 2
+    top = image.getpixel((center, 2))
+    bottom = image.getpixel((center, image.height - 3))
+    assert isinstance(top, tuple)
+    assert isinstance(bottom, tuple)
+    assert top[0] > top[2] + 80
+    assert bottom[2] < bottom[0] + 80
+
+
+def test_today_ai_crops_only_after_qwen_selects_the_source_image() -> None:
+    focus = MagicMock(
+        index=0,
+        complete=True,
+        focus_x=0.5,
+        focus_y=0.15,
+        focus_complete=True,
+    )
+    with (
+        patch.object(image_judge, "pick_image", return_value=focus),
+        patch.object(uploader, "upload_image", return_value="https://img.test/today.jpg") as upload,
+    ):
+        url, alt, complete = generate._pick_and_upload(  # noqa: SLF001
+            [(1, _full_subject_image(), "image/png", "完整主体")],
+            mode="today_ai",
+            brief_date="2026-10-16",
+            module="today-ai",
+        )
+
+    image = Image.open(io.BytesIO(upload.call_args.args[0])).convert("RGB")
+    assert image.width * 6 == image.height * 16
+    assert url == "https://img.test/today.jpg"
+    assert alt == "完整主体"
+    assert complete is True
 
 
 def test_agent_prompt_does_not_suggest_an_unavailable_rank() -> None:
@@ -647,7 +693,10 @@ def test_qwen_request_failure_reports_incomplete_fallback_to_first() -> None:
 def test_today_ai_image_prompt_prioritizes_technology_before_people() -> None:
     response = MagicMock()
     response.json.return_value = {
-        "choices": [{"message": {"content": "选择=0", "reasoning_content": ""}}]
+        "choices": [{"message": {
+            "content": "选择=0\n焦点X=0.62\n焦点Y=0.31",
+            "reasoning_content": "",
+        }}]
     }
     with patch.object(
         image_judge.httpx,  # type: ignore[attr-defined]
@@ -665,8 +714,88 @@ def test_today_ai_image_prompt_prioritizes_technology_before_people() -> None:
     assert "科技感" in prompt
     assert prompt.index("科技感") < prompt.index("人物")
     assert "脸部完整" in prompt
-    assert "至少一个核心物品完整" in prompt
+    assert "至少一个完整物品类别" in prompt
+    assert "16:6" in prompt
     assert result.complete is True
+    assert result.focus_complete is True
+    assert result.focus_x == pytest.approx(0.62)
+    assert result.focus_y == pytest.approx(0.31)
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_y"),
+    [("today_ai", 0.5), ("opc", 0.0)],
+)
+def test_qwen_missing_crop_focus_uses_mode_fallback(
+    mode: str, expected_y: float,
+) -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "choices": [{"message": {"content": "选择=0", "reasoning_content": ""}}]
+    }
+    with patch.object(image_judge.httpx, "post", return_value=response):  # type: ignore[attr-defined]
+        result = image_judge.pick_image(
+            [(b"source", "image/png")],
+            ["subject"],
+            mode=mode,
+            api_key="fixture-key",
+        )
+
+    assert result.complete is True
+    assert result.focus_complete is False
+    assert result.focus_x == 0.5
+    assert result.focus_y == expected_y
+
+
+def test_qwen_locates_both_opc_heads_in_one_request() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "choices": [{"message": {
+            "content": (
+                "图0焦点X=0.48\n图0焦点Y=0.18\n"
+                "图1焦点X=0.52\n图1焦点Y=0.22"
+            ),
+            "reasoning_content": "",
+        }}]
+    }
+    with patch.object(image_judge.httpx, "post", return_value=response) as post:  # type: ignore[attr-defined]
+        focuses = image_judge.locate_crop_focuses(
+            [(b"first", "image/png"), (b"second", "image/png")],
+            ["Alice", "Bob"],
+            mode="opc",
+            api_key="fixture-key",
+        )
+
+    assert [(focus.x, focus.y, focus.complete) for focus in focuses] == [
+        (0.48, 0.18, True),
+        (0.52, 0.22, True),
+    ]
+    assert post.call_count == 1
+    prompt = post.call_args.kwargs["json"]["messages"][0]["content"][0]["text"]
+    assert "完整头顶、脸部和下巴" in prompt
+    assert "16:6" in prompt
+
+
+def test_qwen_missing_one_opc_focus_falls_back_only_for_that_image() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "choices": [{"message": {
+            "content": "图0焦点X=0.48\n图0焦点Y=0.18",
+            "reasoning_content": "",
+        }}]
+    }
+    with patch.object(image_judge.httpx, "post", return_value=response):  # type: ignore[attr-defined]
+        focuses = image_judge.locate_crop_focuses(
+            [(b"first", "image/png"), (b"second", "image/png")],
+            ["Alice", "Bob"],
+            mode="opc",
+            api_key="fixture-key",
+        )
+
+    assert [(focus.x, focus.y, focus.complete) for focus in focuses] == [
+        (0.48, 0.18, True),
+        (0.5, 0.0, False),
+    ]
 
 
 def test_qwen_invalid_output_reports_incomplete_even_when_first_image_is_uploaded() -> None:
